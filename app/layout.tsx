@@ -1,15 +1,14 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Rubik } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// Configuration de la police Rubik avec les sous-ensembles et styles nécessaires
+const rubik = Rubik({
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  variable: "--font-rubik",
+  // Vous pouvez ajouter d'autres options comme :
+  // weight: ["400", "500", "700"], // Pour charger plusieurs poids
+  // style: ["normal", "italic"],   // Pour charger les italiques
 });
 
 export const metadata: Metadata = {
@@ -24,9 +23,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+      <body className={`${rubik.variable} font-sans antialiased`}>
         {children}
       </body>
     </html>
