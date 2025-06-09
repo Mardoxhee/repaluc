@@ -1,3 +1,4 @@
+'use client';
 import React from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -54,7 +55,10 @@ const Login = () => {
                         <div className="flex-grow border-t border-gray-300"></div>
                     </div>
 
-                    <form className="space-y-5">
+                    <form className="space-y-5" onSubmit={e => {
+  e.preventDefault();
+  window.location.href = '/apps';
+}}>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                             <input
