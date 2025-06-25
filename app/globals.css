@@ -22,10 +22,19 @@
 }
 
 body {
+  /* plus de zoom global ici */
+
   background: var(--background);
   color: var(--foreground);
   font-family: Rubik, sans-serif;
   /* Redondance pour sécurité */
+}
+
+.zoom-90 {
+  transform: scale(0.9);
+  transform-origin: top left;
+  width: 111.11%;
+  overflow-x: auto;
 }
 
 /* Animations */

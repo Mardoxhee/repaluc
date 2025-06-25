@@ -10,9 +10,9 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
       <SideBar />
-      <div className="flex-1 min-h-screen ml-64">
+      <div className="flex-1 min-h-screen ml-52">
         <Header />
-        <main className="pt-24 px-8 pb-8">
+        <main className="pt-24 px-8 pb-8 zoom-90">
           {children}
         </main>
       </div>

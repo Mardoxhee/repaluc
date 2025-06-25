@@ -23,8 +23,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${rubik.variable} font-sans antialiased`}>
+    <html lang="en" className="overflow-x-hidden">
+      <body className={`${rubik.variable} font-sans antialiased overflow-x-hidden w-screen max-w-full`}>
         {children}
       </body>
     </html>
