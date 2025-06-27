@@ -1,5 +1,6 @@
 "use client";
 import React, { useState } from "react";
+import { mockPartenaires } from "./mockPartenaires";
 import { FiEdit, FiTrash, FiPlus, FiEye, FiGrid, FiUsers, FiTrendingUp, FiSettings, FiInfo, FiMapPin, FiHome, FiPhone, FiFolder, FiFileText, FiBarChart2, FiSearch, FiUser } from "react-icons/fi";
 import Link from "next/link";
 import VictimForm from "./components/VictimForm";
@@ -738,6 +739,25 @@ const mockMesures = [
 ];
 
 function ReglagesPanel() {
+  // Partenaires
+  const [partenaires, setPartenaires] = useState(mockPartenaires);
+  const [searchPartenaire, setSearchPartenaire] = useState("");
+  const [showPartenaireModal, setShowPartenaireModal] = useState(false);
+  const [editPartenaire, setEditPartenaire] = useState<any | null>(null);
+  const filteredPartenaires = partenaires.filter((p: any) =>
+    p.nom.toLowerCase().includes(searchPartenaire.toLowerCase()) ||
+    (p.domaine && p.domaine.toLowerCase().includes(searchPartenaire.toLowerCase())) ||
+    (p.contact && p.contact.toLowerCase().includes(searchPartenaire.toLowerCase())) ||
+    (p.email && p.email.toLowerCase().includes(searchPartenaire.toLowerCase()))
+  );
+  const handleAddPartenaire = () => { setEditPartenaire({ id: null, nom: "", contact: "", domaine: "", email: "" }); setShowPartenaireModal(true); };
+  const handleEditPartenaire = (p: any) => { setEditPartenaire(p); setShowPartenaireModal(true); };
+  const handleSavePartenaire = (p: any) => {
+    if (p.id) setPartenaires((prev: any[]) => prev.map(x => x.id === p.id ? p : x));
+    else setPartenaires((prev: any[]) => [...prev, { ...p, id: Date.now() }]);
+    setShowPartenaireModal(false); setEditPartenaire(null);
+  };
+  const handleDeletePartenaire = (id: number) => setPartenaires((prev: any[]) => prev.filter(x => x.id !== id));
   // States pour chaque entité
   const [programmes, setProgrammes] = useState(mockProgrammes);
   const [categories] = useState(mockCategories);
