@@ -4,6 +4,7 @@ import { mockPartenaires } from "./mockPartenaires";
 import { FiEdit, FiTrash, FiPlus, FiEye, FiGrid, FiUsers, FiTrendingUp, FiSettings, FiInfo, FiMapPin, FiHome, FiPhone, FiFolder, FiFileText, FiBarChart2, FiSearch, FiUser } from "react-icons/fi";
 import Link from "next/link";
 import VictimForm from "./components/VictimForm";
+import ProgrammeConfigPanel from "./components/ProgrammeConfigPanel";
 
 const fakeClients = [
   {
@@ -274,98 +275,98 @@ const VictimDetailModal = ({ victim, onClose }: { victim: any, onClose: () => vo
           </div>
           <div className="flex-1 px-8 py-6 overflow-y-auto">
             {tab === 'infos' && (() => {
-  // Mocks locaux pour mapping
-  const prejudices = typeof mockPrejudices !== 'undefined' ? mockPrejudices : [
-    { id: 1, nom: "Meurtre" },
-    { id: 2, nom: "Préjuviol" },
-    { id: 3, nom: "Imputation" },
-    { id: 4, nom: "Préjudice moral" },
-    { id: 5, nom: "Préjudice matériel" },
-  ];
-  const programmes = typeof mockProgrammes !== 'undefined' ? mockProgrammes : [
-    { id: 1, nom: "Programme A", categoryId: 1, categoryNom: "Victimes des ménages ordinaires" },
-    { id: 2, nom: "Programme B", categoryId: 2, categoryNom: "Victimes des ménages collectifs" },
-  ];
-  // Trouver le nom du préjudice
-  let prejudiceLabel = victim.prejudiceNom;
-  if (!prejudiceLabel && victim.prejudiceId) {
-    const found = prejudices.find(p => p.id === Number(victim.prejudiceId));
-    prejudiceLabel = found ? found.nom : victim.prejudiceId;
-  }
-  // Trouver le nom du programme éligible
-  let programmeLabel = victim.programmeNom;
-  if (!programmeLabel) {
-    if (victim.programmeId) {
-      const found = programmes.find(p => p.id === Number(victim.programmeId));
-      programmeLabel = found ? found.nom : victim.programmeId;
-    } else if (programmes.length > 0) {
-      programmeLabel = programmes[0].nom;
-    }
-  }
-  return (
-    <div className="flex flex-col items-center w-full px-4 md:px-16 py-8">
-      <div className="w-full max-w-xl bg-gradient-to-tr from-purple-50 via-pink-50 to-blue-50 rounded-2xl shadow-lg border border-gray-100 p-6">
-        <div className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-          <FiInfo className="text-purple-500" /> Informations complémentaires
-        </div>
-        {/* Type de victime */}
-        {victim.categoryNom && (
-          <div className="flex items-center gap-3 mb-3">
-            <span className="w-8 h-8 flex items-center justify-center rounded-xl bg-blue-100"><FiUsers className="text-blue-500" /></span>
-            <span className="font-medium text-gray-700">Type de victime :</span>
-            <span className="text-gray-900">{victim.categoryNom}</span>
-          </div>
-        )}
-        {/* Préjudice subi */}
-        {prejudiceLabel && (
-          <div className="flex items-center gap-3 mb-3">
-            <span className="w-8 h-8 flex items-center justify-center rounded-xl bg-pink-100"><FiFileText className="text-pink-500" /></span>
-            <span className="font-medium text-gray-700">Préjudice subi :</span>
-            <span className="text-gray-900">{prejudiceLabel}</span>
-          </div>
-        )}
-        {/* Programme éligible */}
-        {programmeLabel && (
-          <div className="flex items-center gap-3 mb-3">
-            <span className="w-8 h-8 flex items-center justify-center rounded-xl bg-purple-100"><FiFolder className="text-purple-500" /></span>
-            <span className="font-medium text-gray-700">Programme éligible proposé :</span>
-            <span className="text-gray-900">{programmeLabel}</span>
-          </div>
-        )}
-        {/* Récit texte */}
-        {victim.story && (
-          <div className="flex items-start gap-3 mb-3">
-            <span className="w-8 h-8 flex items-center justify-center rounded-xl bg-gradient-to-tr from-pink-100 to-purple-100 mt-1"><FiFileText className="text-purple-400" /></span>
-            <div>
-              <div className="font-medium text-gray-700 mb-1">Récit du survivant :</div>
-              <div className="text-gray-700 whitespace-pre-line bg-white/60 rounded-lg border border-gray-100 p-3 shadow-inner text-sm">{victim.story}</div>
-            </div>
-          </div>
-        )}
-        {/* Récit audio */}
-        {victim.storyAudio && (
-          <div className="flex items-center gap-3 mb-3">
-            <span className="w-8 h-8 flex items-center justify-center rounded-xl bg-gradient-to-tr from-pink-100 to-purple-100"><FiFileText className="text-purple-400" /></span>
-            <div className="flex flex-col">
-              <div className="font-medium text-gray-700 mb-1">Récit audio du survivant :</div>
-              <audio controls className="w-full">
-                <source src={typeof victim.storyAudio === 'string' ? victim.storyAudio : URL.createObjectURL(victim.storyAudio)} />
-                Votre navigateur ne supporte pas la lecture audio.
-              </audio>
-            </div>
-          </div>
-        )}
-        {!victim.categoryNom && !prejudiceLabel && !programmeLabel && !victim.story && !victim.storyAudio && (
-          <div className="flex flex-col items-center justify-center h-full text-gray-400">
-            <FiInfo size={48} className="mb-2" />
-            <div className="font-bold">Aucune information complémentaire</div>
-            <div className="text-xs mt-2">Les informations complémentaires n'ont pas encore été ajoutées.</div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-})()}
+              // Mocks locaux pour mapping
+              const prejudices = typeof mockPrejudices !== 'undefined' ? mockPrejudices : [
+                { id: 1, nom: "Meurtre" },
+                { id: 2, nom: "Préjuviol" },
+                { id: 3, nom: "Imputation" },
+                { id: 4, nom: "Préjudice moral" },
+                { id: 5, nom: "Préjudice matériel" },
+              ];
+              const programmes = typeof mockProgrammes !== 'undefined' ? mockProgrammes : [
+                { id: 1, nom: "Programme A", categoryId: 1, categoryNom: "Victimes des ménages ordinaires" },
+                { id: 2, nom: "Programme B", categoryId: 2, categoryNom: "Victimes des ménages collectifs" },
+              ];
+              // Trouver le nom du préjudice
+              let prejudiceLabel = victim.prejudiceNom;
+              if (!prejudiceLabel && victim.prejudiceId) {
+                const found = prejudices.find(p => p.id === Number(victim.prejudiceId));
+                prejudiceLabel = found ? found.nom : victim.prejudiceId;
+              }
+              // Trouver le nom du programme éligible
+              let programmeLabel = victim.programmeNom;
+              if (!programmeLabel) {
+                if (victim.programmeId) {
+                  const found = programmes.find(p => p.id === Number(victim.programmeId));
+                  programmeLabel = found ? found.nom : victim.programmeId;
+                } else if (programmes.length > 0) {
+                  programmeLabel = programmes[0].nom;
+                }
+              }
+              return (
+                <div className="flex flex-col items-center w-full px-4 md:px-16 py-8">
+                  <div className="w-full max-w-xl bg-gradient-to-tr from-purple-50 via-pink-50 to-blue-50 rounded-2xl shadow-lg border border-gray-100 p-6">
+                    <div className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                      <FiInfo className="text-purple-500" /> Informations complémentaires
+                    </div>
+                    {/* Type de victime */}
+                    {victim.categoryNom && (
+                      <div className="flex items-center gap-3 mb-3">
+                        <span className="w-8 h-8 flex items-center justify-center rounded-xl bg-blue-100"><FiUsers className="text-blue-500" /></span>
+                        <span className="font-medium text-gray-700">Type de victime :</span>
+                        <span className="text-gray-900">{victim.categoryNom}</span>
+                      </div>
+                    )}
+                    {/* Préjudice subi */}
+                    {prejudiceLabel && (
+                      <div className="flex items-center gap-3 mb-3">
+                        <span className="w-8 h-8 flex items-center justify-center rounded-xl bg-pink-100"><FiFileText className="text-pink-500" /></span>
+                        <span className="font-medium text-gray-700">Préjudice subi :</span>
+                        <span className="text-gray-900">{prejudiceLabel}</span>
+                      </div>
+                    )}
+                    {/* Programme éligible */}
+                    {programmeLabel && (
+                      <div className="flex items-center gap-3 mb-3">
+                        <span className="w-8 h-8 flex items-center justify-center rounded-xl bg-purple-100"><FiFolder className="text-purple-500" /></span>
+                        <span className="font-medium text-gray-700">Programme éligible proposé :</span>
+                        <span className="text-gray-900">{programmeLabel}</span>
+                      </div>
+                    )}
+                    {/* Récit texte */}
+                    {victim.story && (
+                      <div className="flex items-start gap-3 mb-3">
+                        <span className="w-8 h-8 flex items-center justify-center rounded-xl bg-gradient-to-tr from-pink-100 to-purple-100 mt-1"><FiFileText className="text-purple-400" /></span>
+                        <div>
+                          <div className="font-medium text-gray-700 mb-1">Récit du survivant :</div>
+                          <div className="text-gray-700 whitespace-pre-line bg-white/60 rounded-lg border border-gray-100 p-3 shadow-inner text-sm">{victim.story}</div>
+                        </div>
+                      </div>
+                    )}
+                    {/* Récit audio */}
+                    {victim.storyAudio && (
+                      <div className="flex items-center gap-3 mb-3">
+                        <span className="w-8 h-8 flex items-center justify-center rounded-xl bg-gradient-to-tr from-pink-100 to-purple-100"><FiFileText className="text-purple-400" /></span>
+                        <div className="flex flex-col">
+                          <div className="font-medium text-gray-700 mb-1">Récit audio du survivant :</div>
+                          <audio controls className="w-full">
+                            <source src={typeof victim.storyAudio === 'string' ? victim.storyAudio : URL.createObjectURL(victim.storyAudio)} />
+                            Votre navigateur ne supporte pas la lecture audio.
+                          </audio>
+                        </div>
+                      </div>
+                    )}
+                    {!victim.categoryNom && !prejudiceLabel && !programmeLabel && !victim.story && !victim.storyAudio && (
+                      <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                        <FiInfo size={48} className="mb-2" />
+                        <div className="font-bold">Aucune information complémentaire</div>
+                        <div className="text-xs mt-2">Les informations complémentaires n'ont pas encore été ajoutées.</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             {tab === 'dossier' && (
               <div className="flex flex-col md:flex-row h-full gap-6">
@@ -716,6 +717,7 @@ const mockCategories = [
   { id: 1, nom: "Victimes des ménages ordinaires" },
   { id: 2, nom: "Victimes des ménages collectifs" },
   { id: 3, nom: "Victimes en urgence médicale" },
+  { id: 4, nom: "Victimes detenant les décisions de justice" },
 
 ];
 const mockPrejudices = [
@@ -788,6 +790,19 @@ function ReglagesPanel() {
   const [editPrej, setEditPrej] = useState<any | null>(null);
   const [showMesureModal, setShowMesureModal] = useState(false);
   const [editMesure, setEditMesure] = useState<any | null>(null);
+
+  // Configuration programme
+  const [selectedProg, setSelectedProg] = useState<number | null>(null);
+  const [selectedPrej, setSelectedPrej] = useState<number | null>(null);
+  const [selectedMesure, setSelectedMesure] = useState<number | null>(null);
+  const [configurations, setConfigurations] = useState<Array<{ programmeId: number, prejudiceId: number, mesureId: number }>>([]);
+  const handleAddConfig = (e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
+    if (!selectedProg || !selectedPrej || !selectedMesure) return;
+    // Empêcher les doublons
+    if (configurations.some(cfg => cfg.programmeId === selectedProg && cfg.prejudiceId === selectedPrej && cfg.mesureId === selectedMesure)) return;
+    setConfigurations(prev => [...prev, { programmeId: selectedProg, prejudiceId: selectedPrej, mesureId: selectedMesure }]);
+  };
 
   // Handlers CRUD (exemple pour Programmes)
   const handleAddProg = () => { setEditProg({ id: null, nom: "", description: "" }); setShowProgModal(true); };
@@ -1077,6 +1092,7 @@ function ReglagesPanel() {
           </Modal>
         )}
       </div>
+      <ProgrammeConfigPanel programmes={programmes} prejudices={prejudices} mesures={mesures} />
     </div>
   );
 }
