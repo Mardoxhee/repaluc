@@ -1,6 +1,4 @@
 import { useState, useEffect } from 'react'
-import Swal from 'sweetalert2';
-import { useFetch } from '../../context/FetchContext';
 import { mockPartenaires } from '../mockPartenaires';
 import { FiEdit, FiTrash, FiPlus, FiEye, FiGrid, FiUsers, FiTrendingUp, FiSettings, FiInfo, FiMapPin, FiHome, FiPhone, FiFolder, FiFileText, FiBarChart2, FiSearch, FiUser } from "react-icons/fi";
 import Modal from './Modal';
@@ -15,7 +13,6 @@ interface ReglagesProps {
 }
 
 const ReglagesPanel: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, mockProgrammes, mockCategories }) => {
-    const { fetcher, loading: fetchLoading, error: fetchError } = useFetch();
     // Partenaires
     const [partenaires, setPartenaires] = useState(mockPartenaires);
     const [searchPartenaire, setSearchPartenaire] = useState("");
@@ -36,10 +33,10 @@ const ReglagesPanel: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, m
     };
     const handleDeletePartenaire = (id: number) => setPartenaires((prev: any[]) => prev.filter(x => x.id !== id));
     // States pour chaque entité
-    const [programmes, setProgrammes] = useState<any[]>([]);
+    const [programmes, setProgrammes] = useState(mockProgrammes);
     const [categories] = useState(mockCategories);
-    const [prejudices, setPrejudices] = useState<any[]>([]);
-    const [mesures, setMesures] = useState<any[]>([]);
+    const [prejudices, setPrejudices] = useState(mockPrejudices);
+    const [mesures, setMesures] = useState(mockMesures);
 
     // Recherche et pagination programmes
     const [searchProgramme, setSearchProgramme] = useState("");
@@ -55,7 +52,7 @@ const ReglagesPanel: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, m
     const totalPages = Math.ceil(filteredProgrammes.length / perPage);
     // Recherche pour les autres listes
     const filteredCategories = categories.filter(cat => cat.nom.toLowerCase().includes(searchCategorie.toLowerCase()));
-    const filteredPrejudices = prejudices.filter(prej => typeof prej.nom === 'string' && prej.nom.toLowerCase().includes(searchPrejudice.toLowerCase()));
+    const filteredPrejudices = prejudices.filter(prej => prej.nom.toLowerCase().includes(searchPrejudice.toLowerCase()));
     const filteredMesures = mesures.filter(mesure => mesure.nom.toLowerCase().includes(searchMesure.toLowerCase()));
 
     // Modales
@@ -79,318 +76,34 @@ const ReglagesPanel: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, m
         setConfigurations(prev => [...prev, { programmeId: selectedProg, prejudiceId: selectedPrej, mesureId: selectedMesure }]);
     };
 
-    // CRUD for Programmes
-const fetchProgrammes = async () => {
-    try {
-        const data = await fetcher('/programmes');
-        // Map API format to { id, nom, categorie } (handle object or string)
-        const mapped = Array.isArray(data)
-            ? data.map((item: any) => ({
-                id: item.id,
-                nom: item.programme,
-                categorie: typeof item.categorie === 'object' && item.categorie !== null
-                    ? item.categorie.nom || item.categorie.id || ''
-                    : item.categorie || ''
-            }))
-            : [];
-        setProgrammes(mapped);
-    } catch {
-        setProgrammes([]);
-    }
-};
-useEffect(() => { fetchProgrammes(); /* eslint-disable-next-line */ }, []);
-const handleAddProg = () => { setEditProg({ id: null, nom: '', categorie: '' }); setShowProgModal(true); };
-const handleEditProg = (p: any) => {
-    setEditProg({
-        id: p.id,
-        nom: p.nom,
-        categorie: p.categorie
-    });
-    setShowProgModal(true);
-};
-const handleSaveProg = async (p: any) => {
-    // Always use both nom and categorie for update and create
-    if (p.id) {
-        // UPDATE
-        try {
-            await fetcher(`/programmes/${p.id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ programme: p.nom, categorie: p.categorie })
-            });
-            setShowProgModal(false); setEditProg(null);
-            await fetchProgrammes();
-            await Swal.fire({
-                icon: 'success',
-                title: 'Programme mis à jour',
-                showConfirmButton: false,
-                timer: 1200
-            });
-        } catch (err: any) {
-            await Swal.fire({
-                icon: 'error',
-                title: 'Erreur lors de la mise à jour',
-                text: err?.message || 'Erreur inconnue'
-            });
-        }
-    } else {
-        // CREATE
-        try {
-            await fetcher('/programmes', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ programme: p.nom, categorie: p.categorie })
-            });
-            setShowProgModal(false); setEditProg(null);
-            await fetchProgrammes();
-            await Swal.fire({
-                icon: 'success',
-                title: 'Programme créé',
-                showConfirmButton: false,
-                timer: 1200
-            });
-        } catch (err: any) {
-            await Swal.fire({
-                icon: 'error',
-                title: 'Erreur lors de la création',
-                text: err?.message || 'Erreur inconnue'
-            });
-        }
-    }
-};
-const handleDeleteProg = async (id: number) => {
-    const confirm = await Swal.fire({
-        title: 'Supprimer ce programme ?',
-        text: 'Cette action est irréversible.',
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#d33',
-        cancelButtonColor: '#3085d6',
-        confirmButtonText: 'Oui, supprimer',
-        cancelButtonText: 'Annuler'
-    });
-    if (confirm.isConfirmed) {
-        try {
-            await fetcher(`/programmes/${id}`, { method: 'DELETE' });
-            await fetchProgrammes();
-            await Swal.fire({
-                icon: 'success',
-                title: 'Programme supprimé',
-                showConfirmButton: false,
-                timer: 1200
-            });
-        } catch (err: any) {
-            await Swal.fire({
-                icon: 'error',
-                title: 'Erreur lors de la suppression',
-                text: err?.message || 'Erreur inconnue'
-            });
-        }
-    }
-};
+    // Handlers CRUD (exemple pour Programmes)
+    const handleAddProg = () => { setEditProg({ id: null, nom: "", description: "" }); setShowProgModal(true); };
+    const handleEditProg = (p: any) => { setEditProg(p); setShowProgModal(true); };
+    const handleSaveProg = (p: any) => {
+        if (p.id) setProgrammes(prev => prev.map(x => x.id === p.id ? p : x));
+        else setProgrammes(prev => [...prev, { ...p, id: Date.now() }]);
+        setShowProgModal(false); setEditProg(null);
+    };
+    const handleDeleteProg = (id: number) => setProgrammes(prev => prev.filter(x => x.id !== id));
 
     // Idem pour Prejudices et Mesures (CRUD minimal)
     const handleAddPrej = () => { setEditPrej({ id: null, nom: "" }); setShowPrejModal(true); };
-    const handleEditPrej = (p: any) => { setEditPrej({ id: p.id, nom: p.nom }); setShowPrejModal(true); };
-
-    // Fetch prejudices from API
-    const fetchPrejudices = async () => {
-        try {
-            const data = await fetcher('/prejudices');
-            // Map API format to expected front format { id, nom }
-            const mapped = Array.isArray(data)
-                ? data.map((item: any) => ({ id: item.id, nom: item.prejudice }))
-                : [];
-            setPrejudices(mapped);
-        } catch (err) {
-            setPrejudices([]);
-        }
+    const handleEditPrej = (p: any) => { setEditPrej(p); setShowPrejModal(true); };
+    const handleSavePrej = (p: any) => {
+        if (p.id) setPrejudices(prev => prev.map(x => x.id === p.id ? p : x));
+        else setPrejudices(prev => [...prev, { ...p, id: Date.now() }]);
+        setShowPrejModal(false); setEditPrej(null);
     };
+    const handleDeletePrej = (id: number) => setPrejudices(prev => prev.filter(x => x.id !== id));
 
-    useEffect(() => {
-        fetchPrejudices();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    const handleSavePrej = async (p: any) => {
-        if (p.id) {
-            // UPDATE
-            try {
-                await fetcher(`/prejudices/${p.id}`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prejudice: p.nom })
-                });
-                setShowPrejModal(false); setEditPrej(null);
-                await fetchPrejudices();
-                await Swal.fire({
-                    icon: 'success',
-                    title: 'Préjudice mis à jour',
-                    showConfirmButton: false,
-                    timer: 1200
-                });
-            } catch (err: any) {
-                await Swal.fire({
-                    icon: 'error',
-                    title: 'Erreur lors de la mise à jour',
-                    text: err?.message || 'Erreur inconnue'
-                });
-            }
-        } else {
-            // CREATE
-            try {
-                await fetcher('/prejudices', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prejudice: p.nom })
-                });
-                setShowPrejModal(false); setEditPrej(null);
-                await fetchPrejudices();
-                await Swal.fire({
-                    icon: 'success',
-                    title: 'Préjudice créé',
-                    showConfirmButton: false,
-                    timer: 1200
-                });
-            } catch (err: any) {
-                await Swal.fire({
-                    icon: 'error',
-                    title: 'Erreur lors de la création',
-                    text: err?.message || 'Erreur inconnue'
-                });
-            }
-        }
+    const handleAddMesure = () => { setEditMesure({ id: null, nom: "" }); setShowMesureModal(true); };
+    const handleEditMesure = (m: any) => { setEditMesure(m); setShowMesureModal(true); };
+    const handleSaveMesure = (m: any) => {
+        if (m.id) setMesures(prev => prev.map(x => x.id === m.id ? m : x));
+        else setMesures(prev => [...prev, { ...m, id: Date.now() }]);
+        setShowMesureModal(false); setEditMesure(null);
     };
-
-
-    const handleDeletePrej = async (id: number) => {
-        const confirm = await Swal.fire({
-            title: 'Supprimer ce préjudice ?',
-            text: 'Cette action est irréversible.',
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#d33',
-            cancelButtonColor: '#3085d6',
-            confirmButtonText: 'Oui, supprimer',
-            cancelButtonText: 'Annuler'
-        });
-        if (confirm.isConfirmed) {
-            try {
-                await fetcher(`/prejudices/${id}`, {
-                    method: 'DELETE'
-                });
-                await fetchPrejudices();
-                await Swal.fire({
-                    icon: 'success',
-                    title: 'Préjudice supprimé',
-                    showConfirmButton: false,
-                    timer: 1200
-                });
-            } catch (err: any) {
-                await Swal.fire({
-                    icon: 'error',
-                    title: 'Erreur lors de la suppression',
-                    text: err?.message || 'Erreur inconnue'
-                });
-            }
-        }
-    };
-
-    // CRUD for Mesures
-const fetchMesures = async () => {
-    try {
-        const data = await fetcher('/mesures-reparation');
-        // Map API format to { id, nom }
-        const mapped = Array.isArray(data)
-            ? data.map((item: any) => ({ id: item.id, nom: item.mesure }))
-            : [];
-        setMesures(mapped);
-    } catch {
-        setMesures([]);
-    }
-};
-useEffect(() => { fetchMesures(); /* eslint-disable-next-line */ }, []);
-const handleAddMesure = () => { setEditMesure({ id: null, nom: '' }); setShowMesureModal(true); };
-const handleEditMesure = (m: any) => { setEditMesure({ id: m.id, nom: m.nom }); setShowMesureModal(true); };
-const handleSaveMesure = async (m: any) => {
-    if (m.id) {
-        // UPDATE
-        try {
-            await fetcher(`/mesures-reparation/${m.id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mesure: m.nom })
-            });
-            setShowMesureModal(false); setEditMesure(null);
-            await fetchMesures();
-            await Swal.fire({
-                icon: 'success',
-                title: 'Mesure mise à jour',
-                showConfirmButton: false,
-                timer: 1200
-            });
-        } catch (err: any) {
-            await Swal.fire({
-                icon: 'error',
-                title: 'Erreur lors de la mise à jour',
-                text: err?.message || 'Erreur inconnue'
-            });
-        }
-    } else {
-        // CREATE
-        try {
-            await fetcher('/mesures-reparation', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mesure: m.nom })
-            });
-            setShowMesureModal(false); setEditMesure(null);
-            await fetchMesures();
-            await Swal.fire({
-                icon: 'success',
-                title: 'Mesure créée',
-                showConfirmButton: false,
-                timer: 1200
-            });
-        } catch (err: any) {
-            await Swal.fire({
-                icon: 'error',
-                title: 'Erreur lors de la création',
-                text: err?.message || 'Erreur inconnue'
-            });
-        }
-    }
-};
-const handleDeleteMesure = async (id: number) => {
-    const confirm = await Swal.fire({
-        title: 'Supprimer cette mesure ?',
-        text: 'Cette action est irréversible.',
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#d33',
-        cancelButtonColor: '#3085d6',
-        confirmButtonText: 'Oui, supprimer',
-        cancelButtonText: 'Annuler'
-    });
-    if (confirm.isConfirmed) {
-        try {
-            await fetcher(`/mesures-reparation/${id}`, { method: 'DELETE' });
-            await fetchMesures();
-            await Swal.fire({
-                icon: 'success',
-                title: 'Mesure supprimée',
-                showConfirmButton: false,
-                timer: 1200
-            });
-        } catch (err: any) {
-            await Swal.fire({
-                icon: 'error',
-                title: 'Erreur lors de la suppression',
-                text: err?.message || 'Erreur inconnue'
-            });
-        }
-    }
-};
+    const handleDeleteMesure = (id: number) => setMesures(prev => prev.filter(x => x.id !== id));
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -580,11 +293,9 @@ const handleDeleteMesure = async (id: number) => {
                     <Modal title={editPrej?.id ? "Modifier le préjudice" : "Ajouter un préjudice"} onClose={() => setShowPrejModal(false)}>
                         <form className="space-y-4" onSubmit={e => { e.preventDefault(); handleSavePrej(editPrej); }}>
                             <input className="w-full border rounded px-3 py-2" placeholder="Nom" value={editPrej.nom} onChange={e => setEditPrej({ ...editPrej, nom: e.target.value })} required />
-                            {fetchLoading && <div className="text-blue-600 text-sm">Enregistrement en cours...</div>}
-                            {fetchError && <div className="text-red-600 text-sm">Erreur : {fetchError}</div>}
                             <div className="flex gap-2 justify-end">
                                 <button type="button" className="px-4 py-2 rounded bg-gray-100" onClick={() => setShowPrejModal(false)}>Annuler</button>
-                                <button type="submit" className="px-4 py-2 rounded bg-pink-600 text-white" disabled={fetchLoading}>Enregistrer</button>
+                                <button type="submit" className="px-4 py-2 rounded bg-blue-600 text-white">Enregistrer</button>
                             </div>
                         </form>
                     </Modal>

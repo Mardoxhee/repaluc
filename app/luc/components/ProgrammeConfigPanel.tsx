@@ -1,8 +1,5 @@
 "use client";
 import React, { useState } from "react";
-import { useFetch } from '../../context/FetchContext';
-import Swal from 'sweetalert2';
-import { FiEdit, FiTrash } from 'react-icons/fi';
 
 interface Programme {
     id: number;
@@ -24,120 +21,22 @@ interface ProgrammeConfigPanelProps {
 }
 
 const ProgrammeConfigPanel: React.FC<ProgrammeConfigPanelProps> = ({ programmes, prejudices, mesures }) => {
-    const { fetcher, loading: fetchLoading } = useFetch();
     const [selectedProg, setSelectedProg] = useState<number | null>(null);
     const [selectedPrej, setSelectedPrej] = useState<number | null>(null);
     const [selectedMesure, setSelectedMesure] = useState<number | null>(null);
-    const [obs, setObs] = useState("");
-    const [configurations, setConfigurations] = useState<Array<{ id: number, programmeId: number, prejudiceId: number, mesureId: number, obs?: string }>>([]);
-const [editConfigId, setEditConfigId] = useState<number | null>(null);
+    const [configurations, setConfigurations] = useState<Array<{ programmeId: number, prejudiceId: number, mesureId: number }>>([]);
 
-    // Fetch associations from API
-    React.useEffect(() => {
-        fetchConfigs();
-        // eslint-disable-next-line
-    }, []);
-    
-    const handleAddConfig = async (e?: React.FormEvent) => {
+    const handleAddConfig = (e?: React.FormEvent) => {
         if (e) e.preventDefault();
         if (!selectedProg || !selectedPrej || !selectedMesure) return;
-        // If editing, PATCH
-        if (editConfigId) {
-            try {
-                await fetcher(`/programme-prejudice-mesure/${editConfigId}`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        obs,
-                        programmeId: selectedProg,
-                        prejudiceId: selectedPrej,
-                        mesureId: selectedMesure
-                    })
-                });
-                await fetchConfigs();
-                setEditConfigId(null);
-                setObs("");
-                setSelectedProg(null);
-                setSelectedPrej(null);
-                setSelectedMesure(null);
-                if (typeof Swal !== 'undefined') {
-                    await Swal.fire({ icon: 'success', title: 'Configuration mise à jour', showConfirmButton: false, timer: 1200 });
-                } else {
-                    alert('Configuration mise à jour');
-                }
-            } catch (err: any) {
-                if (typeof Swal !== 'undefined') {
-                    await Swal.fire({ icon: 'error', title: 'Erreur', text: err?.message || 'Erreur inconnue' });
-                } else {
-                    alert('Erreur lors de la mise à jour');
-                }
-            }
-            return;
-        }
-        // Sinon, POST (création)
         if (configurations.some(cfg => cfg.programmeId === selectedProg && cfg.prejudiceId === selectedPrej && cfg.mesureId === selectedMesure)) return;
-        try {
-            await fetcher('/programme-prejudice-mesure', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    obs,
-                    programmeId: selectedProg,
-                    prejudiceId: selectedPrej,
-                    mesureId: selectedMesure
-                })
-            });
-            await fetchConfigs();
-            setObs("");
-            setSelectedProg(null);
-            setSelectedPrej(null);
-            setSelectedMesure(null);
-            if (typeof Swal !== 'undefined') {
-                await Swal.fire({ icon: 'success', title: 'Configuration enregistrée', showConfirmButton: false, timer: 1200 });
-            } else {
-                alert('Configuration enregistrée');
-            }
-        } catch (err: any) {
-            if (typeof Swal !== 'undefined') {
-                await Swal.fire({ icon: 'error', title: 'Erreur', text: err?.message || 'Erreur inconnue' });
-            } else {
-                alert('Erreur lors de l\'enregistrement');
-            }
-        }
+        setConfigurations(prev => [...prev, { programmeId: selectedProg, prejudiceId: selectedPrej, mesureId: selectedMesure }]);
     };
-
-    // Récupération des configs depuis l'API (partagée)
-    async function fetchConfigs() {
-        try {
-            const data = await fetcher('/programme-prejudice-mesure');
-            if (Array.isArray(data)) {
-                setConfigurations(data.map((item: any) => ({
-                    id: item.id,
-                    programmeId: item.programmeId,
-                    prejudiceId: item.prejudiceId,
-                    mesureId: item.mesureId,
-                    obs: item.obs || ''
-                })));
-            }
-        } catch {
-            setConfigurations([]);
-        }
-    }
 
     return (
         <div className="bg-white rounded-2xl shadow p-6 border border-gray-100 col-span-1 md:col-span-2 mt-8">
             <h2 className="text-lg font-bold text-gray-900 mb-4">Configuration programme</h2>
             <form className="flex flex-col md:flex-row gap-4 items-end mb-6" onSubmit={handleAddConfig}>
-                <div className="flex-1">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Observation</label>
-                    <input
-                        className="w-full border rounded px-3 py-2"
-                        placeholder="Observation sur la relation"
-                        value={obs}
-                        onChange={e => setObs(e.target.value)}
-                        name="obs"
-                    />
-                </div>
                 <div className="flex-1">
                     <label className="block text-sm font-medium text-gray-700 mb-1">Programme</label>
                     <select
@@ -223,62 +122,15 @@ const [editConfigId, setEditConfigId] = useState<number | null>(null);
                                                     </span>
                                                 </summary>
                                                 <ul className="pl-10 py-2 text-sm border-l border-gray-100 bg-white">
-                                                    {configurations
-                                                        .filter(cfg => cfg.programmeId === prog.id && prejudice && cfg.prejudiceId === prejudice.id)
-                                                        .map(cfg => {
-                                                            const mesure = mesures.find(m => m.id === cfg.mesureId);
-                                                            return (
-                                                                <li key={cfg.id} className="py-1 px-2 text-gray-500 flex items-center gap-2 border-b border-gray-100 last:border-b-0">
-                                                                    <span className="font-medium text-gray-300">Mesure :</span>
-                                                                    <span>{mesure ? mesure.nom : 'Mesure #' + cfg.mesureId}</span>
-                                                                    {cfg.obs && <span className="italic text-xs text-gray-400 ml-2">({cfg.obs})</span>}
-                                                                    <button
-    type="button"
-    className="ml-2 text-blue-600 hover:text-blue-800 p-1 rounded"
-    title="Éditer"
-    aria-label="Éditer"
-    onClick={() => {
-        setEditConfigId(cfg.id);
-        setObs(cfg.obs || '');
-        setSelectedProg(cfg.programmeId);
-        setSelectedPrej(cfg.prejudiceId);
-        setSelectedMesure(cfg.mesureId);
-    }}
->
-    <FiEdit size={16} />
-</button>
-<button
-    type="button"
-    className="ml-1 text-red-600 hover:text-red-800 p-1 rounded"
-    title="Supprimer"
-    aria-label="Supprimer"
-    onClick={async () => {
-        const confirm = await Swal.fire({
-            title: 'Supprimer cette association ?',
-            text: 'Cette action est irréversible.',
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#d33',
-            cancelButtonColor: '#3085d6',
-            confirmButtonText: 'Oui, supprimer',
-            cancelButtonText: 'Annuler'
-        });
-        if (confirm.isConfirmed) {
-            try {
-                await fetcher(`/programme-prejudice-mesure/${cfg.id}`, { method: 'DELETE' });
-                await fetchConfigs();
-                await Swal.fire({ icon: 'success', title: 'Association supprimée', showConfirmButton: false, timer: 1200 });
-            } catch (err: any) {
-                await Swal.fire({ icon: 'error', title: 'Erreur lors de la suppression', text: err?.message || 'Erreur inconnue' });
-            }
-        }
-    }}
->
-    <FiTrash size={16} />
-</button>
-                                                                </li>
-                                                            );
-                                                        })}
+                                                    {uniqueMesures.map(mesureId => {
+                                                        const mesure = mesures.find(m => m.id === mesureId);
+                                                        return (
+                                                            <li key={mesureId} className="py-1 px-2 text-gray-500 flex items-center gap-2 border-b border-gray-100 last:border-b-0">
+                                                                <span className="font-medium text-gray-300">Mesure :</span>
+                                                                <span>{mesure ? mesure.nom : 'Mesure #' + mesureId}</span>
+                                                            </li>
+                                                        );
+                                                    })}
                                                 </ul>
                                             </details>
                                         );

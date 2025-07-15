@@ -3,6 +3,7 @@ import { FiEdit, FiTrash, FiPlus, FiEye, FiGrid, FiUsers, FiTrendingUp, FiSettin
 import VictimForm from "./VictimForm";
 import VictimDetailModal from "./VictimDetailModal";
 import VictimsWithFilters from './filtreComponent'
+import CreateVictimModal from './CreateVictimModal';
 
 const fakeClients = [
     {
@@ -107,6 +108,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
     const [showModal, setShowModal] = React.useState(false);
     const [victimDetail, setVictimDetail] = React.useState<any | null>(null);
     const [showVictimModal, setShowVictimModal] = React.useState(false);
+    // État pour le modal de création
+    const [showCreateModal, setShowCreateModal] = React.useState(false);
 
     // Filtrage
     const filtered = clients.filter((c: any) => {
@@ -169,6 +172,9 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
                     </div>
                     {/* Filtres */}
                     <div className="flex flex-col md:flex-row gap-4 mb-6 items-center ">
+                    </div>
+
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
                         <div className="relative w-full max-w-md">
                             <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                             <input
@@ -179,13 +185,17 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
                                 onChange={e => setSearch(e.target.value)}
                             />
                         </div>
+                        <button
+                            onClick={() => setShowCreateModal(true)}
+                            className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-blue-600 via-purple-500 to-pink-500 text-white font-bold shadow hover:scale-105 transition focus:outline-none focus:ring-2 focus:ring-pink-300"
+                        >
+                            <FiPlus className="w-5 h-5" /> Créer une victime
+                        </button>
                     </div>
                     <VictimsWithFilters mockPrejudices={mockPrejudices}
                         mockMesures={mockMesures}
                         mockProgrammes={mockProgrammes}
                         mockCategories={mockCategories} />
-
-
                     <div className="overflow-x-auto rounded-2xl shadow-lg bg-white/90 border border-gray-100">
                         <table className="min-w-full divide-y divide-gray-200">
                             <thead className="bg-white">
@@ -258,6 +268,27 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
                     </button>
                 </div>
             </div >
+
+            {/* Modal création victime */}
+            <CreateVictimModal
+                isOpen={showCreateModal}
+                onClose={() => setShowCreateModal(false)}
+                onSubmit={data => {
+                    setClients(prev => [
+                        {
+                            id: prev.length ? Math.max(...prev.map(c => c.id)) + 1 : 1,
+                            fullname: data.nom,
+                            province: data.province,
+                            territoire: data.localite,
+                            sexe: data.sexe,
+                            status: "En attente",
+                            ...data
+                        },
+                        ...prev
+                    ]);
+                    setShowCreateModal(false);
+                }}
+            />
 
             {
                 showModal && editClient && (

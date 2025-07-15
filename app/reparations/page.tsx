@@ -1,8 +1,9 @@
 "use client";
 import React, { useState } from "react";
-import { FiEdit, FiTrash, FiPlus, FiEye, FiGrid, FiUsers, FiTrendingUp, FiSettings, FiInfo, FiMapPin, FiHome, FiPhone, FiFolder, FiFileText, FiBarChart2, FiSearch, FiUser } from "react-icons/fi";
+import { FiEye, FiGrid, FiUsers, FiTrendingUp, FiSettings, FiInfo, FiMapPin, FiHome, FiPhone, FiFolder, FiFileText, FiBarChart2, FiSearch, FiUser } from "react-icons/fi";
 import ReglagesPanel from "./components/reglagePanel";
 import ListVictims from './components/ListVictims'
+import DashboardVictims from './components/dashboardVictims'
 
 
 
@@ -393,6 +394,7 @@ const TAB_LIST = [
   { label: "Reglages", key: "reglage", icon: <FiSettings size={18} className="mr-2" /> },
 ];
 
+
 const ReparationsTabs = () => {
   const [activeTab, setActiveTab] = React.useState(TAB_LIST[0].key);
   const tabRefs = React.useRef<(HTMLButtonElement | null)[]>([]);
@@ -440,8 +442,15 @@ const ReparationsTabs = () => {
 
       {/* Contenu de l’onglet actif */}
       <div className="bg-white shadow w-full p-2">
-        {activeTab === "dashboard" && <div>Dashboard à venir…</div>}
-        {activeTab === "victimes" && <ListVictims mockPrejudices={mockPrejudices} mockMesures={mockMesures} mockProgrammes={mockProgrammes} mockCategories={mockCategories} />}
+        {activeTab === "dashboard" && <DashboardVictims /> }
+        {activeTab === "victimes" && (
+          <ListVictims
+            mockPrejudices={mockPrejudices}
+            mockMesures={mockMesures}
+            mockProgrammes={mockProgrammes}
+            mockCategories={mockCategories}
+          />
+        )}
         {activeTab === "programme" && <div>Contenu programme de réparations</div>}
         {activeTab === "indemnisation" && <div>Contenu demandes d’indemnisation</div>}
         {activeTab === "stats" && <div>Contenu statistiques & rapports</div>}
@@ -451,4 +460,4 @@ const ReparationsTabs = () => {
   );
 };
 
-export default ReparationsTabs;
+export default ReparationsTabs; 

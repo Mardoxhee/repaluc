@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from "react";
-import { FiEye, FiGrid, FiUsers, FiTrendingUp, FiSettings, FiInfo, FiMapPin, FiHome, FiPhone, FiFolder, FiFileText, FiBarChart2, FiSearch, FiUser } from "react-icons/fi";
+import { FiEdit, FiTrash, FiPlus, FiEye, FiGrid, FiUsers, FiTrendingUp, FiSettings, FiInfo, FiMapPin, FiHome, FiPhone, FiFolder, FiFileText, FiBarChart2, FiSearch, FiUser } from "react-icons/fi";
 import ReglagesPanel from "./components/reglagePanel";
 import ListVictims from './components/ListVictims'
 import DashboardVictims from './components/dashboardVictims'
@@ -371,7 +371,13 @@ const VictimDetailModal = ({ victim, onClose }: { victim: any, onClose: () => vo
                 <div className="text-xs mt-2">La progression de cette victime n'a pas encore été ajoutée.</div>
               </div>
             )}
-            
+            {tab === 'reglages' && (
+              <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                <FiSettings size={48} className="mb-2" />
+                <div className="font-bold">Aucun réglage disponible</div>
+                <div className="text-xs mt-2">Les réglages de cette victime n'ont pas encore été ajoutés.</div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -384,8 +390,8 @@ const VictimDetailModal = ({ victim, onClose }: { victim: any, onClose: () => vo
 const TAB_LIST = [
   { label: "Dashboard", key: "dashboard", icon: <FiGrid size={18} className="mr-2" /> },
   { label: "Victimes", key: "victimes", icon: <FiUsers size={18} className="mr-2" /> },
-  // { label: "Statistiques & rapports", key: "stats", icon: <FiTrendingUp size={18} className="mr-2" /> },
-  // { label: "Reglages", key: "reglage", icon: <FiSettings size={18} className="mr-2" /> },
+  { label: "Statistiques & rapports", key: "stats", icon: <FiTrendingUp size={18} className="mr-2" /> },
+  { label: "Reglages", key: "reglage", icon: <FiSettings size={18} className="mr-2" /> },
 ];
 
 
