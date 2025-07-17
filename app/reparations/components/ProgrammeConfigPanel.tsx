@@ -17,30 +17,36 @@ interface Mesure {
     nom: string;
 }
 
+interface Violation {
+    id: number;
+    nom: string;
+}
+
 interface ProgrammeConfigPanelProps {
     programmes: Programme[];
     prejudices: Prejudice[];
     mesures: Mesure[];
+    violations: Violation[];
 }
 
-const ProgrammeConfigPanel: React.FC<ProgrammeConfigPanelProps> = ({ programmes, prejudices, mesures }) => {
+const ProgrammeConfigPanel: React.FC<ProgrammeConfigPanelProps> = ({ programmes, prejudices, mesures, violations }) => {
     const { fetcher, loading: fetchLoading } = useFetch();
     const [selectedProg, setSelectedProg] = useState<number | null>(null);
+    const [selectedViolation, setSelectedViolation] = useState<number | null>(null);
     const [selectedPrej, setSelectedPrej] = useState<number | null>(null);
     const [selectedMesure, setSelectedMesure] = useState<number | null>(null);
-    const [obs, setObs] = useState("");
-    const [configurations, setConfigurations] = useState<Array<{ id: number, programmeId: number, prejudiceId: number, mesureId: number, obs?: string }>>([]);
-const [editConfigId, setEditConfigId] = useState<number | null>(null);
+    const [configurations, setConfigurations] = useState<Array<{ id: number, programmeId: number, violationId: number, prejudiceId: number, mesureId: number, obs?: string }>>([]);
+    const [editConfigId, setEditConfigId] = useState<number | null>(null);
 
     // Fetch associations from API
     React.useEffect(() => {
         fetchConfigs();
         // eslint-disable-next-line
     }, []);
-    
+
     const handleAddConfig = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
-        if (!selectedProg || !selectedPrej || !selectedMesure) return;
+        if (!selectedProg || !selectedViolation || !selectedPrej || !selectedMesure) return;
         // If editing, PATCH
         if (editConfigId) {
             try {
@@ -48,16 +54,16 @@ const [editConfigId, setEditConfigId] = useState<number | null>(null);
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        obs,
                         programmeId: selectedProg,
+                        violationId: selectedViolation,
                         prejudiceId: selectedPrej,
                         mesureId: selectedMesure
                     })
                 });
                 await fetchConfigs();
                 setEditConfigId(null);
-                setObs("");
                 setSelectedProg(null);
+                setSelectedViolation(null);
                 setSelectedPrej(null);
                 setSelectedMesure(null);
                 if (typeof Swal !== 'undefined') {
@@ -75,21 +81,21 @@ const [editConfigId, setEditConfigId] = useState<number | null>(null);
             return;
         }
         // Sinon, POST (création)
-        if (configurations.some(cfg => cfg.programmeId === selectedProg && cfg.prejudiceId === selectedPrej && cfg.mesureId === selectedMesure)) return;
+        if (configurations.some(cfg => cfg.programmeId === selectedProg && cfg.violationId === selectedViolation && cfg.prejudiceId === selectedPrej && cfg.mesureId === selectedMesure)) return;
         try {
             await fetcher('/programme-prejudice-mesure', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    obs,
                     programmeId: selectedProg,
+                    violationId: selectedViolation,
                     prejudiceId: selectedPrej,
                     mesureId: selectedMesure
                 })
             });
             await fetchConfigs();
-            setObs("");
             setSelectedProg(null);
+            setSelectedViolation(null);
             setSelectedPrej(null);
             setSelectedMesure(null);
             if (typeof Swal !== 'undefined') {
@@ -116,7 +122,7 @@ const [editConfigId, setEditConfigId] = useState<number | null>(null);
                     programmeId: item.programmeId,
                     prejudiceId: item.prejudiceId,
                     mesureId: item.mesureId,
-                    obs: item.obs || ''
+                    violationId: item.violationId,
                 })));
             }
         } catch {
@@ -129,16 +135,6 @@ const [editConfigId, setEditConfigId] = useState<number | null>(null);
             <h2 className="text-lg font-bold text-gray-900 mb-4">Configuration programme</h2>
             <form className="flex flex-col md:flex-row gap-4 items-end mb-6" onSubmit={handleAddConfig}>
                 <div className="flex-1">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Observation</label>
-                    <input
-                        className="w-full border rounded px-3 py-2"
-                        placeholder="Observation sur la relation"
-                        value={obs}
-                        onChange={e => setObs(e.target.value)}
-                        name="obs"
-                    />
-                </div>
-                <div className="flex-1">
                     <label className="block text-sm font-medium text-gray-700 mb-1">Programme</label>
                     <select
                         className="w-full border rounded px-3 py-2"
@@ -149,6 +145,20 @@ const [editConfigId, setEditConfigId] = useState<number | null>(null);
                         <option value="" disabled>Choisir un programme</option>
                         {programmes.map(prog => (
                             <option key={prog.id} value={prog.id}>{prog.nom}</option>
+                        ))}
+                    </select>
+                </div>
+                <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Violation</label>
+                    <select
+                        className="w-full border rounded px-3 py-2"
+                        value={selectedViolation ?? ''}
+                        onChange={e => setSelectedViolation(Number(e.target.value) || null)}
+                        required
+                    >
+                        <option value="" disabled>Choisir une violation</option>
+                        {violations.map(v => (
+                            <option key={v.id} value={v.id}>{v.nom}</option>
                         ))}
                     </select>
                 </div>
@@ -183,7 +193,7 @@ const [editConfigId, setEditConfigId] = useState<number | null>(null);
                 <button
                     type="submit"
                     className="px-6 py-2 rounded bg-gradient-to-r from-blue-500 to-pink-500 text-white font-semibold shadow hover:scale-105 transition-transform"
-                    disabled={!selectedProg || !selectedPrej || !selectedMesure}
+                    disabled={!selectedProg || !selectedViolation || !selectedPrej || !selectedMesure}
                 >Associer</button>
             </form>
             {/* Liste des programmes avec accordéons */}
@@ -233,49 +243,48 @@ const [editConfigId, setEditConfigId] = useState<number | null>(null);
                                                                     <span>{mesure ? mesure.nom : 'Mesure #' + cfg.mesureId}</span>
                                                                     {cfg.obs && <span className="italic text-xs text-gray-400 ml-2">({cfg.obs})</span>}
                                                                     <button
-    type="button"
-    className="ml-2 text-blue-600 hover:text-blue-800 p-1 rounded"
-    title="Éditer"
-    aria-label="Éditer"
-    onClick={() => {
-        setEditConfigId(cfg.id);
-        setObs(cfg.obs || '');
-        setSelectedProg(cfg.programmeId);
-        setSelectedPrej(cfg.prejudiceId);
-        setSelectedMesure(cfg.mesureId);
-    }}
->
-    <FiEdit size={16} />
-</button>
-<button
-    type="button"
-    className="ml-1 text-red-600 hover:text-red-800 p-1 rounded"
-    title="Supprimer"
-    aria-label="Supprimer"
-    onClick={async () => {
-        const confirm = await Swal.fire({
-            title: 'Supprimer cette association ?',
-            text: 'Cette action est irréversible.',
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#d33',
-            cancelButtonColor: '#3085d6',
-            confirmButtonText: 'Oui, supprimer',
-            cancelButtonText: 'Annuler'
-        });
-        if (confirm.isConfirmed) {
-            try {
-                await fetcher(`/programme-prejudice-mesure/${cfg.id}`, { method: 'DELETE' });
-                await fetchConfigs();
-                await Swal.fire({ icon: 'success', title: 'Association supprimée', showConfirmButton: false, timer: 1200 });
-            } catch (err: any) {
-                await Swal.fire({ icon: 'error', title: 'Erreur lors de la suppression', text: err?.message || 'Erreur inconnue' });
-            }
-        }
-    }}
->
-    <FiTrash size={16} />
-</button>
+                                                                        type="button"
+                                                                        className="ml-2 text-blue-600 hover:text-blue-800 p-1 rounded"
+                                                                        title="Éditer"
+                                                                        aria-label="Éditer"
+                                                                        onClick={() => {
+                                                                            setEditConfigId(cfg.id);
+                                                                            setSelectedProg(cfg.programmeId);
+                                                                            setSelectedPrej(cfg.prejudiceId);
+                                                                            setSelectedMesure(cfg.mesureId);
+                                                                        }}
+                                                                    >
+                                                                        <FiEdit size={16} />
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        className="ml-1 text-red-600 hover:text-red-800 p-1 rounded"
+                                                                        title="Supprimer"
+                                                                        aria-label="Supprimer"
+                                                                        onClick={async () => {
+                                                                            const confirm = await Swal.fire({
+                                                                                title: 'Supprimer cette association ?',
+                                                                                text: 'Cette action est irréversible.',
+                                                                                icon: 'warning',
+                                                                                showCancelButton: true,
+                                                                                confirmButtonColor: '#d33',
+                                                                                cancelButtonColor: '#3085d6',
+                                                                                confirmButtonText: 'Oui, supprimer',
+                                                                                cancelButtonText: 'Annuler'
+                                                                            });
+                                                                            if (confirm.isConfirmed) {
+                                                                                try {
+                                                                                    await fetcher(`/programme-prejudice-mesure/${cfg.id}`, { method: 'DELETE' });
+                                                                                    await fetchConfigs();
+                                                                                    await Swal.fire({ icon: 'success', title: 'Association supprimée', showConfirmButton: false, timer: 1200 });
+                                                                                } catch (err: any) {
+                                                                                    await Swal.fire({ icon: 'error', title: 'Erreur lors de la suppression', text: err?.message || 'Erreur inconnue' });
+                                                                                }
+                                                                            }
+                                                                        }}
+                                                                    >
+                                                                        <FiTrash size={16} />
+                                                                    </button>
                                                                 </li>
                                                             );
                                                         })}

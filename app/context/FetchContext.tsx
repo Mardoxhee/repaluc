@@ -8,6 +8,7 @@ interface FetchContextType {
 }
 
 const FetchContext = createContext<FetchContextType | undefined>(undefined);
+export { FetchContext };
 
 export const FetchProvider = ({ children }: { children: ReactNode }) => {
     const [loading, setLoading] = useState(false);

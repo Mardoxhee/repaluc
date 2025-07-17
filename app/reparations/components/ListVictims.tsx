@@ -2,111 +2,51 @@ import React, { useState, useEffect } from "react";
 import { FiEdit, FiTrash, FiPlus, FiEye, FiGrid, FiUsers, FiTrendingUp, FiSettings, FiInfo, FiMapPin, FiHome, FiPhone, FiFolder, FiFileText, FiBarChart2, FiSearch, FiUser } from "react-icons/fi";
 import VictimForm from "./VictimForm";
 import VictimDetailModal from "./VictimDetailModal";
-import VictimsWithFilters from './filtreComponent'
+import VictimsWithFilters from './filtreComponent';
 
-const fakeClients = [
-    {
-        id: 1,
-        fullname: "Awa Diabaté",
-        province: "Nord-Kivu",
-        territoire: "Goma",
-        sexe: "F",
-        status: "Pris en charge",
-    },
-    {
-        id: 2,
-        fullname: "Moussa Koné",
-        province: "Sud-Kivu",
-        territoire: "Bukavu",
-        sexe: "M",
-        status: "En attente",
-    },
-    {
-        id: 3,
-        fullname: "Fatou Traoré",
-        province: "Ituri",
-        territoire: "Bunia",
-        sexe: "F",
-        status: "Rejeté",
-    },
-    {
-        id: 4,
-        fullname: "Jean Kouassi",
-        province: "Haut-Uele",
-        territoire: "Isiro",
-        sexe: "M",
-        status: "Pris en charge",
-    },
-    {
-        id: 5,
-        fullname: "Chantal Mbayo",
-        province: "Maniema",
-        territoire: "Kindu",
-        sexe: "F",
-        status: "En attente",
-    },
-    {
-        id: 6,
-        fullname: "Eric Ilunga",
-        province: "Tshopo",
-        territoire: "Kisangani",
-        sexe: "M",
-        status: "Pris en charge",
-    },
-    {
-        id: 7,
-        fullname: "Gloria Tshisekedi",
-        province: "Kasai",
-        territoire: "Tshikapa",
-        sexe: "F",
-        status: "Pris en charge",
-    },
-    {
-        id: 8,
-        fullname: "Patrick Lumumba",
-        province: "Bas-Uele",
-        territoire: "Buta",
-        sexe: "M",
-        status: "Rejeté",
-    },
-    {
-        id: 9,
-        fullname: "Marie Kabila",
-        province: "Kwilu",
-        territoire: "Kikwit",
-        sexe: "F",
-        status: "En attente",
-    },
-    {
-        id: 10,
-        fullname: "Serge Bemba",
-        province: "Mongala",
-        territoire: "Lisala",
-        sexe: "M",
-        status: "Pris en charge",
-    },
-];
-
-interface ReglagesProps {
-    mockPrejudices: { id: number; nom: string }[];
-    mockMesures: { id: number; nom: string }[];
-    mockProgrammes: { id: number; nom: string }[];
-    mockCategories: { id: number; nom: string }[];
+interface ListVictimsProps {
+    mockPrejudices: any[];
+    mockMesures: any[];
+    mockProgrammes: any[];
+    mockCategories: any[];
 }
 
-
-const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, mockProgrammes, mockCategories }) => {
-    const [filterType, setFilterType] = React.useState<string>("");
-    const [search, setSearch] = React.useState<string>("");
-    const [page, setPage] = React.useState<number>(1);
-    const perPage = 10;
-
+const ListVictims: React.FC<ListVictimsProps> = ({
+    mockPrejudices,
+    mockMesures,
+    mockProgrammes,
+    mockCategories
+}) => {
     // État local pour la liste, l'édition et le modal
-    const [clients, setClients] = React.useState(fakeClients);
-    const [editClient, setEditClient] = React.useState<any | null>(null);
-    const [showModal, setShowModal] = React.useState(false);
-    const [victimDetail, setVictimDetail] = React.useState<any | null>(null);
-    const [showVictimModal, setShowVictimModal] = React.useState(false);
+    const [clients, setClients] = useState<any[]>([]);
+    const [loading, setLoading] = useState<boolean>(true);
+    const [error, setError] = useState<string>("");
+    const [search, setSearch] = useState<string>("");
+    const [page, setPage] = useState<number>(1);
+    const [perPage] = useState<number>(10);
+    const [editClient, setEditClient] = useState<any | null>(null);
+    const [showModal, setShowModal] = useState(false);
+    const [victimDetail, setVictimDetail] = useState<any | null>(null);
+    const [showVictimModal, setShowVictimModal] = useState(false);
+
+    // Fetch dynamique
+    useEffect(() => {
+        setLoading(true);
+        setError("");
+        fetch("http://10.140.0.106:8006/victime/categorie/status/confirmé")
+            .then(res => {
+                if (!res.ok) throw new Error("Erreur lors du chargement des victimes");
+                return res.json();
+            })
+            .then(data => {
+                setClients(Array.isArray(data.data) ? data.data : []);
+                setLoading(false);
+            })
+            .catch(err => {
+                setError(err.message || "Erreur inconnue");
+                setLoading(false);
+            });
+    }, []);
 
     // Filtrage
     const filtered = clients.filter((c: any) => {
@@ -114,29 +54,34 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
         if (search) {
             const s = search.toLowerCase();
             return (
-                (typeof c.fullname === 'string' && c.fullname.toLowerCase().includes(s)) ||
+                (typeof c.nom === 'string' && c.nom.toLowerCase().includes(s)) ||
                 (typeof c.province === 'string' && c.province.toLowerCase().includes(s)) ||
                 (typeof c.territoire === 'string' && c.territoire.toLowerCase().includes(s))
             );
         }
         return true;
     });
+
     const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
     const paginated = filtered.slice((page - 1) * perPage, page * perPage);
 
-    React.useEffect(() => { setPage(1); }, [filterType, search]);
-    const EditClientModal = ({ client, onClose, onSave }: { client: any, onClose: () => void, onSave: (c: any) => void }) => {
-        const [form, setForm] = React.useState<any>(client);
+    useEffect(() => {
+        setPage(1);
+    }, [search]);
 
+    const EditClientModal = ({ client, onClose, onSave }: { client: any, onClose: () => void, onSave: (c: any) => void }) => {
+        const [form, setForm] = useState<any>(client);
 
         const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
             const { name, value } = e.target;
             setForm((prev: any) => ({ ...prev, [name]: value }));
         };
+
         const handleSubmit = (e: React.FormEvent) => {
             e.preventDefault();
             onSave(form);
         };
+
         return (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
                 <div className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-2xl relative border border-gray-100">
@@ -164,11 +109,12 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
         <>
             <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 py-14 px-4">
                 <div className="max-w-7xl mx-auto w-full px-8">
-                    <div className="flex items-center justify-between w-full mb-8 ">
+                    <div className="flex items-center justify-between w-full mb-8">
                         <h1 className="text-3xl font-bold text-gray-900">Victimes</h1>
                     </div>
+
                     {/* Filtres */}
-                    <div className="flex flex-col md:flex-row gap-4 mb-6 items-center ">
+                    <div className="flex flex-col md:flex-row gap-4 mb-6 items-center">
                         <div className="relative w-full max-w-md">
                             <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                             <input
@@ -180,11 +126,13 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
                             />
                         </div>
                     </div>
-                    <VictimsWithFilters mockPrejudices={mockPrejudices}
+
+                    <VictimsWithFilters
+                        mockPrejudices={mockPrejudices}
                         mockMesures={mockMesures}
                         mockProgrammes={mockProgrammes}
-                        mockCategories={mockCategories} />
-
+                        mockCategories={mockCategories}
+                    />
 
                     <div className="overflow-x-auto rounded-2xl shadow-lg bg-white/90 border border-gray-100">
                         <table className="min-w-full divide-y divide-gray-200">
@@ -200,89 +148,94 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-100">
-                                {paginated.length === 0 && (
-                                    <tr><td colSpan={7} className="text-center py-8 text-gray-400">Aucun client trouvé</td></tr>
-                                )}
-                            </tbody>
-
-                            <tbody>
-                                {paginated.map((client, idx) => (
-                                    <tr key={client.id} className="border-b hover:bg-blue-50/30 transition">
-                                        <td className="px-4 py-3">{(page - 1) * perPage + idx + 1}</td>
-                                        <td className="px-4 py-3 font-semibold text-gray-900">{client.fullname}</td>
-                                        <td className="px-4 py-3">{client.province}</td>
-                                        <td className="px-4 py-3">{client.territoire}</td>
-                                        <td className="px-4 py-3">{client.sexe}</td>
-                                        <td className="px-4 py-3">
-                                            {client.status === "Pris en charge" && (
-                                                <span className="inline-block px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700">Pris en charge</span>
-                                            )}
-                                            {client.status === "En attente" && (
-                                                <span className="inline-block px-3 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-700">En attente</span>
-                                            )}
-                                            {client.status === "Rejeté" && (
-                                                <span className="inline-block px-3 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-700">Rejeté</span>
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-3 flex gap-2 justify-center">
-                                            <button
-                                                className="group flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-blue-500 hover:bg-blue-700 text-white border border-blue-600 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-blue-300"
-                                                title="Voir les détails"
-                                                onClick={() => { setVictimDetail(client); setShowVictimModal(true); }}
-                                            >
-                                                <FiEye className="w-5 h-5" />
-                                                <span className="hidden sm:inline">Détails</span>
-                                            </button>
+                                {paginated.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={7} className="text-center py-8 text-gray-400">
+                                            {loading ? "Chargement..." : "Aucun client trouvé"}
                                         </td>
                                     </tr>
-                                ))}
+                                ) : (
+                                    paginated.map((client: any, index: number) => (
+                                        <tr key={client.id || index} className="hover:bg-gray-50">
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                {(page - 1) * perPage + index + 1}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                                {client.nom || 'Non spécifié'}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                {client.province || 'Non spécifié'}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                {client.territoire || 'Non spécifié'}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                {client.sexe || 'Non spécifié'}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                {client.status || 'Non spécifié'}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-center">
+                                                <button
+                                                    onClick={() => {
+                                                        setVictimDetail(client);
+                                                        setShowVictimModal(true);
+                                                    }}
+                                                    className="text-pink-600 hover:text-pink-900 mr-3 flex items-center justify-center gap-1"
+                                                >
+                                                    <FiEye className="w-5 h-5" />
+                                                    <span className="hidden sm:inline">Détails</span>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
                             </tbody>
                         </table>
                     </div>
-                </div>
-                <div className="flex justify-end gap-2 mt-6">
-                    <button
-                        onClick={() => setPage(p => Math.max(1, p - 1))}
-                        className="px-4 py-2 rounded-lg border bg-white text-gray-600 hover:bg-pink-50 disabled:opacity-50"
-                        disabled={page === 1}
-                    >
-                        Précédent
-                    </button>
-                    <span className="px-2 py-2 text-gray-700 font-medium">Page {page} / {totalPages}</span>
-                    <button
-                        onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                        className="px-4 py-2 rounded-lg border bg-white text-gray-600 hover:bg-pink-50 disabled:opacity-50"
-                        disabled={page === totalPages}
-                    >
-                        Suivant
-                    </button>
-                </div>
-            </div >
 
-            {
-                showModal && editClient && (
+                    <div className="flex justify-end gap-2 mt-6">
+                        <button
+                            onClick={() => setPage(p => Math.max(1, p - 1))}
+                            className="px-4 py-2 rounded-lg border bg-white text-gray-600 hover:bg-pink-50 disabled:opacity-50"
+                            disabled={page === 1}
+                        >
+                            Précédent
+                        </button>
+                        <span className="px-2 py-2 text-gray-700 font-medium">
+                            Page {page} / {totalPages}
+                        </span>
+                        <button
+                            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                            className="px-4 py-2 rounded-lg border bg-white text-gray-600 hover:bg-pink-50 disabled:opacity-50"
+                            disabled={page === totalPages}
+                        >
+                            Suivant
+                        </button>
+                    </div>
+                </div>
+
+                {showModal && editClient && (
                     <EditClientModal
                         client={editClient}
-                        onClose={() => { setShowModal(false); setEditClient(null) }}
+                        onClose={() => { setShowModal(false); setEditClient(null); }}
                         onSave={(updated: any) => {
                             setClients(prev => prev.map(c => c.id === updated.id ? updated : c));
                             setShowModal(false);
                             setEditClient(null);
                         }}
                     />
-                )
-            }
-            {
-                showVictimModal && victimDetail && (
+                )}
+
+                {showVictimModal && victimDetail && (
                     <VictimDetailModal
                         victim={victimDetail}
                         onClose={() => setShowVictimModal(false)}
                     />
-                )
-            }
-
+                )}
+            </div>
         </>
-    )
-}
+    );
+};
 
 export default ListVictims;

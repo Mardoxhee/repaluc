@@ -12,9 +12,9 @@ const mockProgrammes = [
   { id: 2, nom: "Programme B", categoryId: 2, categoryNom: "Victimes des ménages collectifs" },
 ];
 const mockCategories = [
-  { id: 1, nom: "Victimes des ménages ordinaires" },
-  { id: 2, nom: "Victimes des ménages collectifs" },
-  { id: 3, nom: "Victimes en urgence médicale" },
+  { id: 1, nom: "Victimes vivant dans les ménages ordinaires" },
+  { id: 2, nom: "Victimes vivant dans les ménages collectifs" },
+  { id: 3, nom: "Victime en cas d'urgence médicale" },
   { id: 4, nom: "Victimes detenant les décisions de justice" },
 
 ];
