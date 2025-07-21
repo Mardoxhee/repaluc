@@ -1,7 +1,6 @@
 "use client";
 import React, { useState } from "react";
 import { FiEye, FiGrid, FiUsers, FiTrendingUp, FiSettings, FiInfo, FiMapPin, FiHome, FiPhone, FiFolder, FiFileText, FiBarChart2, FiSearch, FiUser } from "react-icons/fi";
-import ReglagesPanel from "./components/reglagePanel";
 import ListVictims from './components/ListVictims'
 import DashboardVictims from './components/dashboardVictims'
 
