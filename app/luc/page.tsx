@@ -447,7 +447,6 @@ const ReparationsTabs = () => {
         {activeTab === "programme" && <div>Contenu programme de réparations</div>}
         {activeTab === "indemnisation" && <div>Contenu demandes d’indemnisation</div>}
         {activeTab === "stats" && <div>Contenu statistiques & rapports</div>}
-        {activeTab === "reglage" && <ReglagesPanel mockPrejudices={mockPrejudices} mockMesures={mockMesures} mockProgrammes={mockProgrammes} mockCategories={mockCategories} />}
       </div>
     </div>
   );
