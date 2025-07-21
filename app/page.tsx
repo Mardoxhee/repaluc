@@ -22,8 +22,6 @@ export default function Home() {
         {/* Main content */}
         <div className="relative z-20 w-full max-w-2xl mx-auto flex flex-col items-center justify-center px-4 py-12 rounded-3xl bg-white/70 backdrop-blur-xl shadow-2xl border border-white/40">
 
-
-
         {/* Hero Section */}
         <section className="flex flex-col-reverse md:flex-row items-center justify-center">
           <div className="flex flex-col gap-6">
@@ -33,12 +31,8 @@ export default function Home() {
             <p className="text-base sm:text-lg text-gray-700 max-w-xl mb-3 text-center w-full">
               Application développée en interne pour le suivi et la gestion centralisée des victimes et de leurs dossiers.
             </p>
-   -
           </div>
-
         </section>
-
-
 
         {/* Actions Section */}
         <section className="w-full max-w-4xl mx-auto px-6 pb-8 flex flex-col md:flex-row gap-8 mt-auto">

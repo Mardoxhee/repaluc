@@ -3,7 +3,7 @@ import Swal from 'sweetalert2';
 import { useFetch } from '../../context/FetchContext';
 import { mockPartenaires } from '../mockPartenaires';
 import { FiEdit, FiTrash, FiPlus, FiEye, FiGrid, FiUsers, FiTrendingUp, FiSettings, FiInfo, FiMapPin, FiHome, FiPhone, FiFolder, FiFileText, FiBarChart2, FiSearch, FiUser } from "react-icons/fi";
-import Modal from './Modal';
+import { Modal } from 'flowbite-react';
 import ProgrammeConfigPanel from './ProgrammeConfigPanel';
 import Programme from "./programme"
 import Violation from "./violation"
@@ -464,20 +464,33 @@ const ReglagesPanel: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, m
                         </li>
                     ))}
                 </ul>
-                {/* Modal Préjudice */}
-                {showPrejModal && (
-                    <Modal title={editPrej?.id ? "Modifier le préjudice" : "Ajouter un préjudice"} onClose={() => setShowPrejModal(false)}>
-                        <form className="space-y-4" onSubmit={e => { e.preventDefault(); handleSavePrej(editPrej); }}>
-                            <input className="w-full border rounded px-3 py-2" placeholder="Nom" value={editPrej.nom} onChange={e => setEditPrej({ ...editPrej, nom: e.target.value })} required />
-                            {fetchLoading && <div className="text-blue-600 text-sm">Enregistrement en cours...</div>}
-                            {fetchError && <div className="text-red-600 text-sm">Erreur : {fetchError}</div>}
-                            <div className="flex gap-2 justify-end">
-                                <button type="button" className="px-4 py-2 rounded bg-gray-100" onClick={() => setShowPrejModal(false)}>Annuler</button>
-                                <button type="submit" className="px-4 py-2 rounded bg-pink-600 text-white" disabled={fetchLoading}>Enregistrer</button>
+                {/* Modal Préjudice (Flowbite) */}
+                <Modal show={showPrejModal} onClose={() => setShowPrejModal(false)}>
+                    {editPrej && (
+                        <div className="p-6 bg-white text-gray-900 rounded-xl">
+                            <div className="mb-4">
+                                <h3 className="text-lg font-bold">
+                                    {editPrej.id ? "Modifier le préjudice" : "Ajouter un préjudice"}
+                                </h3>
                             </div>
-                        </form>
-                    </Modal>
-                )}
+                            <form className="space-y-4" onSubmit={e => { e.preventDefault(); handleSavePrej(editPrej); }}>
+                                <input
+                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    placeholder="Nom"
+                                    value={editPrej.nom}
+                                    onChange={e => setEditPrej({ ...editPrej, nom: e.target.value })}
+                                    required
+                                />
+                                {fetchLoading && <div className="text-blue-600 text-sm">Enregistrement en cours...</div>}
+                                {fetchError && <div className="text-red-600 text-sm">Erreur : {fetchError}</div>}
+                                <div className="flex gap-2 justify-end mt-6">
+                                    <button type="button" className="px-4 py-2 rounded bg-gray-100 text-gray-700 hover:bg-gray-200" onClick={() => setShowPrejModal(false)}>Annuler</button>
+                                    <button type="submit" className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700" disabled={fetchLoading}>Enregistrer</button>
+                                </div>
+                            </form>
+                        </div>
+                    )}
+                </Modal>
             </div>
             {/* Mesures de réparation */}
             <div className="bg-white rounded-2xl shadow p-6 border border-gray-100">
@@ -529,21 +542,34 @@ const ReglagesPanel: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, m
                         </li>
                     ))}
                 </ul>
-                {/* Modal Mesure */}
-                {showMesureModal && (
-                    <Modal title={editMesure?.id ? "Modifier la mesure" : "Ajouter une mesure"} onClose={() => setShowMesureModal(false)}>
-                        <form className="space-y-4" onSubmit={e => { e.preventDefault(); handleSaveMesure(editMesure); }}>
-                            <input className="w-full border rounded px-3 py-2" placeholder="Nom" value={editMesure.nom} onChange={e => setEditMesure({ ...editMesure, nom: e.target.value })} required />
-                            <div className="flex gap-2 justify-end">
-                                <button type="button" className="px-4 py-2 rounded bg-gray-100" onClick={() => setShowMesureModal(false)}>Annuler</button>
-                                <button type="submit" className="px-4 py-2 rounded bg-blue-600 text-white">Enregistrer</button>
-                            </div>
-                        </form>
-                    </Modal>
-                )}
+                {/* Modal Mesure (Flowbite) */}
+                <Modal show={showMesureModal} onClose={() => setShowMesureModal(false)}>
+    {editMesure && (
+        <div className="p-6 bg-white text-gray-900 rounded-xl">
+            <div className="mb-4">
+                <h3 className="text-lg font-bold">
+                    {editMesure.id ? "Modifier la mesure" : "Ajouter une mesure"}
+                </h3>
             </div>
-            <ProgrammeConfigPanel programmes={programmes} prejudices={prejudices} mesures={mesures} violations={violations} />
+            <form className="space-y-4" onSubmit={e => { e.preventDefault(); handleSaveMesure(editMesure); }}>
+                <input
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Nom"
+                    value={editMesure.nom}
+                    onChange={e => setEditMesure({ ...editMesure, nom: e.target.value })}
+                    required
+                />
+                <div className="flex gap-2 justify-end mt-6">
+                    <button type="button" className="px-4 py-2 rounded bg-gray-100 text-gray-700 hover:bg-gray-200" onClick={() => setShowMesureModal(false)}>Annuler</button>
+                    <button type="submit" className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Enregistrer</button>
+                </div>
+            </form>
         </div>
-    );
+    )}
+</Modal>
+            </div>
+        </div>
+    )
 }
+
 export default ReglagesPanel;
