@@ -6,133 +6,66 @@ import DashboardStats from "@/components/DashboardStats";
 export default function Home() {
   return (
     <MainLayout>
-      <div className="flex flex-col gap-10 w-full max-w-[1440px] mx-auto pt-6 pb-12 px-2 sm:px-8">
-        {/* Filtres période */}
-        <div className="flex justify-end mb-2">
-          <div className="inline-flex rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-            <button className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-blue-50 focus:bg-blue-100 transition">Année</button>
-            <button className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-blue-50 focus:bg-blue-100 transition border-l border-gray-200">Mois</button>
-            <button className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-blue-50 focus:bg-blue-100 transition border-l border-gray-200">Semaine</button>
-          </div>
+      <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
+        {/* Background parallax image + gradient overlay */}
+        <div className="absolute inset-0 w-full h-full z-0">
+          <div className="absolute inset-0 bg-gradient-to-br from-blue-900/60 via-pink-900/40 to-white/70 z-10" />
+          <div
+            className="absolute inset-0 w-full h-full bg-center bg-cover bg-no-repeat scale-110 will-change-transform"
+            style={{
+              backgroundImage: 'url(/childs.jpg)',
+              backgroundAttachment: 'fixed',
+              filter: 'blur(1.5px) brightness(0.85)',
+            }}
+          />
         </div>
+        {/* Main content */}
+        <div className="relative z-20 w-full max-w-2xl mx-auto flex flex-col items-center justify-center px-4 py-12 rounded-3xl bg-white/70 backdrop-blur-xl shadow-2xl border border-white/40">
 
-        {/* Statistiques principales */}
-        <DashboardStats />
 
-        {/* Graphiques */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
-          <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-50 flex flex-col">
-            <span className="text-lg font-bold text-gray-800 mb-2">Revenus mensuels</span>
-            <div className="flex-1 flex items-center justify-center">
-              <div className="w-full h-40 flex items-center justify-center text-gray-400">[Graphique placeholder]</div>
+
+        {/* Hero Section */}
+        <section className="flex flex-col-reverse md:flex-row items-center justify-center">
+          <div className="flex flex-col gap-6">
+            <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 leading-tight mb-2 text-center w-full">
+              La plateforme de suivi des victimes
+            </h1>
+            <p className="text-base sm:text-lg text-gray-700 max-w-xl mb-3 text-center w-full">
+              Application développée en interne pour le suivi et la gestion centralisée des victimes et de leurs dossiers.
+            </p>
+   -
+          </div>
+
+        </section>
+
+
+
+        {/* Actions Section */}
+        <section className="w-full max-w-4xl mx-auto px-6 pb-8 flex flex-col md:flex-row gap-8 mt-auto">
+          {/* Suivi de la luc */}
+          <div className="flex-1 bg-white rounded-2xl shadow-lg p-6 flex flex-col items-center text-center border-t-4 border-blue-400 hover:shadow-xl transition">
+            <div className="w-12 h-12 flex items-center justify-center bg-blue-100 rounded-xl mb-3">
+              <svg width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2" className="text-blue-500"><circle cx="16" cy="16" r="12" /><path d="M16 10v6l4 2" /></svg>
             </div>
+            <h3 className="font-bold text-lg mb-1 text-blue-700">Suivi de la luc</h3>
+            <p className="text-gray-600 mb-4">Visualiser et gérer l évolution de la luc en temps réel</p>
+            <a href="/luc" className="inline-block px-6 py-2 bg-blue-600 text-white rounded-lg font-medium shadow hover:bg-blue-700 transition">Accéder</a>
           </div>
-          <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-50 flex flex-col">
-            <span className="text-lg font-bold text-gray-800 mb-2">Souscriptions par mois</span>
-            <div className="flex-1 flex items-center justify-center">
-              <div className="w-full h-40 flex items-center justify-center text-gray-400">[Graphique placeholder]</div>
+          {/* Suivi des réparations */}
+          <div className="flex-1 bg-white rounded-2xl shadow-lg p-6 flex flex-col items-center text-center border-t-4 border-green-400 hover:shadow-xl transition">
+            <div className="w-12 h-12 flex items-center justify-center bg-green-100 rounded-xl mb-3">
+              <svg width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2" className="text-green-500"><rect x="7" y="13" width="18" height="10" rx="3" /><path d="M16 17v-4" /><path d="M12 21h8" /></svg>
             </div>
+            <h3 className="font-bold text-lg mb-1 text-green-700">Suivi des réparations</h3>
+            <p className="text-gray-600 mb-4">Suivre le processus des réparations </p>
+            <a href="/reparations" className="inline-block px-6 py-2 bg-green-600 text-white rounded-lg font-medium shadow hover:bg-green-700 transition">Accéder</a>
           </div>
-        </div>
+        </section>
 
-        {/* Top users & apps */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
-          <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-50">
-            <span className="text-lg font-bold text-gray-800 mb-4 block">Top utilisateurs</span>
-            <ul className="space-y-3">
-              <li className="flex items-center gap-3"><span className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-700">AD</span> <span className="font-semibold text-gray-700">Awa Diabaté</span> <span className="ml-auto text-xs text-gray-500">132 souscriptions</span></li>
-              <li className="flex items-center gap-3"><span className="w-9 h-9 rounded-full bg-pink-100 flex items-center justify-center font-bold text-pink-700">MK</span> <span className="font-semibold text-gray-700">Moussa Koné</span> <span className="ml-auto text-xs text-gray-500">97 souscriptions</span></li>
-              <li className="flex items-center gap-3"><span className="w-9 h-9 rounded-full bg-purple-100 flex items-center justify-center font-bold text-purple-700">JD</span> <span className="font-semibold text-gray-700">Jean Dupont</span> <span className="ml-auto text-xs text-gray-500">81 souscriptions</span></li>
-            </ul>
-          </div>
-          <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-50">
-            <span className="text-lg font-bold text-gray-800 mb-4 block">Top applications</span>
-            <ul className="space-y-4">
-              <li className="flex items-center gap-3">
-                <span className="w-11 h-11 rounded-xl bg-purple-200 flex items-center justify-center font-bold text-purple-700 text-lg">MZ</span>
-                <div className="flex flex-col">
-                  <span className="font-semibold text-gray-800 leading-tight">Mazaya</span>
-                  <span className="text-xs text-gray-500">Mazaya S.A.</span>
-                </div>
-                <span className="ml-auto text-sm text-gray-700 font-medium">520 utilisateurs</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <span className="w-11 h-11 rounded-xl bg-blue-200 flex items-center justify-center font-bold text-blue-700 text-lg">TI</span>
-                <div className="flex flex-col">
-                  <span className="font-semibold text-gray-800 leading-tight">TechI</span>
-                  <span className="text-xs text-gray-500">Tech Innov SARL</span>
-                </div>
-                <span className="ml-auto text-sm text-gray-700 font-medium">310 utilisateurs</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <span className="w-11 h-11 rounded-xl bg-pink-200 flex items-center justify-center font-bold text-pink-700 text-lg">AX</span>
-                <div className="flex flex-col">
-                  <span className="font-semibold text-gray-800 leading-tight">AppX</span>
-                  <span className="text-xs text-gray-500">AppX Corp</span>
-                </div>
-                <span className="ml-auto text-sm text-gray-700 font-medium">150 utilisateurs</span>
-              </li>
-            </ul>
-          </div>
-        </div>
 
-        {/* Suggestions */}
-        <div className="bg-gradient-to-r from-blue-50 via-purple-50 to-pink-50 border border-gray-100 rounded-2xl shadow p-8 flex flex-col items-center">
-          <span className="text-xl font-bold text-gray-800 mb-2">Suggestions d'amélioration</span>
-          <ul className="text-gray-600 text-base list-disc pl-6 space-y-1">
-            <li>Automatiser les relances d’abonnement bientôt expirés</li>
-            <li>Ajouter un tableau de bord exportable (PDF/Excel)</li>
-            <li>Mettre en avant les offres populaires</li>
-            <li>Intégrer des notifications temps réel</li>
-          </ul>
-        </div>
-
-        {/* Roadmap / Fonctionnalités à venir */}
-        <div className="mt-6 w-full max-w-3xl mx-auto bg-white border border-gray-100 rounded-2xl shadow flex flex-col p-8 gap-4">
-          <span className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-            <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" className="text-pink-500 mr-1"><path d="M12 8v4l3 3"/></svg>
-            Fonctionnalités à venir
-          </span>
-          <ul className="space-y-4">
-            <li className="flex items-start gap-4">
-              <span className="flex-shrink-0 w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
-                <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" className="text-blue-500"><path d="M3 8v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8"/><path d="M16 8V6a4 4 0 0 0-8 0v2"/><rect width="16" height="4" x="2" y="8" rx="2"/></svg>
-              </span>
-              <div>
-                <span className="font-semibold text-gray-800">Automatiser les relances d’abonnement</span>
-                <div className="text-gray-500 text-sm">Envoi automatique de rappels avant expiration pour maximiser la rétention.</div>
-              </div>
-            </li>
-            <li className="flex items-start gap-4">
-              <span className="flex-shrink-0 w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
-                <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" className="text-green-500"><path d="M4 4h14v14H4z"/><path d="M8 4v14M16 8H4"/></svg>
-              </span>
-              <div>
-                <span className="font-semibold text-gray-800">Tableau de bord exportable</span>
-                <div className="text-gray-500 text-sm">Exportez vos stats au format PDF ou Excel en un clic.</div>
-              </div>
-            </li>
-            <li className="flex items-start gap-4">
-              <span className="flex-shrink-0 w-10 h-10 rounded-xl bg-pink-100 flex items-center justify-center">
-                <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" className="text-pink-500"><path d="M12 17l-5-5 1.41-1.41L12 14.17l6.59-6.59L20 9l-8 8z"/></svg>
-              </span>
-              <div>
-                <span className="font-semibold text-gray-800">Offres populaires en avant</span>
-                <div className="text-gray-500 text-sm">Mettez en lumière les abonnements les plus attractifs pour booster les ventes.</div>
-              </div>
-            </li>
-            <li className="flex items-start gap-4">
-              <span className="flex-shrink-0 w-10 h-10 rounded-xl bg-yellow-100 flex items-center justify-center">
-                <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" className="text-yellow-500"><circle cx="11" cy="11" r="9"/><path d="M11 7v4l2.5 2.5"/></svg>
-              </span>
-              <div>
-                <span className="font-semibold text-gray-800">Notifications temps réel</span>
-                <div className="text-gray-500 text-sm">Recevez des alertes instantanées sur les événements importants.</div>
-              </div>
-            </li>
-          </ul>
         </div>
       </div>
     </MainLayout>
   );
 }
+

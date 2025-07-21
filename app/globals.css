@@ -122,3 +122,15 @@ body {
 .animate-pulse-slow {
   animation: pulse-slow 8s ease infinite;
 }
+
+/* Force mode clair partout, même si l'OS est en darkmode */
+html, body {
+  background: #f8fafc !important;
+  color: #1e293b !important;
+}
+@media (prefers-color-scheme: dark) {
+  html, body {
+    background: #f8fafc !important;
+    color: #1e293b !important;
+  }
+}

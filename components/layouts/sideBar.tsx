@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const navItems = [
-  { label: 'Dashboard', icon: <FiGrid size={22} />, href: '/' },
+
   { label: 'LUC', icon: <FiBox size={22} />, href: '/luc' },
   { label: 'Réparations', icon: <FiRepeat size={22} />, href: '/reparations' },
   { label: 'Accès à la justice', icon: <FiUsers size={22} />, href: '/acces-justice' },
