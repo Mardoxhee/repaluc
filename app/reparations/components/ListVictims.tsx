@@ -18,7 +18,7 @@ const ListVictims: React.FC<ListVictimsProps> = ({
     mockCategories
 }) => {
     // État local pour la liste, l'édition et le modal
-    const [clients, setClients] = useState<any[]>([]);
+    const [allVictims, setAllVictims] = useState<any[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string>("");
     const [search, setSearch] = useState<string>("");
@@ -28,50 +28,162 @@ const ListVictims: React.FC<ListVictimsProps> = ({
     const [showModal, setShowModal] = useState(false);
     const [victimDetail, setVictimDetail] = useState<any | null>(null);
     const [showVictimModal, setShowVictimModal] = useState(false);
-
-    // Fetch dynamique
-    useEffect(() => {
-        setLoading(true);
-        setError("");
-        // Utiliser le nouvel endpoint avec les paramètres par défaut
-        const params = new URLSearchParams();
-        params.append('status', 'confirmé'); // Filtrer par défaut les victimes confirmées
-        
-        fetch(`http://10.140.0.106:8006/victime/paginate/filtered?${params.toString()}`)
-            .then(res => {
-                if (!res.ok) throw new Error("Erreur lors du chargement des victimes");
-                return res.json();
-            })
-            .then(data => {
-                setClients(Array.isArray(data.data) ? data.data : []);
-                setLoading(false);
-            })
-            .catch(err => {
-                setError(err.message || "Erreur inconnue");
-                setLoading(false);
-            });
-    }, []);
-
-    // Filtrage
-    const filtered = clients.filter((c: any) => {
-        if (!c) return false;
-        if (search) {
-            const s = search.toLowerCase();
-            return (
-                (typeof c.nom === 'string' && c.nom.toLowerCase().includes(s)) ||
-                (typeof c.province === 'string' && c.province.toLowerCase().includes(s)) ||
-                (typeof c.territoire === 'string' && c.territoire.toLowerCase().includes(s))
-            );
-        }
-        return true;
+    const [filters, setFilters] = useState({
+        programme: "",
+        prejudices: [] as string[],
+        categorie: "",
+        province: "",
+        territoire: "",
+        secteur: "",
+        letter: "",
+        ageRange: "",
+        statut: ""
     });
 
-    const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
-    const paginated = filtered.slice((page - 1) * perPage, page * perPage);
+    // Fetch initial unique
+    useEffect(() => {
+        const fetchAllVictims = async () => {
+            setLoading(true);
+            setError("");
+            try {
+                const data = await fetch('http://10.140.0.106:8006/victime').then(res => res.json());
+                setAllVictims(Array.isArray(data) ? data : []);
+            } catch (err: any) {
+                setError(err.message || "Erreur lors du chargement des victimes");
+                setAllVictims([]);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchAllVictims();
+    }, []);
 
+    // Filtrage côté client
+    const filteredVictims = useMemo(() => {
+        return allVictims.filter(victim => {
+            // Filtre par programme
+            if (filters.programme && filters.programme !== "") {
+                const programme = mockProgrammes.find(p => String(p.id) === filters.programme);
+                if (programme && victim.programme !== programme.nom) {
+                    return false;
+                }
+            }
+
+            // Filtre par catégorie
+            if (filters.categorie && filters.categorie !== "") {
+                const category = mockCategories.find(c => String(c.id) === filters.categorie);
+                if (category && victim.categorie !== category.nom) {
+                    return false;
+                }
+            }
+
+            // Filtre par province
+            if (filters.province && filters.province !== "" && victim.province !== filters.province) {
+                return false;
+            }
+
+            // Filtre par territoire
+            if (filters.territoire && filters.territoire !== "" && victim.territoire !== filters.territoire) {
+                return false;
+            }
+
+            // Filtre par secteur
+            if (filters.secteur && filters.secteur !== "" && victim.secteur !== filters.secteur) {
+                return false;
+            }
+
+            // Filtre par préjudices (multi-sélection)
+            if (filters.prejudices && filters.prejudices.length > 0) {
+                const hasMatchingPrejudice = filters.prejudices.some(prejId => {
+                    const prejudice = mockPrejudices.find(p => String(p.id) === prejId);
+                    return prejudice && victim.prejudicesSubis === prejudice.nom;
+                });
+                if (!hasMatchingPrejudice) {
+                    return false;
+                }
+            }
+
+            // Filtre par statut
+            if (filters.statut && filters.statut !== "") {
+                if (filters.statut === 'confirmé' && victim.status !== 'confirmé') {
+                    return false;
+                }
+                if (filters.statut === 'non confirmé' && victim.status === 'confirmé') {
+                    return false;
+                }
+            }
+
+            return true;
+        });
+    }, [allVictims, filters, mockProgrammes, mockCategories, mockPrejudices]);
+
+    // Filtrage par recherche textuelle
+    const searchFilteredVictims = useMemo(() => {
+        if (!search) return filteredVictims;
+        const searchTerm = search.toLowerCase();
+        return filteredVictims.filter(victim => 
+            (victim.nom?.toLowerCase().includes(searchTerm)) ||
+            (victim.province?.toLowerCase().includes(searchTerm)) ||
+            (victim.territoire?.toLowerCase().includes(searchTerm))
+        );
+    }, [filteredVictims, search]);
+
+    // Pagination
+    const totalPages = Math.max(1, Math.ceil(searchFilteredVictims.length / perPage));
+    const paginatedVictims = searchFilteredVictims.slice((page - 1) * perPage, page * perPage);
+
+    // Reset page when search changes
     useEffect(() => {
         setPage(1);
-    }, [search]);
+    }, [search, filters]);
+
+    // Callback pour les filtres
+    const handleFiltersChange = useCallback((newFilters: typeof filters) => {
+        setFilters(newFilters);
+        setPage(1);
+    }, []);
+
+    // Fonction pour construire l'URL avec filtres (utilisée seulement pour les actions spécifiques)
+    const buildFilterUrl = useCallback(() => {
+        const params = new URLSearchParams();
+        Object.entries(filters).forEach(([key, value]) => {
+            if (value && value !== "" && (!Array.isArray(value) || value.length > 0)) {
+                if (key === 'categorie') {
+                    const category = mockCategories.find(c => String(c.id) === value);
+                    if (category) {
+                        params.append(key, category.nom);
+                    }
+                } else if (key === 'prejudices' && Array.isArray(value)) {
+                    value.forEach(v => {
+                        const prejudice = mockPrejudices.find(p => String(p.id) === v);
+                        if (prejudice) {
+                            params.append('prejudice', prejudice.nom);
+                        }
+                    });
+                } else if (!Array.isArray(value)) {
+                    params.append(key, value);
+                }
+            }
+        });
+        return `/victime/paginate/filtered${params.toString() ? `?${params.toString()}` : ''}`;
+    }, [filters, mockCategories, mockPrejudices]);
+
+    // Fonction pour appliquer les filtres via API (optionnelle)
+    const applyFiltersToAPI = useCallback(async () => {
+        setLoading(true);
+        setError("");
+        try {
+            const url = buildFilterUrl();
+            console.log("Applying filters to API:", url);
+            const response = await fetch(`http://10.140.0.106:8006${url}`);
+            const data = await response.json();
+            setAllVictims(Array.isArray(data.data) ? data.data : Array.isArray(data) ? data : []);
+        } catch (err: any) {
+            setError(err.message || "Erreur lors de l'application des filtres");
+        } finally {
+            setLoading(false);
+        }
+    }, [buildFilterUrl]);
 
     const EditClientModal = ({ client, onClose, onSave }: { client: any, onClose: () => void, onSave: (c: any) => void }) => {
         const [form, setForm] = useState<any>(client);
@@ -136,9 +248,13 @@ const ListVictims: React.FC<ListVictimsProps> = ({
                         mockMesures={mockMesures}
                         mockProgrammes={mockProgrammes}
                         mockCategories={mockCategories}
+                        onFiltersChange={handleFiltersChange}
+                        currentFilters={filters}
+                        allVictims={allVictims}
                     />
 
-                    <div className="overflow-x-auto rounded-2xl shadow-lg bg-white/90 border border-gray-100">
+                    {searchFilteredVictims.length > 0 && (
+                        <div className="overflow-x-auto rounded-2xl shadow-lg bg-white/90 border border-gray-100 mt-6">
                         <table className="min-w-full divide-y divide-gray-200">
                             <thead className="bg-white">
                                 <tr>
@@ -152,37 +268,43 @@ const ListVictims: React.FC<ListVictimsProps> = ({
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-100">
-                                {paginated.length === 0 ? (
+                                {loading && (
+                                    <tr><td colSpan={7} className="text-center py-8 text-gray-400">Chargement...</td></tr>
+                                )}
+                                {error && (
+                                    <tr><td colSpan={7} className="text-center py-8 text-red-400">Erreur : {error}</td></tr>
+                                )}
+                                {!loading && !error && paginatedVictims.length === 0 ? (
                                     <tr>
                                         <td colSpan={7} className="text-center py-8 text-gray-400">
-                                            {loading ? "Chargement..." : "Aucun client trouvé"}
+                                            Aucune victime trouvée
                                         </td>
                                     </tr>
                                 ) : (
-                                    paginated.map((client: any, index: number) => (
-                                        <tr key={client.id || index} className="hover:bg-gray-50">
+                                    !loading && !error && paginatedVictims.map((victim: any, index: number) => (
+                                        <tr key={victim.id || index} className="hover:bg-gray-50">
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                                 {(page - 1) * perPage + index + 1}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                                {client.nom || 'Non spécifié'}
+                                                {victim.nom || 'Non spécifié'}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                {client.province || 'Non spécifié'}
+                                                {victim.province || 'Non spécifié'}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                {client.territoire || 'Non spécifié'}
+                                                {victim.territoire || 'Non spécifié'}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                {client.sexe || 'Non spécifié'}
+                                                {victim.sexe || 'Non spécifié'}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                {client.status || 'Non spécifié'}
+                                                {victim.status || 'Non confirmé'}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-center">
                                                 <button
                                                     onClick={() => {
-                                                        setVictimDetail(client);
+                                                        setVictimDetail(victim);
                                                         setShowVictimModal(true);
                                                     }}
                                                     className="text-pink-600 hover:text-pink-900 mr-3 flex items-center justify-center gap-1"
@@ -196,9 +318,12 @@ const ListVictims: React.FC<ListVictimsProps> = ({
                                 )}
                             </tbody>
                         </table>
-                    </div>
+                        </div>
+                    )}
 
-                    <div className="flex justify-end gap-2 mt-6">
+                    {/* Pagination */}
+                    {totalPages > 1 && (
+                        <div className="flex justify-end gap-2 mt-6">
                         <button
                             onClick={() => setPage(p => Math.max(1, p - 1))}
                             className="px-4 py-2 rounded-lg border bg-white text-gray-600 hover:bg-pink-50 disabled:opacity-50"
@@ -216,15 +341,17 @@ const ListVictims: React.FC<ListVictimsProps> = ({
                         >
                             Suivant
                         </button>
-                    </div>
+                        </div>
+                    )}
                 </div>
+            </div>
 
                 {showModal && editClient && (
                     <EditClientModal
                         client={editClient}
                         onClose={() => { setShowModal(false); setEditClient(null); }}
                         onSave={(updated: any) => {
-                            setClients(prev => prev.map(c => c.id === updated.id ? updated : c));
+                            setAllVictims(prev => prev.map(c => c.id === updated.id ? updated : c));
                             setShowModal(false);
                             setEditClient(null);
                         }}
@@ -237,7 +364,6 @@ const ListVictims: React.FC<ListVictimsProps> = ({
                         onClose={() => setShowVictimModal(false)}
                     />
                 )}
-            </div>
         </>
     );
 };

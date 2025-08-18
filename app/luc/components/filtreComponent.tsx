@@ -12,6 +12,7 @@ interface VictimsWithFiltersProps {
     mockProgrammes: any[];
     onFiltersChange: (filters: any) => void;
     currentFilters: any;
+    allVictims: any[];
 }
 
 const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
@@ -20,7 +21,8 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
     mockMesures,
     mockProgrammes,
     onFiltersChange,
-    currentFilters
+    currentFilters,
+    allVictims
 }) => {
     const { fetcher } = useFetch();
 
@@ -30,63 +32,59 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
     const [isProgressionOpen, setIsProgressionOpen] = useState(false);
     const [isConfirming, setIsConfirming] = React.useState(false);
 
-    // State pour les victimes filtrées (pour la confirmation groupée)
-    const [filteredVictims, setFilteredVictims] = React.useState<any[]>([]);
+    // Filtrage côté client
+    const filteredVictims = React.useMemo(() => {
+        return allVictims.filter(victim => {
+            // Filtre par catégorie
+            if (currentFilters.categorie && currentFilters.categorie !== "") {
+                const category = mockCategories.find(c => String(c.id) === currentFilters.categorie);
+                if (category && victim.categorie !== category.nom) {
+                    return false;
+                }
+            }
+
+            // Filtre par province
+            if (currentFilters.province && currentFilters.province !== "" && victim.province !== currentFilters.province) {
+                return false;
+            }
+
+            // Filtre par territoire
+            if (currentFilters.territoire && currentFilters.territoire !== "" && victim.territoire !== currentFilters.territoire) {
+                return false;
+            }
+
+            // Filtre par secteur
+            if (currentFilters.secteur && currentFilters.secteur !== "" && victim.secteur !== currentFilters.secteur) {
+                return false;
+            }
+
+            // Filtre par préjudice
+            if (currentFilters.prejudice && currentFilters.prejudice !== "") {
+                const prejudice = mockPrejudices.find(p => String(p.id) === currentFilters.prejudice);
+                if (prejudice && victim.prejudicesSubis !== prejudice.nom) {
+                    return false;
+                }
+            }
+
+            // Filtre par statut
+            if (currentFilters.statut && currentFilters.statut !== "") {
+                if (currentFilters.statut === 'confirme' && victim.status !== 'confirmé') {
+                    return false;
+                }
+                if (currentFilters.statut === 'nonconfirme' && victim.status === 'confirmé') {
+                    return false;
+                }
+            }
+
+            return true;
+        });
+    }, [allVictims, currentFilters, mockCategories, mockPrejudices]);
 
     // Fonction pour mettre à jour les filtres - memoized
     const updateFilter = React.useCallback((key: string, value: string) => {
         const newFilters = { ...currentFilters, [key]: value };
         onFiltersChange(newFilters);
     }, [currentFilters, onFiltersChange]);
-
-    // Fetch des victimes avec le nouvel endpoint
-    React.useEffect(() => {
-        let cancelled = false;
-        
-        const fetchVictims = async () => {
-            try {
-                // Construire les paramètres de requête
-                const params = new URLSearchParams();
-                
-                // Ajouter les filtres actifs comme paramètres de requête
-                Object.entries(currentFilters).forEach(([key, value]) => {
-                    if (value && value !== "") {
-                        // Pour la catégorie, utiliser le nom au lieu de l'ID
-                        if (key === 'categorie') {
-                            const category = mockCategories.find(c => String(c.id) === value);
-                            if (category) {
-                                params.append(key, category.nom);
-                            }
-                        } else {
-                            params.append(key, value);
-                        }
-                    }
-                });
-                
-                // Construire l'URL finale
-                const url = `/victime/paginate/filtered${params.toString() ? `?${params.toString()}` : ''}`;
-                
-                const data = await fetcher(url);
-                if (!cancelled) {
-                    const victimsData = data?.data || data || [];
-                    setFilteredVictims(victimsData);
-                }
-            } catch (err: any) {
-                console.error("Erreur lors du fetch des victimes:", err);
-                if (!cancelled) {
-                    setFilteredVictims([]);
-                }
-            }
-        };
-        
-        // Debounce pour éviter trop de requêtes
-        const timeoutId = setTimeout(fetchVictims, 300);
-        
-        return () => {
-            cancelled = true;
-            clearTimeout(timeoutId);
-        };
-    }, [currentFilters, mockCategories, fetcher]);
 
     const handleGroupConfirmation = React.useCallback(async () => {
         console.log("Bouton confirmation groupée cliqué");
@@ -99,6 +97,23 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
         setIsConfirming(true);
 
         try {
+            // Construire l'URL avec les filtres pour l'API
+            const params = new URLSearchParams();
+            Object.entries(currentFilters).forEach(([key, value]) => {
+                if (value && value !== "") {
+                    if (key === 'categorie') {
+                        const category = mockCategories.find(c => String(c.id) === value);
+                        if (category) {
+                            params.append(key, category.nom);
+                        }
+                    } else {
+                        params.append(key, value);
+                    }
+                }
+            });
+
+            const url = `/victime/paginate/filtered${params.toString() ? `?${params.toString()}` : ''}`;
+            
             // Préparer les données selon le format demandé
             const confirmationData = filteredVictims.map(victim => ({
                 programmeCategorie: victim.categorie || mockCategories.find(c => c.id === victim.categorie) || "",
@@ -127,7 +142,7 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
         } finally {
             setIsConfirming(false);
         }
-    }, [filteredVictims, fetcher, mockCategories, mockPrejudices]);
+    }, [filteredVictims, fetcher, mockCategories, mockPrejudices, currentFilters]);
 
     // Mock territoires
     const territoires = [
@@ -167,29 +182,6 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
         { value: "3", label: "31-50 ans" },
         { value: "4", label: "> 50 ans" },
     ];
-
-    // Liste optimisée des victimes
-    interface Victim {
-        id: number | string;
-        fullname: string;
-        categorie: number | string;
-        [key: string]: any;
-    }
-    interface Category { id: number | string; nom: string; }
-    interface ListVictimsProps {
-        victims: Victim[];
-        mockCategories: Category[];
-    }
-    const ListVictims: React.FC<ListVictimsProps> = React.memo(({ victims, mockCategories }) => {
-        if (!victims || victims.length === 0) {
-            return <div className="mt-6 text-gray-400 italic">Aucune victime trouvée pour ces filtres.</div>;
-        }
-        return (
-            <ul className="mt-6 divide-y divide-gray-100">
-
-            </ul>
-        );
-    });
 
     return (
         <div>
@@ -347,8 +339,31 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
                 </div>
             )}
 
-            {/* Liste optimisée des victimes */}
-            <ListVictims victims={filteredVictims} mockCategories={mockCategories} />
+            {/* Affichage du nombre de victimes filtrées */}
+            {filteredVictims.length > 0 && (
+                <div className="mt-6 bg-white rounded-2xl shadow-lg border border-gray-100 p-4">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-semibold text-gray-700">Victimes filtrées</h3>
+                        <div className="px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 font-medium">
+                            {filteredVictims.length} victime{filteredVictims.length > 1 ? 's' : ''} trouvée{filteredVictims.length > 1 ? 's' : ''}
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {filteredVictims.slice(0, 9).map((victim: any) => (
+                            <div key={victim.id} className="p-4 border border-gray-200 rounded-lg hover:shadow-md transition-shadow">
+                                <div className="font-medium text-gray-900">{victim.nom}</div>
+                                <div className="text-sm text-gray-600">{victim.province}, {victim.territoire}</div>
+                                <div className="text-xs text-gray-500 mt-1">{victim.sexe} • {victim.status || 'Non confirmé'}</div>
+                            </div>
+                        ))}
+                    </div>
+                    {filteredVictims.length > 9 && (
+                        <div className="text-center mt-4 text-sm text-gray-500">
+                            ... et {filteredVictims.length - 9} autres victimes
+                        </div>
+                    )}
+                </div>
+            )}
 
         </div>
     );

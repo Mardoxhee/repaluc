@@ -96,35 +96,147 @@ interface ReglagesProps {
 
 
 const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, mockProgrammes, mockCategories }) => {
-    const [filterType, setFilterType] = React.useState<string>("");
     const [search, setSearch] = React.useState<string>("");
     const [page, setPage] = React.useState<number>(1);
     const perPage = 10;
 
     // État local pour la liste, l'édition et le modal
-    const [clients, setClients] = React.useState(fakeClients);
+    const [allVictims, setAllVictims] = React.useState(fakeClients);
     const [editClient, setEditClient] = React.useState<any | null>(null);
     const [showModal, setShowModal] = React.useState(false);
     const [victimDetail, setVictimDetail] = React.useState<any | null>(null);
     const [showVictimModal, setShowVictimModal] = React.useState(false);
-
-    // Filtrage
-    const filtered = clients.filter((c: any) => {
-        if (!c) return false;
-        if (search) {
-            const s = search.toLowerCase();
-            return (
-                (typeof c.fullname === 'string' && c.fullname.toLowerCase().includes(s)) ||
-                (typeof c.province === 'string' && c.province.toLowerCase().includes(s)) ||
-                (typeof c.territoire === 'string' && c.territoire.toLowerCase().includes(s))
-            );
-        }
-        return true;
+    const [filters, setFilters] = React.useState({
+        programme: "",
+        prejudices: [] as string[],
+        categorie: "",
+        province: "",
+        territoire: "",
+        secteur: "",
+        letter: "",
+        ageRange: "",
+        statut: ""
     });
-    const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
-    const paginated = filtered.slice((page - 1) * perPage, page * perPage);
 
-    React.useEffect(() => { setPage(1); }, [filterType, search]);
+    // Filtrage côté client
+    const filteredVictims = React.useMemo(() => {
+        return allVictims.filter(victim => {
+            // Filtre par programme
+            if (filters.programme && filters.programme !== "") {
+                const programme = mockProgrammes.find(p => String(p.id) === filters.programme);
+                if (programme && victim.programme !== programme.nom) {
+                    return false;
+                }
+            }
+
+            // Filtre par catégorie
+            if (filters.categorie && filters.categorie !== "") {
+                const category = mockCategories.find(c => String(c.id) === filters.categorie);
+                if (category && victim.categorie !== category.nom) {
+                    return false;
+                }
+            }
+
+            // Filtre par province
+            if (filters.province && filters.province !== "" && victim.province !== filters.province) {
+                return false;
+            }
+
+            // Filtre par territoire
+            if (filters.territoire && filters.territoire !== "" && victim.territoire !== filters.territoire) {
+                return false;
+            }
+
+            // Filtre par secteur
+            if (filters.secteur && filters.secteur !== "" && victim.secteur !== filters.secteur) {
+                return false;
+            }
+
+            // Filtre par préjudices (multi-sélection)
+            if (filters.prejudices && filters.prejudices.length > 0) {
+                const hasMatchingPrejudice = filters.prejudices.some(prejId => {
+                    const prejudice = mockPrejudices.find(p => String(p.id) === prejId);
+                    return prejudice && victim.prejudicesSubis === prejudice.nom;
+                });
+                if (!hasMatchingPrejudice) {
+                    return false;
+                }
+            }
+
+            // Filtre par statut
+            if (filters.statut && filters.statut !== "") {
+                if (filters.statut === 'confirmé' && victim.status !== 'confirmé') {
+                    return false;
+                }
+                if (filters.statut === 'non confirmé' && victim.status === 'confirmé') {
+                    return false;
+                }
+            }
+
+            return true;
+        });
+    }, [allVictims, filters, mockProgrammes, mockCategories, mockPrejudices]);
+
+    // Filtrage par recherche textuelle
+    const searchFilteredVictims = React.useMemo(() => {
+        if (!search) return filteredVictims;
+        const searchTerm = search.toLowerCase();
+        return filteredVictims.filter(victim => 
+            (victim.fullname?.toLowerCase().includes(searchTerm)) ||
+            (victim.province?.toLowerCase().includes(searchTerm)) ||
+            (victim.territoire?.toLowerCase().includes(searchTerm))
+        );
+    }, [filteredVictims, search]);
+
+    const totalPages = Math.max(1, Math.ceil(searchFilteredVictims.length / perPage));
+    const paginated = searchFilteredVictims.slice((page - 1) * perPage, page * perPage);
+
+    React.useEffect(() => { setPage(1); }, [search, filters]);
+
+    // Callback pour les filtres
+    const handleFiltersChange = React.useCallback((newFilters: typeof filters) => {
+        setFilters(newFilters);
+        setPage(1);
+    }, []);
+
+    // Fonction pour construire l'URL avec filtres (utilisée seulement pour les actions spécifiques)
+    const buildFilterUrl = React.useCallback(() => {
+        const params = new URLSearchParams();
+        Object.entries(filters).forEach(([key, value]) => {
+            if (value && value !== "" && (!Array.isArray(value) || value.length > 0)) {
+                if (key === 'categorie') {
+                    const category = mockCategories.find(c => String(c.id) === value);
+                    if (category) {
+                        params.append(key, category.nom);
+                    }
+                } else if (key === 'prejudices' && Array.isArray(value)) {
+                    value.forEach(v => {
+                        const prejudice = mockPrejudices.find(p => String(p.id) === v);
+                        if (prejudice) {
+                            params.append('prejudice', prejudice.nom);
+                        }
+                    });
+                } else if (!Array.isArray(value)) {
+                    params.append(key, value);
+                }
+            }
+        });
+        return `/victime/paginate/filtered${params.toString() ? `?${params.toString()}` : ''}`;
+    }, [filters, mockCategories, mockPrejudices]);
+
+    // Fonction pour appliquer les filtres via API (optionnelle)
+    const applyFiltersToAPI = React.useCallback(async () => {
+        try {
+            const url = buildFilterUrl();
+            console.log("Applying filters to API:", url);
+            const response = await fetch(`http://10.140.0.106:8006${url}`);
+            const data = await response.json();
+            setAllVictims(Array.isArray(data.data) ? data.data : Array.isArray(data) ? data : []);
+        } catch (err: any) {
+            console.error("Erreur lors de l'application des filtres:", err);
+        }
+    }, [buildFilterUrl]);
+
     const EditClientModal = ({ client, onClose, onSave }: { client: any, onClose: () => void, onSave: (c: any) => void }) => {
         const [form, setForm] = React.useState<any>(client);
 
@@ -180,10 +292,15 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
                             />
                         </div>
                     </div>
-                    <VictimsWithFilters mockPrejudices={mockPrejudices}
+                    <VictimsWithFilters 
+                        mockPrejudices={mockPrejudices}
                         mockMesures={mockMesures}
                         mockProgrammes={mockProgrammes}
-                        mockCategories={mockCategories} />
+                        mockCategories={mockCategories}
+                        onFiltersChange={handleFiltersChange}
+                        currentFilters={filters}
+                        allVictims={allVictims}
+                    />
 
 
                     <div className="overflow-x-auto rounded-2xl shadow-lg bg-white/90 border border-gray-100">
@@ -203,9 +320,6 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
                                 {paginated.length === 0 && (
                                     <tr><td colSpan={7} className="text-center py-8 text-gray-400">Aucun client trouvé</td></tr>
                                 )}
-                            </tbody>
-
-                            <tbody>
                                 {paginated.map((client, idx) => (
                                     <tr key={client.id} className="border-b hover:bg-blue-50/30 transition">
                                         <td className="px-4 py-3">{(page - 1) * perPage + idx + 1}</td>
@@ -265,7 +379,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
                         client={editClient}
                         onClose={() => { setShowModal(false); setEditClient(null) }}
                         onSave={(updated: any) => {
-                            setClients(prev => prev.map(c => c.id === updated.id ? updated : c));
+                            setAllVictims(prev => prev.map(c => c.id === updated.id ? updated : c));
                             setShowModal(false);
                             setEditClient(null);
                         }}

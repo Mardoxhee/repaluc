@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from "react";
-// --- FILTRES AVANCÉS POUR LA LISTE DES VICTIMES ---
 import { FiFilter } from "react-icons/fi";
 import Select from "react-select";
-import { useFetch } from "../../context/FetchContext";
 
 interface VictimsWithFiltersProps {
     mockPrejudices: any[];
@@ -11,6 +9,7 @@ interface VictimsWithFiltersProps {
     mockProgrammes: any[];
     onFiltersChange?: (filters: any) => void;
     currentFilters?: any;
+    allVictims: any[];
 }
 
 const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({ 
@@ -19,11 +18,9 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
     mockProgrammes, 
     mockCategories,
     onFiltersChange,
-    currentFilters = {}
+    currentFilters = {},
+    allVictims
 }) => {
-    const { fetcher } = useFetch();
-    const [victims, setVictims] = React.useState<any[]>([]);
-    
     // États filtres
     const [showFilters, setShowFilters] = React.useState(false);
     const [filters, setFilters] = React.useState({
@@ -47,62 +44,80 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
         }
     }, [filters, onFiltersChange]);
 
-    // Fetch des victimes avec le nouvel endpoint
-    React.useEffect(() => {
-        let cancelled = false;
-        
-        const fetchVictims = async () => {
-            try {
-                // Construire les paramètres de requête
-                const params = new URLSearchParams();
-                
-                // Ajouter les filtres actifs comme paramètres de requête
-                Object.entries(filters).forEach(([key, value]) => {
-                    if (value && value !== "" && (!Array.isArray(value) || value.length > 0)) {
-                        if (key === 'categorie') {
-                            const category = mockCategories.find(c => String(c.id) === value);
-                            if (category) {
-                                params.append(key, category.nom);
-                            }
-                        } else if (key === 'prejudices' && Array.isArray(value)) {
-                            // Pour les préjudices multiples, ajouter chaque valeur
-                            value.forEach(v => {
-                                const prejudice = mockPrejudices.find(p => String(p.id) === v);
-                                if (prejudice) {
-                                    params.append('prejudice', prejudice.nom);
-                                }
-                            });
-                        } else if (!Array.isArray(value)) {
-                            params.append(key, value);
-                        }
-                    }
-                });
-                
-                // Construire l'URL finale
-                const url = `/victime/paginate/filtered${params.toString() ? `?${params.toString()}` : ''}`;
-                console.log("Fetching from URL:", url);
-                
-                const data = await fetcher(url);
-                if (!cancelled) {
-                    const victimsData = data?.data || data || [];
-                    setVictims(victimsData);
-                }
-            } catch (err: any) {
-                console.error("Erreur lors du fetch des victimes:", err);
-                if (!cancelled) {
-                    setVictims([]);
+    // Filtrage côté client
+    const filteredVictims = React.useMemo(() => {
+        return allVictims.filter(victim => {
+            // Filtre par programme
+            if (filters.programme && filters.programme !== "") {
+                const programme = mockProgrammes.find(p => String(p.id) === filters.programme);
+                if (programme && victim.programme !== programme.nom) {
+                    return false;
                 }
             }
-        };
-        
-        // Debounce pour éviter trop de requêtes
-        const timeoutId = setTimeout(fetchVictims, 300);
-        
-        return () => {
-            cancelled = true;
-            clearTimeout(timeoutId);
-        };
-    }, [filters, mockCategories, mockPrejudices, fetcher]);
+
+            // Filtre par catégorie
+            if (filters.categorie && filters.categorie !== "") {
+                const category = mockCategories.find(c => String(c.id) === filters.categorie);
+                if (category && victim.categorie !== category.nom) {
+                    return false;
+                }
+            }
+
+            // Filtre par province
+            if (filters.province && filters.province !== "" && victim.province !== filters.province) {
+                return false;
+            }
+
+            // Filtre par territoire
+            if (filters.territoire && filters.territoire !== "" && victim.territoire !== filters.territoire) {
+                return false;
+            }
+
+            // Filtre par secteur
+            if (filters.secteur && filters.secteur !== "" && victim.secteur !== filters.secteur) {
+                return false;
+            }
+
+            // Filtre par préjudices (multi-sélection)
+            if (filters.prejudices && filters.prejudices.length > 0) {
+                const hasMatchingPrejudice = filters.prejudices.some(prejId => {
+                    const prejudice = mockPrejudices.find(p => String(p.id) === prejId);
+                    return prejudice && victim.prejudicesSubis === prejudice.nom;
+                });
+                if (!hasMatchingPrejudice) {
+                    return false;
+                }
+            }
+
+            // Filtre par statut
+            if (filters.statut && filters.statut !== "") {
+                if (filters.statut === 'confirmé' && victim.status !== 'confirmé') {
+                    return false;
+                }
+                if (filters.statut === 'non confirmé' && victim.status === 'confirmé') {
+                    return false;
+                }
+            }
+
+            // Filtre par lettre
+            if (filters.letter && filters.letter !== "" && !victim.nom?.toUpperCase().startsWith(filters.letter)) {
+                return false;
+            }
+
+            // Filtre par tranche d'âge
+            if (filters.ageRange && filters.ageRange !== "") {
+                const age = victim.age || 0;
+                switch (filters.ageRange) {
+                    case "1": if (age >= 18) return false; break;
+                    case "2": if (age < 18 || age > 30) return false; break;
+                    case "3": if (age < 31 || age > 50) return false; break;
+                    case "4": if (age <= 50) return false; break;
+                }
+            }
+
+            return true;
+        });
+    }, [allVictims, filters, mockProgrammes, mockCategories, mockPrejudices]);
 
     // Options tranches d'âge
     const ageRanges = [
@@ -322,10 +337,10 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
                     </div>
 
                     {/* Affichage du nombre de victimes trouvées */}
-                    {victims.length > 0 && (
+                    {filteredVictims.length > 0 && (
                         <div className="w-full flex justify-center mt-4">
                             <div className="px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 font-medium">
-                                {victims.length} victime{victims.length > 1 ? 's' : ''} trouvée{victims.length > 1 ? 's' : ''}
+                                {filteredVictims.length} victime{filteredVictims.length > 1 ? 's' : ''} trouvée{filteredVictims.length > 1 ? 's' : ''}
                             </div>
                         </div>
                     )}
@@ -333,11 +348,11 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
             )}
 
             {/* Affichage simple de la liste des victimes */}
-            {victims.length > 0 && (
+            {filteredVictims.length > 0 && (
                 <div className="mt-6 bg-white rounded-2xl shadow-lg border border-gray-100 p-4">
                     <h3 className="font-semibold text-gray-700 mb-4">Victimes filtrées</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {victims.map((victim: any) => (
+                        {filteredVictims.slice(0, 9).map((victim: any) => (
                             <div key={victim.id} className="p-4 border border-gray-200 rounded-lg hover:shadow-md transition-shadow">
                                 <div className="font-medium text-gray-900">{victim.nom}</div>
                                 <div className="text-sm text-gray-600">{victim.province}, {victim.territoire}</div>
@@ -345,6 +360,11 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
                             </div>
                         ))}
                     </div>
+                    {filteredVictims.length > 9 && (
+                        <div className="text-center mt-4 text-sm text-gray-500">
+                            ... et {filteredVictims.length - 9} autres victimes
+                        </div>
+                    )}
                 </div>
             )}
         </div>

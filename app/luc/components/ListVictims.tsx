@@ -15,7 +15,8 @@ interface ReglagesProps {
 const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, mockProgrammes, mockCategories }) => {
     const [search, setSearch] = useState<string>("");
     const [showCreateModal, setShowCreateModal] = useState(false);
-    const [victims, setVictims] = useState<any[]>([]);
+    const [allVictims, setAllVictims] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
     const [page, setPage] = useState<number>(1);
     const [perPage] = useState<number>(10);
     const [editClient, setEditClient] = useState<any | null>(null);
@@ -39,64 +40,84 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
         prejudice: "",
         statut: ""
     });
-    const [hasActiveFilters, setHasActiveFilters] = useState(false);
 
     const fetchCtx = useContext(FetchContext);
 
-    // Fonction pour construire l'URL avec la nouvelle logique - memoized
-    const buildFilterUrl = useCallback(() => {
-        const params = new URLSearchParams();
-        
-        // Ajouter les filtres actifs comme paramètres de requête
-        Object.entries(filters).forEach(([key, value]) => {
-            if (value && value !== "") {
-                // Pour la catégorie, utiliser le nom au lieu de l'ID
-                if (key === 'categorie') {
-                    const category = mockCategories.find(c => String(c.id) === value);
-                    if (category) {
-                        params.append(key, category.nom);
-                    }
-                } else {
-                    params.append(key, value);
-                }
+    // Fetch initial unique de toutes les victimes
+    useEffect(() => {
+        const fetchAllVictims = async () => {
+            setLoading(true);
+            try {
+                const data = await fetchCtx?.fetcher('/victime');
+                const victimsData = Array.isArray(data) ? data : [];
+                setAllVictims(victimsData.map((v: any) => ({ ...v, status: v.status ?? null })));
+            } catch (e) {
+                console.error("Erreur lors du fetch des victimes:", e);
+                setAllVictims([]);
+            } finally {
+                setLoading(false);
             }
-        });
-        
-        // Construire l'URL finale
-        return `/victime/paginate/filtered${params.toString() ? `?${params.toString()}` : ''}`;
-    }, [filters, mockCategories]);
+        };
+        fetchAllVictims();
+    }, [fetchCtx]);
 
     // Vérifier s'il y a des filtres actifs - memoized
-    const checkActiveFilters = useMemo(() => {
+    const hasActiveFilters = useMemo(() => {
         return Object.values(filters).some(value => value !== "");
     }, [filters]);
 
-    // Fetch des victimes avec le nouvel endpoint
-    useEffect(() => {
-        const fetchVictims = async () => {
-            try {
-                const url = buildFilterUrl();
-                console.log("Fetching from URL:", url);
-                const data = await fetchCtx?.fetcher(url);
-                console.log("Response data:", data);
-                const victimsData = data || [];
-                setVictims(victimsData.map((v: any) => ({ ...v, status: v.status ?? null })));
-            } catch (e) {
-                console.error("Erreur lors du fetch des victimes:", e);
-                setVictims([]);
+    // Filtrage côté client des victimes
+    const filteredVictims = useMemo(() => {
+        if (!hasActiveFilters) return allVictims;
+        
+        return allVictims.filter(victim => {
+            // Filtre par catégorie
+            if (filters.categorie && filters.categorie !== "") {
+                const category = mockCategories.find(c => String(c.id) === filters.categorie);
+                if (category && victim.categorie !== category.nom) {
+                    return false;
+                }
             }
-        };
-        
-        setHasActiveFilters(checkActiveFilters);
-        
-        // Debounce pour éviter trop de requêtes
-        const timeoutId = setTimeout(fetchVictims, 300);
-        
-        return () => clearTimeout(timeoutId);
-    }, [filters, fetchCtx, buildFilterUrl, checkActiveFilters]);
+
+            // Filtre par province
+            if (filters.province && filters.province !== "" && victim.province !== filters.province) {
+                return false;
+            }
+
+            // Filtre par territoire
+            if (filters.territoire && filters.territoire !== "" && victim.territoire !== filters.territoire) {
+                return false;
+            }
+
+            // Filtre par secteur
+            if (filters.secteur && filters.secteur !== "" && victim.secteur !== filters.secteur) {
+                return false;
+            }
+
+            // Filtre par préjudice
+            if (filters.prejudice && filters.prejudice !== "") {
+                const prejudice = mockPrejudices.find(p => String(p.id) === filters.prejudice);
+                if (prejudice && victim.prejudicesSubis !== prejudice.nom) {
+                    return false;
+                }
+            }
+
+            // Filtre par statut
+            if (filters.statut && filters.statut !== "") {
+                if (filters.statut === 'confirme' && victim.status !== 'confirmé') {
+                    return false;
+                }
+                if (filters.statut === 'nonconfirme' && victim.status === 'confirmé') {
+                    return false;
+                }
+            }
+
+            return true;
+        });
+    }, [allVictims, filters, hasActiveFilters, mockCategories, mockPrejudices]);
 
     // Calcul de la pagination - memoized
-    const searchFilteredVictims = useMemo(() => victims.filter(victim => {
+    const searchFilteredVictims = useMemo(() => filteredVictims.filter(victim => {
         if (!search) return true;
         const searchTerm = search.toLowerCase();
         return (
@@ -104,7 +125,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
             (victim.province?.toLowerCase().includes(searchTerm)) ||
             (victim.territoire?.toLowerCase().includes(searchTerm))
         );
-    }), [victims, search]);
+    }), [filteredVictims, search]);
 
     const totalPages = useMemo(() => Math.max(1, Math.ceil(searchFilteredVictims.length / perPage)), [searchFilteredVictims.length, perPage]);
     const paginatedVictims = useMemo(() => searchFilteredVictims.slice((page - 1) * perPage, page * perPage), [searchFilteredVictims, page, perPage]);
@@ -153,10 +174,11 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
                         mockCategories={mockCategories}
                         onFiltersChange={handleFiltersChange}
                         currentFilters={filters}
+                        allVictims={allVictims}
                     />
 
                     {/* Message informatif si aucun filtre n'est appliqué ET aucune victime */}
-                    {!hasActiveFilters && victims.length === 0 && (
+                    {!hasActiveFilters && allVictims.length === 0 && !loading && (
                         <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 text-center mb-6">
                             <div className="text-blue-600 font-medium mb-2">Aucune victime à afficher</div>
                             <div className="text-blue-500 text-sm">
@@ -166,7 +188,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
                     )}
 
                     {/* Tableau des victimes */}
-                    {victims.length > 0 && (
+                    {(hasActiveFilters ? searchFilteredVictims.length > 0 : allVictims.length > 0) && (
                         <div className="overflow-x-auto rounded-2xl shadow-lg bg-white/90 border border-gray-100">
                             <table className="min-w-full divide-y divide-gray-200">
                                 <thead className="bg-white">
@@ -181,16 +203,16 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-100">
-                                    {fetchCtx?.loading && (
+                                    {loading && (
                                         <tr><td colSpan={7} className="text-center py-8 text-gray-400">Chargement...</td></tr>
                                     )}
                                     {fetchCtx?.error && (
                                         <tr><td colSpan={7} className="text-center py-8 text-red-400">Erreur : {fetchCtx.error}</td></tr>
                                     )}
-                                    {!fetchCtx?.loading && !fetchCtx?.error && paginatedVictims.length === 0 && (
+                                    {!loading && !fetchCtx?.error && paginatedVictims.length === 0 && (
                                         <tr><td colSpan={7} className="text-center py-8 text-gray-400">Aucune victime trouvée avec ces filtres</td></tr>
                                     )}
-                                    {!fetchCtx?.loading && !fetchCtx?.error && paginatedVictims.map((victim, idx) => (
+                                    {!loading && !fetchCtx?.error && paginatedVictims.map((victim, idx) => (
                                         <tr key={victim.id} className="border-b hover:bg-blue-50/30 transition">
                                             <td className="px-4 py-3">{(page - 1) * perPage + idx + 1}</td>
                                             <td className="px-4 py-3 font-semibold text-gray-900">{victim.nom}</td>
@@ -226,7 +248,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
                     )}
 
                     {/* Pagination */}
-                    {hasActiveFilters && (
+                    {(hasActiveFilters ? searchFilteredVictims.length > 0 : allVictims.length > 0) && totalPages > 1 && (
                         <div className="flex justify-end gap-2 mt-6">
                             <button
                                 onClick={() => setPage(p => Math.max(1, p - 1))}
@@ -255,9 +277,9 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
                 isOpen={showCreateModal}
                 onClose={handleCreateModalClose}
                 onSubmit={data => {
-                    setVictims(prev => [
+                    setAllVictims(prev => [
                         {
-                            id: prev.length ? Math.max(...prev.map(v => v.id)) + 1 : 1,
+                            id: prev.length ? Math.max(...prev.map(v => Number(v.id) || 0)) + 1 : 1,
                             nom: data.nom,
                             province: data.province,
                             territoire: data.localite,
@@ -280,6 +302,11 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
             )}
         </>
     );
+
+    // Calculer hasActiveFilters
+    const hasActiveFilters = useMemo(() => {
+        return Object.values(filters).some(value => value !== "");
+    }, [filters]);
 };
 
 export default ListVictims;
