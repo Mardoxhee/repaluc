@@ -8,11 +8,11 @@ interface MainLayoutProps {
 
 const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   return (
-    <div className="flex min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
+    <div className="flex h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 overflow-hidden">
       <SideBar />
-      <div className="flex-1 ml-64">
+      <div className="flex-1 ml-64 overflow-auto">
         <Header />
-        <main className="zoom-90">
+        <main className="zoom-90 pt-20">
           {children}
         </main>
       </div>

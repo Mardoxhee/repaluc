@@ -5,7 +5,7 @@ import DashboardStats from "@/components/DashboardStats";
 export default function Home() {
   return (
     <MainLayout>
-      <div className="flex items-center justify-center min-h-screen pt-20 pb-8 px-6">
+      <div className="min-h-screen flex items-center justify-center p-6">
         {/* Conteneur principal parfaitement centré */}
         <div className="w-full max-w-4xl mx-auto">
           <div className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-xl border border-gray-200 p-8 md:p-12">
