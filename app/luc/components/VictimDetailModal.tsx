@@ -157,10 +157,17 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
   return (
     <>
       <Modal show={true} onClose={onClose} size="7xl">
-        <Modal.Header>
-          Détails de la victime : {nom || "-"}
-        </Modal.Header>
-        <Modal.Body>
+
+        <div className='p-4 relative'>
+          <button
+            onClick={onClose}
+            className="absolute top-2 right-2 text-gray-400 hover:text-pink-500 transition-colors z-10"
+            title="Fermer"
+            aria-label="Fermer"
+            type="button"
+          >
+            <X size={28} />
+          </button>
           <div className="mb-6">
             <div className="flex border-b border-gray-200">
               {tabs.map((tabItem) => {
@@ -493,16 +500,16 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
               )}
             </div>
           )}
-        </Modal.Body>
+        </div>
       </Modal>
 
       {/* Aperçu fichier */}
       {selectedFile && (
         <Modal show={true} onClose={() => setSelectedFile(null)}>
-          <Modal.Header>
+          <div>
             {selectedFile.label}
-          </Modal.Header>
-          <Modal.Body>
+          </div>
+          <div>
             <div className="text-center py-8">
               <FileText className="mx-auto text-gray-400 mb-4" size={48} />
               <div className="text-gray-700">
@@ -512,7 +519,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                 Fonctionnalité d'aperçu à implémenter
               </div>
             </div>
-          </Modal.Body>
+          </div>
         </Modal>
       )}
     </>
