@@ -23,8 +23,15 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
     const [victimDetail, setVictimDetail] = useState<any | null>(null);
     const [showVictimModal, setShowVictimModal] = useState(false);
     
-    // États pour les filtres
-    const [filters, setFilters] = useState({
+    // États pour les filtres - initialement vides
+    const [filters, setFilters] = useState<{
+        categorie: string;
+        province: string;
+        territoire: string;
+        secteur: string;
+        prejudice: string;
+        statut: string;
+    }>({
         categorie: "",
         province: "",
         territoire: "",
@@ -32,6 +39,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
         prejudice: "",
         statut: ""
     });
+    const [hasActiveFilters, setHasActiveFilters] = useState(false);
 
     const fetchCtx = useContext(FetchContext);
 
@@ -50,8 +58,22 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
         return queryString ? `/victime?${queryString}` : "/victime";
     };
 
-    // Fetch des victimes avec filtres
+    // Vérifier s'il y a des filtres actifs
+    const checkActiveFilters = (filterObj: typeof filters) => {
+        return Object.values(filterObj).some(value => value !== "");
+    };
+
+    // Fetch des victimes seulement si des filtres sont appliqués
     useEffect(() => {
+        const activeFilters = checkActiveFilters(filters);
+        setHasActiveFilters(activeFilters);
+        
+        // Ne faire la requête que si des filtres sont appliqués
+        if (!activeFilters) {
+            setVictims([]);
+            return;
+        }
+
         const fetchVictims = async () => {
             try {
                 const url = buildFilterUrl();
@@ -66,9 +88,10 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
                 })));
             } catch (e) {
                 console.error("Erreur lors du fetch des victimes:", e);
-                // Erreur déjà gérée par FetchContext
+                setVictims([]);
             }
         };
+        
         fetchVictims();
     }, [filters, fetchCtx]);
 
@@ -123,8 +146,19 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
                         currentFilters={filters}
                     />
 
+                    {/* Message informatif si aucun filtre n'est appliqué */}
+                    {!hasActiveFilters && (
+                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 text-center mb-6">
+                            <div className="text-blue-600 font-medium mb-2">Aucun filtre appliqué</div>
+                            <div className="text-blue-500 text-sm">
+                                Utilisez les filtres ci-dessus pour afficher les victimes selon vos critères
+                            </div>
+                        </div>
+                    )}
+
                     {/* Tableau des victimes */}
-                    <div className="overflow-x-auto rounded-2xl shadow-lg bg-white/90 border border-gray-100">
+                    {hasActiveFilters && (
+                        <div className="overflow-x-auto rounded-2xl shadow-lg bg-white/90 border border-gray-100">
                         <table className="min-w-full divide-y divide-gray-200">
                             <thead className="bg-white">
                                 <tr>
@@ -145,7 +179,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
                                     <tr><td colSpan={7} className="text-center py-8 text-red-400">Erreur : {fetchCtx.error}</td></tr>
                                 )}
                                 {!fetchCtx?.loading && !fetchCtx?.error && paginatedVictims.length === 0 && (
-                                    <tr><td colSpan={7} className="text-center py-8 text-gray-400">Aucune victime trouvée</td></tr>
+                                    <tr><td colSpan={7} className="text-center py-8 text-gray-400">Aucune victime trouvée avec ces filtres</td></tr>
                                 )}
                                 {!fetchCtx?.loading && !fetchCtx?.error && paginatedVictims.map((victim, idx) => (
                                     <tr key={victim.id} className="border-b hover:bg-blue-50/30 transition">
@@ -179,10 +213,12 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
                                 ))}
                             </tbody>
                         </table>
-                    </div>
+                        </div>
+                    )}
 
                     {/* Pagination */}
-                    <div className="flex justify-end gap-2 mt-6">
+                    {hasActiveFilters && (
+                        <div className="flex justify-end gap-2 mt-6">
                         <button
                             onClick={() => setPage(p => Math.max(1, p - 1))}
                             className="px-4 py-2 rounded-lg border bg-white text-gray-600 hover:bg-pink-50 disabled:opacity-50"
@@ -200,7 +236,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
                         >
                             Suivant
                         </button>
-                    </div>
+                        </div>
+                    )}
                 </div>
             </div>
 

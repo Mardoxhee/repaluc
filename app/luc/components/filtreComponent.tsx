@@ -39,10 +39,12 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
         onFiltersChange(newFilters);
     };
 
-    // Fetch des victimes filtrées pour la confirmation groupée
+    // Fetch des victimes filtrées SEULEMENT pour la confirmation groupée
     React.useEffect(() => {
         const fetchFilteredVictims = async () => {
-            if (!currentFilters.province && !currentFilters.territoire && !currentFilters.secteur) {
+            // Ne fetch que si au moins un filtre est appliqué
+            const hasFilters = Object.values(currentFilters).some(value => value !== "");
+            if (!hasFilters) {
                 setFilteredVictims([]);
                 return;
             }
@@ -67,12 +69,18 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
             }
         };
         
-        fetchFilteredVictims();
+        // Debounce pour éviter trop de requêtes
+        const timeoutId = setTimeout(fetchFilteredVictims, 300);
+        return () => clearTimeout(timeoutId);
     }, [currentFilters, fetcher]);
+
     const handleGroupConfirmation = async () => {
         console.log("Bouton confirmation groupée cliqué");
-        if (!currentFilters.province && !currentFilters.territoire && !currentFilters.secteur) {
-            alert("Veuillez sélectionner au moins un filtre (province, territoire ou secteur) pour la confirmation groupée");
+        
+        // Vérifier qu'au moins un filtre est appliqué
+        const hasFilters = Object.values(currentFilters).some(value => value !== "");
+        if (!hasFilters) {
+            alert("Veuillez sélectionner au moins un filtre pour la confirmation groupée");
             return;
         }
 
@@ -279,7 +287,7 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
                     </div>
                     
                     {/* Boutons d'action */}
-                    {(currentFilters.categorie || currentFilters.province || currentFilters.territoire || currentFilters.secteur) && (
+                    {Object.values(currentFilters).some(value => value !== "") && filteredVictims.length > 0 && (
                         <div className="w-full flex justify-end mt-4 gap-4">
                             <button
                                 className="px-6 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-all transform hover:-translate-y-0.5 shadow-md focus:outline-none focus:ring-2 focus:ring-blue-300"
