@@ -55,8 +55,15 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
         const [firstFilter] = activeFilters;
         const [param, value] = firstFilter;
         
-        return `/victime/categorie/${param}/${value}`;
-    }, [filters]);
+        // Pour la catégorie, utiliser le nom au lieu de l'ID
+        let finalValue = value;
+        if (param === 'categorie') {
+            const category = mockCategories.find(c => String(c.id) === value);
+            finalValue = category ? category.nom : value;
+        }
+        
+        return `/victime/categorie/${param}/${encodeURIComponent(finalValue)}`;
+    }, [filters, mockCategories]);
 
     // Vérifier s'il y a des filtres actifs - memoized
     const checkActiveFilters = useMemo(() => {

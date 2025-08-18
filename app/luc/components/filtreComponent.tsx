@@ -57,7 +57,15 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
                 if (activeFilters.length > 0) {
                     const [firstFilter] = activeFilters;
                     const [param, value] = firstFilter;
-                    url = `/victime/categorie/${param}/${value}`;
+                    
+                    // Pour la catégorie, utiliser le nom au lieu de l'ID
+                    let finalValue = value;
+                    if (param === 'categorie') {
+                        const category = mockCategories.find(c => String(c.id) === value);
+                        finalValue = category ? category.nom : value;
+                    }
+                    
+                    url = `/victime/categorie/${param}/${encodeURIComponent(finalValue)}`;
                 }
                 
                 const data = await fetcher(url);
