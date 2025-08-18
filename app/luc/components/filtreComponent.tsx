@@ -7,48 +7,7 @@ import { useFetch } from "../../context/FetchContext";
 
 const VictimsWithFilters = ({ mockPrejudices, mockCategories }: any) => {
     const { fetcher } = useFetch();
-    // Mocks de victimes (à remplacer par API plus tard)
-    const [victims] = React.useState([
-        {
-            id: 1,
-            fullname: "Alice Moke",
-            age: 24,
-            sexe: "F",
-            programme: 1,
-            prejudices: [1, 2],
-            categorie: 2,
-            letter: "A",
-            statut: 'confirme',
-            province: 'Kinshasa',
-            secteur: 'Katoka',
-        },
-        {
-            id: 2,
-            fullname: "Benoît Kamba",
-            age: 42,
-            sexe: "M",
-            programme: 2,
-            prejudices: [3],
-            categorie: 1,
-            letter: "B",
-            statut: 'nonconfirme',
-            province: 'Kongo-Central',
-            secteur: 'Lubunga',
-        },
-        {
-            id: 3,
-            fullname: "Clara Moke",
-            age: 17,
-            sexe: "F",
-            programme: 1,
-            prejudices: [2, 5],
-            categorie: 1,
-            letter: "C",
-            statut: 'confirme',
-            province: 'Sud-Kivu',
-            secteur: 'Kipushi',
-        },
-    ]);
+
     // États filtres
     const [showFilters, setShowFilters] = React.useState(false);
     // Modal progression
@@ -83,8 +42,8 @@ const VictimsWithFilters = ({ mockPrejudices, mockCategories }: any) => {
         try {
             // Préparer les données selon le format demandé
             const confirmationData = filteredVictims.map(victim => ({
-                programmeCategorie: victim.categoryNom || mockCategories.find(c => c.id === victim.categorie)?.nom || "",
-                prejudiceType: victim.prejudiceNom || mockPrejudices.find(p => p.id === victim.prejudices?.[0])?.nom || "",
+                programmeCategorie: victim.categorie || mockCategories.find(c => c.id === victim.categorie) || "",
+                prejudiceType: victim.prejudicesSubis || mockPrejudices.find(p => p.id === victim.prejudicesSubis) || "",
                 violation: victim.typeViolation || "Violation non spécifiée",
                 victimeId: victim.id
             }));
