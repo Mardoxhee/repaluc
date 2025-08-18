@@ -65,6 +65,51 @@ const VictimsWithFilters = ({ mockPrejudices, mockCategories }: any) => {
     const [territoire, setTerritoire] = React.useState<string>("");
     const [isConfirming, setIsConfirming] = React.useState(false);
 
+    const handleGroupConfirmation = async () => {
+        if (!province && !territoire && !secteur) {
+            alert("Veuillez sélectionner au moins un filtre (province, territoire ou secteur) pour la confirmation groupée");
+            return;
+        }
+
+        if (filteredVictims.length === 0) {
+            alert("Aucune victime trouvée avec les filtres sélectionnés");
+            return;
+        }
+
+        setIsConfirming(true);
+
+        try {
+            // Préparer les données selon le format demandé
+            const confirmationData = filteredVictims.map(victim => ({
+                programmeCategorie: victim.categoryNom || mockCategories.find(c => c.id === victim.categorie)?.nom || "",
+                prejudiceType: victim.prejudiceNom || mockPrejudices.find(p => p.id === victim.prejudices?.[0])?.nom || "",
+                violation: victim.typeViolation || "Violation non spécifiée",
+                victimeId: victim.id
+            }));
+
+            console.log("Données de confirmation groupée:", confirmationData);
+
+            // Envoyer la requête POST
+            const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+            const response = await fetcher(`${baseUrl}/programme-prejudice-mesure/classify`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(confirmationData)
+            });
+
+            console.log("Réponse de la confirmation groupée:", response);
+            alert(`Confirmation groupée réussie pour ${filteredVictims.length} victimes`);
+
+        } catch (error: any) {
+            console.error("Erreur lors de la confirmation groupée:", error);
+            alert(`Erreur lors de la confirmation groupée: ${error.message || 'Erreur inconnue'}`);
+        } finally {
+            setIsConfirming(false);
+        }
+    };
+
     // Mock territoires
     const territoires = [
         { value: '', label: 'Tous les territoires' },
