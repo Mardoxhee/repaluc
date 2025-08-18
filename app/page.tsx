@@ -5,12 +5,9 @@ import DashboardStats from "@/components/DashboardStats";
 export default function Home() {
   return (
     <MainLayout>
-      <div className="min-h-screen flex items-center justify-center p-6 relative">
-        {/* Background simplifié */}
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-100 via-purple-100 to-pink-100"></div>
-        
+      <div className="flex items-center justify-center min-h-screen pt-20 pb-8 px-6">
         {/* Conteneur principal parfaitement centré */}
-        <div className="relative z-10 w-full max-w-4xl mx-auto">
+        <div className="w-full max-w-4xl mx-auto">
           <div className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-xl border border-gray-200 p-8 md:p-12">
             
             {/* Hero Section */}
