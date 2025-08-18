@@ -74,16 +74,17 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
             if (!hasFilters) return; // La liste par défaut est déjà affichée
             try {
                 const activeFilters = Object.entries(currentFilters).filter(([key, value]) => value !== "");
-                let url = "/victime";
-                if (activeFilters.length > 0) {
-                    const [param, value] = activeFilters[0];
+                let baseUrl = "/victime/paginate/filtered";
+                const params = new URLSearchParams();
+                activeFilters.forEach(([key, value]) => {
                     let finalValue = value;
-                    if (param === 'categorie') {
+                    if (key === 'categorie') {
                         const category = mockCategories.find(c => String(c.id) === value);
                         finalValue = category ? category.nom : value;
                     }
-                    url = `/victime/categorie/${param}/${encodeURIComponent(finalValue)}`;
-                }
+                    params.append(key, finalValue);
+                });
+                const url = `${baseUrl}?${params.toString()}`;
                 const data = await fetcher(url);
                 if (!cancelled) {
                     const victimsData = data?.data || data || [];
