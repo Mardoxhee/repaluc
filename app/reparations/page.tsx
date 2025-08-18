@@ -413,9 +413,9 @@ const ReparationsTabs = () => {
   }, [activeTab]);
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-2">
+    <div className="w-full px-4 pt-24">
       {/* Onglets */}
-      <div className="relative flex gap-2 border-b mb-8">
+      <div className="relative flex gap-2 border-b mb-8 bg-white rounded-t-xl px-6 py-4 shadow-sm">
         {TAB_LIST.map((tab, idx) => (
           <button
             key={tab.key}
@@ -441,7 +441,7 @@ const ReparationsTabs = () => {
       </div>
 
       {/* Contenu de l’onglet actif */}
-      <div className="bg-white shadow w-full p-2">
+      <div className="bg-white shadow-lg rounded-b-xl w-full min-h-[calc(100vh-200px)]">
         {activeTab === "dashboard" && <DashboardVictims /> }
         {activeTab === "victimes" && (
           <ListVictims

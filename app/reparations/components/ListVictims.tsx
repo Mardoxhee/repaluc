@@ -107,8 +107,8 @@ const ListVictims: React.FC<ListVictimsProps> = ({
 
     return (
         <>
-            <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 py-14 px-4">
-                <div className="max-w-7xl mx-auto w-full px-8">
+            <div className="w-full p-6">
+                <div className="w-full">
                     <div className="flex items-center justify-between w-full mb-8">
                         <h1 className="text-3xl font-bold text-gray-900">Victimes</h1>
                     </div>

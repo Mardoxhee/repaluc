@@ -61,7 +61,7 @@ const DashboardVictims = () => {
   }));
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-4 py-8">
+    <div className="w-full px-6 py-8">
       <h2 className="text-2xl font-bold mb-6 text-gray-900">Tableau de bord des victimes</h2>
       {/* Cartes stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6 mb-8">
