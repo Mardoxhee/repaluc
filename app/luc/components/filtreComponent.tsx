@@ -50,19 +50,20 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
             }
             
             try {
-                const params = new URLSearchParams();
-                if (currentFilters.categorie) params.append('categorie', currentFilters.categorie);
-                if (currentFilters.province) params.append('province', currentFilters.province);
-                if (currentFilters.territoire) params.append('territoire', currentFilters.territoire);
-                if (currentFilters.secteur) params.append('secteur', currentFilters.secteur);
-                if (currentFilters.prejudice) params.append('prejudice', currentFilters.prejudice);
-                if (currentFilters.statut) params.append('statut', currentFilters.statut);
+                // Construire l'URL avec la nouvelle logique
+                const activeFilters = Object.entries(currentFilters).filter(([key, value]) => value !== "");
                 
-                const queryString = params.toString();
-                const url = queryString ? `/victime?${queryString}` : "/victime";
+                let url = "/victime";
+                if (activeFilters.length > 0) {
+                    const [firstFilter] = activeFilters;
+                    const [param, value] = firstFilter;
+                    url = `/victime/categorie/${param}/${value}`;
+                }
                 
                 const data = await fetcher(url);
-                setFilteredVictims(data || []);
+                // Gérer la structure de réponse
+                const victimsData = data?.data || data || [];
+                setFilteredVictims(victimsData);
             } catch (err: any) {
                 console.error("Erreur lors du fetch des victimes filtrées:", err);
                 setFilteredVictims([]);

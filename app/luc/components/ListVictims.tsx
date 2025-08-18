@@ -43,19 +43,19 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
 
     const fetchCtx = useContext(FetchContext);
 
-    // Fonction pour construire l'URL avec les query params
+    // Fonction pour construire l'URL avec la nouvelle logique
     const buildFilterUrl = () => {
-        const params = new URLSearchParams();
+        const activeFilters = Object.entries(filters).filter(([key, value]) => value !== "");
         
-        if (filters.categorie) params.append('categorie', filters.categorie);
-        if (filters.province) params.append('province', filters.province);
-        if (filters.territoire) params.append('territoire', filters.territoire);
-        if (filters.secteur) params.append('secteur', filters.secteur);
-        if (filters.prejudice) params.append('prejudice', filters.prejudice);
-        if (filters.statut) params.append('statut', filters.statut);
+        if (activeFilters.length === 0) {
+            return "/victime"; // Toutes les victimes
+        }
         
-        const queryString = params.toString();
-        return queryString ? `/victime?${queryString}` : "/victime";
+        // Construire l'URL avec le format /victime/categorie/:param/:value
+        const [firstFilter] = activeFilters;
+        const [param, value] = firstFilter;
+        
+        return `/victime/categorie/${param}/${value}`;
     };
 
     // Vérifier s'il y a des filtres actifs
@@ -68,11 +68,6 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
         const activeFilters = checkActiveFilters(filters);
         setHasActiveFilters(activeFilters);
         
-        // Ne faire la requête que si des filtres sont appliqués
-        if (!activeFilters) {
-            setVictims([]);
-            return;
-        }
 
         const fetchVictims = async () => {
             try {
@@ -82,7 +77,17 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
                 const data = await fetchCtx?.fetcher(url);
                 console.log("Données reçues:", data);
                 
-                setVictims((data || []).map((v: any) => ({
+                // Gérer la structure de réponse différente selon l'endpoint
+                let victimsData = [];
+                if (activeFilters) {
+                    // Pour les filtres, la réponse peut être dans data.data
+                    victimsData = data?.data || data || [];
+                } else {
+                    // Pour /victime, la réponse directe
+                    victimsData = data || [];
+                }
+                
+                setVictims(victimsData.map((v: any) => ({
                     ...v,
                     status: v.status ?? null,
                 })));
