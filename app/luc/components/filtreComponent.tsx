@@ -2,8 +2,10 @@ import React, { useState, useEffect } from "react";
 import { FiFilter } from "react-icons/fi";
 import ProgressionModal from "./ProgressionModal";
 import Select from "react-select";
+import { useFetch } from "../../context/FetchContext";
 
 const VictimsWithFilters = ({ mockPrejudices, mockCategories }: any) => {
+    const { fetcher } = useFetch();
     // Mocks de victimes (à remplacer par API plus tard)
     const [victims] = React.useState([
         {
@@ -61,6 +63,7 @@ const VictimsWithFilters = ({ mockPrejudices, mockCategories }: any) => {
     const [secteur, setSecteur] = React.useState<string>("");
     // Territoire
     const [territoire, setTerritoire] = React.useState<string>("");
+    const [isConfirming, setIsConfirming] = React.useState(false);
 
     // Mock territoires
     const territoires = [
@@ -126,6 +129,50 @@ const VictimsWithFilters = ({ mockPrejudices, mockCategories }: any) => {
         if (search && !v.fullname.toLowerCase().includes(search.toLowerCase())) ok = false;
         return ok;
     });
+
+    const handleGroupConfirmation = async () => {
+        if (!province && !territoire && !secteur) {
+            alert("Veuillez sélectionner au moins un filtre (province, territoire ou secteur) pour la confirmation groupée");
+            return;
+        }
+
+        if (filteredVictims.length === 0) {
+            alert("Aucune victime trouvée avec les filtres sélectionnés");
+            return;
+        }
+
+        setIsConfirming(true);
+        
+        try {
+            // Préparer les données selon le format demandé
+            const confirmationData = filteredVictims.map(victim => ({
+                programmeCategorie: victim.categoryNom || mockCategories.find(c => c.id === victim.categorie)?.nom || "",
+                prejudiceType: victim.prejudiceNom || mockPrejudices.find(p => p.id === victim.prejudices?.[0])?.nom || "",
+                violation: victim.typeViolation || "Violation non spécifiée",
+                victimeId: victim.id
+            }));
+
+            console.log("Données de confirmation groupée:", confirmationData);
+
+            // Envoyer la requête POST
+            const response = await fetcher('/victimes/confirmation-groupee', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(confirmationData)
+            });
+
+            console.log("Réponse de la confirmation groupée:", response);
+            alert(`Confirmation groupée réussie pour ${filteredVictims.length} victimes`);
+
+        } catch (error: any) {
+            console.error("Erreur lors de la confirmation groupée:", error);
+            alert(`Erreur lors de la confirmation groupée: ${error.message || 'Erreur inconnue'}`);
+        } finally {
+            setIsConfirming(false);
+        }
+    };
 
     return (
         <div>
@@ -303,6 +350,26 @@ const VictimsWithFilters = ({ mockPrejudices, mockCategories }: any) => {
                     )}
 
                     <ProgressionModal isOpen={isProgressionOpen} onClose={() => setIsProgressionOpen(false)} />
+                    
+                    {/* Bouton de confirmation groupée */}
+                    {(province || territoire || secteur) && filteredVictims.length > 0 && (
+                        <div className="w-full flex justify-center mt-6">
+                            <button
+                                className="px-8 py-3 rounded-lg bg-gradient-to-r from-green-500 to-blue-500 text-white font-bold shadow-lg hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                onClick={handleGroupConfirmation}
+                                disabled={isConfirming}
+                            >
+                                {isConfirming ? (
+                                    <>
+                                        <span className="inline-block animate-spin mr-2">⏳</span>
+                                        Confirmation en cours...
+                                    </>
+                                ) : (
+                                    `Confirmation groupée (${filteredVictims.length} victimes)`
+                                )}
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
 
