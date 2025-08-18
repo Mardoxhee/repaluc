@@ -441,7 +441,7 @@ const ReparationsTabs = () => {
       </div>
 
       {/* Contenu de l’onglet actif */}
-      <div className="bg-white shadow-lg rounded-b-xl w-full min-h-[calc(100vh-200px)]">
+      <div className="bg-white shadow-lg rounded-b-xl w-full min-h-[calc(100vh-200px)] p-4">
         {activeTab === "dashboard" && <DashboardVictims /> }
         {activeTab === "victimes" && (
           <ListVictims
