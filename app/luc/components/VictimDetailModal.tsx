@@ -14,7 +14,7 @@ import {
   UserCheck,
   Loader2
 } from 'lucide-react';
-import { Modal } from 'flowbite-react';
+import Modal from './Modal';
 
 interface Victim {
   id: number;
