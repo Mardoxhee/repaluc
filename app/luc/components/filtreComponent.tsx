@@ -14,13 +14,13 @@ interface VictimsWithFiltersProps {
     currentFilters: any;
 }
 
-const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({ 
-    mockPrejudices, 
-    mockCategories, 
-    mockMesures, 
-    mockProgrammes, 
-    onFiltersChange, 
-    currentFilters 
+const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
+    mockPrejudices,
+    mockCategories,
+    mockMesures,
+    mockProgrammes,
+    onFiltersChange,
+    currentFilters
 }) => {
     const { fetcher } = useFetch();
 
@@ -29,7 +29,7 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
     // Modal progression
     const [isProgressionOpen, setIsProgressionOpen] = useState(false);
     const [isConfirming, setIsConfirming] = React.useState(false);
-    
+
     // State pour les victimes filtrées (pour la confirmation groupée)
     const [filteredVictims, setFilteredVictims] = React.useState<any[]>([]);
 
@@ -40,52 +40,53 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
     }, [currentFilters, onFiltersChange]);
 
     // Fetch des victimes filtrées SEULEMENT pour la confirmation groupée
+    // Debounce robuste pour éviter les requêtes multiples rapides
+    const lastFiltersRef = React.useRef<any>(currentFilters);
     React.useEffect(() => {
+        // Ne fetch que si la valeur des filtres a vraiment changé
+        if (JSON.stringify(currentFilters) === JSON.stringify(lastFiltersRef.current)) return;
+        lastFiltersRef.current = currentFilters;
+        let cancelled = false;
         const fetchFilteredVictims = async () => {
-            // Ne fetch que si au moins un filtre est appliqué
             const hasFilters = Object.values(currentFilters).some(value => value !== "");
             if (!hasFilters) {
                 setFilteredVictims([]);
                 return;
             }
-            
             try {
-                // Construire l'URL avec la nouvelle logique
                 const activeFilters = Object.entries(currentFilters).filter(([key, value]) => value !== "");
-                
                 let url = "/victime";
                 if (activeFilters.length > 0) {
-                    const [firstFilter] = activeFilters;
-                    const [param, value] = firstFilter;
-                    
-                    // Pour la catégorie, utiliser le nom au lieu de l'ID
+                    const [param, value] = activeFilters[0];
                     let finalValue = value;
                     if (param === 'categorie') {
                         const category = mockCategories.find(c => String(c.id) === value);
                         finalValue = category ? category.nom : value;
                     }
-                    
                     url = `/victime/categorie/${param}/${encodeURIComponent(finalValue)}`;
                 }
-                
                 const data = await fetcher(url);
-                // Gérer la structure de réponse
-                const victimsData = data?.data || data || [];
-                setFilteredVictims(victimsData);
+                if (!cancelled) {
+                    const victimsData = data?.data || data || [];
+                    setFilteredVictims(victimsData);
+                }
             } catch (err: any) {
-                console.error("Erreur lors du fetch des victimes filtrées:", err);
-                setFilteredVictims([]);
+                if (!cancelled) {
+                    console.error("Erreur lors du fetch des victimes filtrées:", err);
+                    setFilteredVictims([]);
+                }
             }
         };
-        
-        // Debounce pour éviter trop de requêtes
-        const timeoutId = setTimeout(fetchFilteredVictims, 300);
-        return () => clearTimeout(timeoutId);
-    }, [currentFilters]);
+        const timeoutId = setTimeout(fetchFilteredVictims, 350);
+        return () => {
+            cancelled = true;
+            clearTimeout(timeoutId);
+        };
+    }, [currentFilters, mockCategories, fetcher]);
 
     const handleGroupConfirmation = React.useCallback(async () => {
         console.log("Bouton confirmation groupée cliqué");
-        
+
         // Vérifier qu'au moins un filtre est appliqué
         const hasFilters = Object.values(currentFilters).some(value => value !== "");
         if (!hasFilters) {
@@ -188,15 +189,7 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
         }
         return (
             <ul className="mt-6 divide-y divide-gray-100">
-                {victims.map((victim: Victim) => (
-                    <li key={victim.id} className="py-4 flex flex-col sm:flex-row sm:items-center gap-2">
-                        <span className="font-semibold text-pink-700">{victim.fullname}</span>
-                        <span className="text-xs text-gray-500">
-                            Catégorie : {mockCategories.find((c: Category) => String(c.id) === String(victim.categorie))?.nom || victim.categorie}
-                        </span>
-                        {/* Ajoute d'autres infos ici si besoin */}
-                    </li>
-                ))}
+
             </ul>
         );
     });
@@ -325,7 +318,7 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
                             }}
                         />
                     </div>
-                    
+
                     {/* Boutons d'action */}
                     {Object.values(currentFilters).some(value => value !== "") && filteredVictims.length > 0 && (
                         <div className="w-full flex justify-end mt-4 gap-4">

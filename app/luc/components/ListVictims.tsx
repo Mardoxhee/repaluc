@@ -71,39 +71,39 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
     }, [filters]);
 
     // Fetch des victimes seulement si des filtres sont appliqués
+    // Premier fetch uniquement au montage (liste complète)
     useEffect(() => {
-        setHasActiveFilters(checkActiveFilters);
-        
-
-        const fetchVictims = async () => {
+        const fetchInitialVictims = async () => {
             try {
-                const url = buildFilterUrl();
-                console.log("URL de requête construite:", url);
-                
-                const data = await fetchCtx?.fetcher(url);
-                console.log("Données reçues:", data);
-                
-                // Gérer la structure de réponse différente selon l'endpoint
-                let victimsData = [];
-                if (checkActiveFilters) {
-                    // Pour les filtres, la réponse peut être dans data.data
-                    victimsData = data?.data || data || [];
-                } else {
-                    // Pour /victime, la réponse directe
-                    victimsData = data || [];
-                }
-                
-                setVictims(victimsData.map((v: any) => ({
-                    ...v,
-                    status: v.status ?? null,
-                })));
+                const data = await fetchCtx?.fetcher("/victime");
+                const victimsData = data || [];
+                setVictims(victimsData.map((v: any) => ({ ...v, status: v.status ?? null })));
             } catch (e) {
-                console.error("Erreur lors du fetch des victimes:", e);
+                console.error("Erreur lors du fetch initial des victimes:", e);
                 setVictims([]);
             }
         };
-        
-        fetchVictims();
+        fetchInitialVictims();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Fetch uniquement lors d'un changement de filtre (et si un filtre est actif)
+    useEffect(() => {
+        setHasActiveFilters(checkActiveFilters);
+        if (!checkActiveFilters) return;
+        const fetchFilteredVictims = async () => {
+            try {
+                const url = buildFilterUrl();
+                const data = await fetchCtx?.fetcher(url);
+                const victimsData = data?.data || data || [];
+                setVictims(victimsData.map((v: any) => ({ ...v, status: v.status ?? null })));
+            } catch (e) {
+                console.error("Erreur lors du fetch des victimes filtrées:", e);
+                setVictims([]);
+            }
+        };
+        fetchFilteredVictims();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filters, fetchCtx, buildFilterUrl, checkActiveFilters]);
 
     // Calcul de la pagination - memoized
