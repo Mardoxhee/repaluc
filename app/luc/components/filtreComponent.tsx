@@ -1,5 +1,5 @@
 "use client"
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, memo } from "react";
 import { FiFilter } from "react-icons/fi";
 import ProgressionModal from "./ProgressionModal";
 import Select from "react-select";
@@ -162,6 +162,37 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
         { value: "4", label: "> 50 ans" },
     ];
 
+    // Liste optimisée des victimes
+    interface Victim {
+        id: number | string;
+        fullname: string;
+        categorie: number | string;
+        [key: string]: any;
+    }
+    interface Category { id: number | string; nom: string; }
+    interface ListVictimsProps {
+        victims: Victim[];
+        mockCategories: Category[];
+    }
+    const ListVictims: React.FC<ListVictimsProps> = React.memo(({ victims, mockCategories }) => {
+        if (!victims || victims.length === 0) {
+            return <div className="mt-6 text-gray-400 italic">Aucune victime trouvée pour ces filtres.</div>;
+        }
+        return (
+            <ul className="mt-6 divide-y divide-gray-100">
+                {victims.map((victim: Victim) => (
+                    <li key={victim.id} className="py-4 flex flex-col sm:flex-row sm:items-center gap-2">
+                        <span className="font-semibold text-pink-700">{victim.fullname}</span>
+                        <span className="text-xs text-gray-500">
+                            Catégorie : {mockCategories.find((c: Category) => String(c.id) === String(victim.categorie))?.nom || victim.categorie}
+                        </span>
+                        {/* Ajoute d'autres infos ici si besoin */}
+                    </li>
+                ))}
+            </ul>
+        );
+    });
+
     return (
         <div>
             {/* Barre de recherche + bouton filtre alignés */}
@@ -317,6 +348,9 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
 
                 </div>
             )}
+
+            {/* Liste optimisée des victimes */}
+            <ListVictims victims={filteredVictims} mockCategories={mockCategories} />
 
         </div>
     );
