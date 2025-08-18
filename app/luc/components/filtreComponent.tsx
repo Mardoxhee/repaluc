@@ -33,11 +33,11 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
     // State pour les victimes filtrées (pour la confirmation groupée)
     const [filteredVictims, setFilteredVictims] = React.useState<any[]>([]);
 
-    // Fonction pour mettre à jour les filtres
-    const updateFilter = (key: string, value: string) => {
+    // Fonction pour mettre à jour les filtres - memoized
+    const updateFilter = React.useCallback((key: string, value: string) => {
         const newFilters = { ...currentFilters, [key]: value };
         onFiltersChange(newFilters);
-    };
+    }, [currentFilters, onFiltersChange]);
 
     // Fetch des victimes filtrées SEULEMENT pour la confirmation groupée
     React.useEffect(() => {
@@ -73,9 +73,9 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
         // Debounce pour éviter trop de requêtes
         const timeoutId = setTimeout(fetchFilteredVictims, 300);
         return () => clearTimeout(timeoutId);
-    }, [currentFilters, fetcher]);
+    }, [currentFilters]);
 
-    const handleGroupConfirmation = async () => {
+    const handleGroupConfirmation = React.useCallback(async () => {
         console.log("Bouton confirmation groupée cliqué");
         
         // Vérifier qu'au moins un filtre est appliqué
@@ -121,7 +121,7 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
         } finally {
             setIsConfirming(false);
         }
-    };
+    }, [currentFilters, filteredVictims, fetcher, mockCategories, mockPrejudices]);
 
     // Mock territoires
     const territoires = [

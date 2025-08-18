@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from "react";
+import React, { useState, useEffect, useContext, useCallback, useMemo } from "react";
 import { FetchContext } from "../../context/FetchContext";
 import { FiEdit, FiTrash, FiPlus, FiEye, FiSearch } from "react-icons/fi";
 import VictimDetailModal from "./VictimDetailModal";
@@ -43,8 +43,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
 
     const fetchCtx = useContext(FetchContext);
 
-    // Fonction pour construire l'URL avec la nouvelle logique
-    const buildFilterUrl = () => {
+    // Fonction pour construire l'URL avec la nouvelle logique - memoized
+    const buildFilterUrl = useCallback(() => {
         const activeFilters = Object.entries(filters).filter(([key, value]) => value !== "");
         
         if (activeFilters.length === 0) {
@@ -56,17 +56,16 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
         const [param, value] = firstFilter;
         
         return `/victime/categorie/${param}/${value}`;
-    };
+    }, [filters]);
 
-    // Vérifier s'il y a des filtres actifs
-    const checkActiveFilters = (filterObj: typeof filters) => {
-        return Object.values(filterObj).some(value => value !== "");
-    };
+    // Vérifier s'il y a des filtres actifs - memoized
+    const checkActiveFilters = useMemo(() => {
+        return Object.values(filters).some(value => value !== "");
+    }, [filters]);
 
     // Fetch des victimes seulement si des filtres sont appliqués
     useEffect(() => {
-        const activeFilters = checkActiveFilters(filters);
-        setHasActiveFilters(activeFilters);
+        setHasActiveFilters(checkActiveFilters);
         
 
         const fetchVictims = async () => {
@@ -79,7 +78,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
                 
                 // Gérer la structure de réponse différente selon l'endpoint
                 let victimsData = [];
-                if (activeFilters) {
+                if (checkActiveFilters) {
                     // Pour les filtres, la réponse peut être dans data.data
                     victimsData = data?.data || data || [];
                 } else {
@@ -98,10 +97,10 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
         };
         
         fetchVictims();
-    }, [filters, fetchCtx]);
+    }, [filters, fetchCtx, buildFilterUrl, checkActiveFilters]);
 
-    // Calcul de la pagination
-    const searchFilteredVictims = victims.filter(victim => {
+    // Calcul de la pagination - memoized
+    const searchFilteredVictims = useMemo(() => victims.filter(victim => {
         if (!search) return true;
         const searchTerm = search.toLowerCase();
         return (
@@ -109,10 +108,19 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
             (victim.province?.toLowerCase().includes(searchTerm)) ||
             (victim.territoire?.toLowerCase().includes(searchTerm))
         );
-    });
+    }), [victims, search]);
 
-    const totalPages = Math.max(1, Math.ceil(searchFilteredVictims.length / perPage));
-    const paginatedVictims = searchFilteredVictims.slice((page - 1) * perPage, page * perPage);
+    const totalPages = useMemo(() => Math.max(1, Math.ceil(searchFilteredVictims.length / perPage)), [searchFilteredVictims.length, perPage]);
+    const paginatedVictims = useMemo(() => searchFilteredVictims.slice((page - 1) * perPage, page * perPage), [searchFilteredVictims, page, perPage]);
+
+    // Callback pour éviter les re-rendus du composant de filtres
+    const handleFiltersChange = useCallback((newFilters: typeof filters) => {
+        setFilters(newFilters);
+        setPage(1); // Reset page quand les filtres changent
+    }, []);
+
+    const handleCreateModalClose = useCallback(() => setShowCreateModal(false), []);
+    const handleVictimModalClose = useCallback(() => setShowVictimModal(false), []);
 
     return (
         <>
@@ -147,7 +155,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
                         mockMesures={mockMesures}
                         mockProgrammes={mockProgrammes}
                         mockCategories={mockCategories}
-                        onFiltersChange={setFilters}
+                        onFiltersChange={handleFiltersChange}
                         currentFilters={filters}
                     />
 
@@ -249,7 +257,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
             {/* Modal création victime */}
             <CreateVictimModal
                 isOpen={showCreateModal}
-                onClose={() => setShowCreateModal(false)}
+                onClose={handleCreateModalClose}
                 onSubmit={data => {
                     setVictims(prev => [
                         {
@@ -271,7 +279,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
             {showVictimModal && victimDetail && (
                 <VictimDetailModal
                     victim={victimDetail}
-                    onClose={() => setShowVictimModal(false)}
+                    onClose={handleVictimModalClose}
                 />
             )}
         </>
