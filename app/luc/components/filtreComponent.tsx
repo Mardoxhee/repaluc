@@ -40,19 +40,38 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
     }, [currentFilters, onFiltersChange]);
 
     // Fetch des victimes filtrées SEULEMENT pour la confirmation groupée
-    // Debounce robuste pour éviter les requêtes multiples rapides
+    // Afficher toutes les victimes par défaut au premier chargement
+    React.useEffect(() => {
+        let cancelled = false;
+        const fetchAllVictims = async () => {
+            try {
+                const data = await fetcher("/victime");
+                if (!cancelled) {
+                    const victimsData = data?.data || data || [];
+                    setFilteredVictims(victimsData);
+                }
+            } catch (err: any) {
+                if (!cancelled) {
+                    setFilteredVictims([]);
+                }
+            }
+        };
+        // Si aucun filtre n'est appliqué, fetch toutes les victimes
+        if (!Object.values(currentFilters).some(value => value !== "")) {
+            fetchAllVictims();
+        }
+        return () => { cancelled = true; };
+    }, [fetcher, currentFilters]);
+
+    // Debounce robuste pour éviter les requêtes multiples rapides lors du filtrage
     const lastFiltersRef = React.useRef<any>(currentFilters);
     React.useEffect(() => {
-        // Ne fetch que si la valeur des filtres a vraiment changé
         if (JSON.stringify(currentFilters) === JSON.stringify(lastFiltersRef.current)) return;
         lastFiltersRef.current = currentFilters;
         let cancelled = false;
         const fetchFilteredVictims = async () => {
             const hasFilters = Object.values(currentFilters).some(value => value !== "");
-            if (!hasFilters) {
-                setFilteredVictims([]);
-                return;
-            }
+            if (!hasFilters) return; // La liste par défaut est déjà affichée
             try {
                 const activeFilters = Object.entries(currentFilters).filter(([key, value]) => value !== "");
                 let url = "/victime";
@@ -72,16 +91,18 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
                 }
             } catch (err: any) {
                 if (!cancelled) {
-                    console.error("Erreur lors du fetch des victimes filtrées:", err);
                     setFilteredVictims([]);
                 }
             }
         };
-        const timeoutId = setTimeout(fetchFilteredVictims, 350);
-        return () => {
-            cancelled = true;
-            clearTimeout(timeoutId);
-        };
+        // Ne fetch que si un filtre est appliqué
+        if (Object.values(currentFilters).some(value => value !== "")) {
+            const timeoutId = setTimeout(fetchFilteredVictims, 350);
+            return () => {
+                cancelled = true;
+                clearTimeout(timeoutId);
+            };
+        }
     }, [currentFilters, mockCategories, fetcher]);
 
     const handleGroupConfirmation = React.useCallback(async () => {

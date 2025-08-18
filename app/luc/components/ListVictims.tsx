@@ -22,7 +22,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
     const [showModal, setShowModal] = useState(false);
     const [victimDetail, setVictimDetail] = useState<any | null>(null);
     const [showVictimModal, setShowVictimModal] = useState(false);
-    
+
     // États pour les filtres - initialement vides
     const [filters, setFilters] = useState<{
         categorie: string;
@@ -46,22 +46,22 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
     // Fonction pour construire l'URL avec la nouvelle logique - memoized
     const buildFilterUrl = useCallback(() => {
         const activeFilters = Object.entries(filters).filter(([key, value]) => value !== "");
-        
+
         if (activeFilters.length === 0) {
             return "/victime"; // Toutes les victimes
         }
-        
+
         // Construire l'URL avec le format /victime/categorie/:param/:value
         const [firstFilter] = activeFilters;
         const [param, value] = firstFilter;
-        
+
         // Pour la catégorie, utiliser le nom au lieu de l'ID
         let finalValue = value;
         if (param === 'categorie') {
             const category = mockCategories.find(c => String(c.id) === value);
             finalValue = category ? category.nom : value;
         }
-        
+
         return `/victime/categorie/${param}/${encodeURIComponent(finalValue)}`;
     }, [filters, mockCategories]);
 
@@ -76,6 +76,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
         const fetchInitialVictims = async () => {
             try {
                 const data = await fetchCtx?.fetcher("/victime");
+                console.log("data", data)
                 const victimsData = data || [];
                 setVictims(victimsData.map((v: any) => ({ ...v, status: v.status ?? null })));
             } catch (e) {
@@ -166,96 +167,96 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
                         currentFilters={filters}
                     />
 
-                    {/* Message informatif si aucun filtre n'est appliqué */}
-                    {!hasActiveFilters && (
+                    {/* Message informatif si aucun filtre n'est appliqué ET aucune victime */}
+                    {!hasActiveFilters && victims.length === 0 && (
                         <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 text-center mb-6">
-                            <div className="text-blue-600 font-medium mb-2">Aucun filtre appliqué</div>
+                            <div className="text-blue-600 font-medium mb-2">Aucune victime à afficher</div>
                             <div className="text-blue-500 text-sm">
-                                Utilisez les filtres ci-dessus pour afficher les victimes selon vos critères
+                                Il n'y a aucune victime enregistrée pour le moment.
                             </div>
                         </div>
                     )}
 
                     {/* Tableau des victimes */}
-                    {hasActiveFilters && (
+                    {victims.length > 0 && (
                         <div className="overflow-x-auto rounded-2xl shadow-lg bg-white/90 border border-gray-100">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-white">
-                                <tr>
-                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">N*</th>
-                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Nom complet</th>
-                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Province</th>
-                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Territoire</th>
-                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Sexe</th>
-                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Statut</th>
-                                    <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-gray-100">
-                                {fetchCtx?.loading && (
-                                    <tr><td colSpan={7} className="text-center py-8 text-gray-400">Chargement...</td></tr>
-                                )}
-                                {fetchCtx?.error && (
-                                    <tr><td colSpan={7} className="text-center py-8 text-red-400">Erreur : {fetchCtx.error}</td></tr>
-                                )}
-                                {!fetchCtx?.loading && !fetchCtx?.error && paginatedVictims.length === 0 && (
-                                    <tr><td colSpan={7} className="text-center py-8 text-gray-400">Aucune victime trouvée avec ces filtres</td></tr>
-                                )}
-                                {!fetchCtx?.loading && !fetchCtx?.error && paginatedVictims.map((victim, idx) => (
-                                    <tr key={victim.id} className="border-b hover:bg-blue-50/30 transition">
-                                        <td className="px-4 py-3">{(page - 1) * perPage + idx + 1}</td>
-                                        <td className="px-4 py-3 font-semibold text-gray-900">{victim.nom}</td>
-                                        <td className="px-4 py-3">{victim.province}</td>
-                                        <td className="px-4 py-3">{victim.territoire}</td>
-                                        <td className="px-4 py-3">{victim.sexe === "Homme" ? "M" : "F"}</td>
-                                        <td className="px-4 py-3">
-                                            {(!victim.status || victim.status === "") ? (
-                                                <span className="inline-block px-3 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-700">
-                                                    non confirmé
-                                                </span>
-                                            ) : (
-                                                <span className="inline-block px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700">
-                                                    {victim.status}
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-3 flex gap-2 justify-center">
-                                            <button
-                                                className="group flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-blue-500 hover:bg-blue-700 text-white border border-blue-600 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-blue-300"
-                                                title="Voir les détails"
-                                                onClick={() => { setVictimDetail(victim); setShowVictimModal(true); }}
-                                            >
-                                                <FiEye className="w-5 h-5" />
-                                                <span className="hidden sm:inline">Détails</span>
-                                            </button>
-                                        </td>
+                            <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-white">
+                                    <tr>
+                                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">N*</th>
+                                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Nom complet</th>
+                                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Province</th>
+                                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Territoire</th>
+                                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Sexe</th>
+                                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Statut</th>
+                                        <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-100">
+                                    {fetchCtx?.loading && (
+                                        <tr><td colSpan={7} className="text-center py-8 text-gray-400">Chargement...</td></tr>
+                                    )}
+                                    {fetchCtx?.error && (
+                                        <tr><td colSpan={7} className="text-center py-8 text-red-400">Erreur : {fetchCtx.error}</td></tr>
+                                    )}
+                                    {!fetchCtx?.loading && !fetchCtx?.error && paginatedVictims.length === 0 && (
+                                        <tr><td colSpan={7} className="text-center py-8 text-gray-400">Aucune victime trouvée avec ces filtres</td></tr>
+                                    )}
+                                    {!fetchCtx?.loading && !fetchCtx?.error && paginatedVictims.map((victim, idx) => (
+                                        <tr key={victim.id} className="border-b hover:bg-blue-50/30 transition">
+                                            <td className="px-4 py-3">{(page - 1) * perPage + idx + 1}</td>
+                                            <td className="px-4 py-3 font-semibold text-gray-900">{victim.nom}</td>
+                                            <td className="px-4 py-3">{victim.province}</td>
+                                            <td className="px-4 py-3">{victim.territoire}</td>
+                                            <td className="px-4 py-3">{victim.sexe === "Homme" ? "M" : "F"}</td>
+                                            <td className="px-4 py-3">
+                                                {(!victim.status || victim.status === "") ? (
+                                                    <span className="inline-block px-3 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-700">
+                                                        non confirmé
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-block px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700">
+                                                        {victim.status}
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3 flex gap-2 justify-center">
+                                                <button
+                                                    className="group flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-blue-500 hover:bg-blue-700 text-white border border-blue-600 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-blue-300"
+                                                    title="Voir les détails"
+                                                    onClick={() => { setVictimDetail(victim); setShowVictimModal(true); }}
+                                                >
+                                                    <FiEye className="w-5 h-5" />
+                                                    <span className="hidden sm:inline">Détails</span>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
                     )}
 
                     {/* Pagination */}
                     {hasActiveFilters && (
                         <div className="flex justify-end gap-2 mt-6">
-                        <button
-                            onClick={() => setPage(p => Math.max(1, p - 1))}
-                            className="px-4 py-2 rounded-lg border bg-white text-gray-600 hover:bg-pink-50 disabled:opacity-50"
-                            disabled={page === 1}
-                        >
-                            Précédent
-                        </button>
-                        <span className="px-2 py-2 text-gray-700 font-medium">
-                            Page {page} / {totalPages}
-                        </span>
-                        <button
-                            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                            className="px-4 py-2 rounded-lg border bg-white text-gray-600 hover:bg-pink-50 disabled:opacity-50"
-                            disabled={page === totalPages}
-                        >
-                            Suivant
-                        </button>
+                            <button
+                                onClick={() => setPage(p => Math.max(1, p - 1))}
+                                className="px-4 py-2 rounded-lg border bg-white text-gray-600 hover:bg-pink-50 disabled:opacity-50"
+                                disabled={page === 1}
+                            >
+                                Précédent
+                            </button>
+                            <span className="px-2 py-2 text-gray-700 font-medium">
+                                Page {page} / {totalPages}
+                            </span>
+                            <button
+                                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                                className="px-4 py-2 rounded-lg border bg-white text-gray-600 hover:bg-pink-50 disabled:opacity-50"
+                                disabled={page === totalPages}
+                            >
+                                Suivant
+                            </button>
                         </div>
                     )}
                 </div>
