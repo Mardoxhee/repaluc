@@ -13,7 +13,6 @@ interface ReglagesProps {
 }
 
 const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, mockProgrammes, mockCategories }) => {
-    const [filterType, setFilterType] = useState<string>("");
     const [search, setSearch] = useState<string>("");
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [victims, setVictims] = useState<any[]>([]);
@@ -23,26 +22,58 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
     const [showModal, setShowModal] = useState(false);
     const [victimDetail, setVictimDetail] = useState<any | null>(null);
     const [showVictimModal, setShowVictimModal] = useState(false);
+    
+    // États pour les filtres
+    const [filters, setFilters] = useState({
+        categorie: "",
+        province: "",
+        territoire: "",
+        secteur: "",
+        prejudice: "",
+        statut: ""
+    });
 
     const fetchCtx = useContext(FetchContext);
 
+    // Fonction pour construire l'URL avec les query params
+    const buildFilterUrl = () => {
+        const params = new URLSearchParams();
+        
+        if (filters.categorie) params.append('categorie', filters.categorie);
+        if (filters.province) params.append('province', filters.province);
+        if (filters.territoire) params.append('territoire', filters.territoire);
+        if (filters.secteur) params.append('secteur', filters.secteur);
+        if (filters.prejudice) params.append('prejudice', filters.prejudice);
+        if (filters.statut) params.append('statut', filters.statut);
+        
+        const queryString = params.toString();
+        return queryString ? `/victime?${queryString}` : "/victime";
+    };
+
+    // Fetch des victimes avec filtres
     useEffect(() => {
         const fetchVictims = async () => {
             try {
-                const data = await fetchCtx?.fetcher("/victime");
+                const url = buildFilterUrl();
+                console.log("URL de requête construite:", url);
+                
+                const data = await fetchCtx?.fetcher(url);
+                console.log("Données reçues:", data);
+                
                 setVictims((data || []).map((v: any) => ({
                     ...v,
                     status: v.status ?? null,
                 })));
             } catch (e) {
+                console.error("Erreur lors du fetch des victimes:", e);
                 // Erreur déjà gérée par FetchContext
             }
         };
         fetchVictims();
-    }, []);
+    }, [filters, fetchCtx]);
 
     // Calcul de la pagination
-    const filteredVictims = victims.filter(victim => {
+    const searchFilteredVictims = victims.filter(victim => {
         if (!search) return true;
         const searchTerm = search.toLowerCase();
         return (
@@ -52,8 +83,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
         );
     });
 
-    const totalPages = Math.max(1, Math.ceil(filteredVictims.length / perPage));
-    const paginatedVictims = filteredVictims.slice((page - 1) * perPage, page * perPage);
+    const totalPages = Math.max(1, Math.ceil(searchFilteredVictims.length / perPage));
+    const paginatedVictims = searchFilteredVictims.slice((page - 1) * perPage, page * perPage);
 
     return (
         <>
@@ -88,6 +119,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
                         mockMesures={mockMesures}
                         mockProgrammes={mockProgrammes}
                         mockCategories={mockCategories}
+                        onFiltersChange={setFilters}
+                        currentFilters={filters}
                     />
 
                     {/* Tableau des victimes */}

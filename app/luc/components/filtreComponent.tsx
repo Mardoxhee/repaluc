@@ -5,50 +5,73 @@ import ProgressionModal from "./ProgressionModal";
 import Select from "react-select";
 import { useFetch } from "../../context/FetchContext";
 
-const VictimsWithFilters = ({ mockPrejudices, mockCategories }: any) => {
+interface VictimsWithFiltersProps {
+    mockPrejudices: any[];
+    mockCategories: any[];
+    mockMesures: any[];
+    mockProgrammes: any[];
+    onFiltersChange: (filters: any) => void;
+    currentFilters: any;
+}
+
+const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({ 
+    mockPrejudices, 
+    mockCategories, 
+    mockMesures, 
+    mockProgrammes, 
+    onFiltersChange, 
+    currentFilters 
+}) => {
     const { fetcher } = useFetch();
-
-    // State pour les victimes dynamiques
-    const [victims, setVictims] = React.useState<any[]>([]);
-    const [loadingVictims, setLoadingVictims] = React.useState(false);
-    const [errorVictims, setErrorVictims] = React.useState<string | null>(null);
-
-    React.useEffect(() => {
-        const fetchVictims = async () => {
-            setLoadingVictims(true);
-            setErrorVictims(null);
-            try {
-                const data = await fetcher('/victime');
-                setVictims(data || []);
-            } catch (err: any) {
-                setErrorVictims(err.message || 'Erreur lors du chargement des victimes');
-            } finally {
-                setLoadingVictims(false);
-            }
-        };
-        fetchVictims();
-    }, [fetcher]);
 
     // États filtres
     const [showFilters, setShowFilters] = React.useState(false);
     // Modal progression
     const [isProgressionOpen, setIsProgressionOpen] = useState(false);
-    const [programme, setProgramme] = React.useState<string>("");
-    const [prejudices, setPrejudices] = React.useState<string[]>([]);
-    const [categorie, setCategorie] = React.useState<string>("");
-    const [letter, setLetter] = React.useState<string>("");
-    const [ageRange, setAgeRange] = React.useState<string>("");
-    // Nouveaux filtres
-    const [statut, setStatut] = React.useState<string>(""); // '', 'confirme', 'nonconfirme'
-    const [province, setProvince] = React.useState<string>("");
-    const [secteur, setSecteur] = React.useState<string>("");
-    // Territoire
-    const [territoire, setTerritoire] = React.useState<string>("");
     const [isConfirming, setIsConfirming] = React.useState(false);
+    
+    // State pour les victimes filtrées (pour la confirmation groupée)
+    const [filteredVictims, setFilteredVictims] = React.useState<any[]>([]);
 
+    // Fonction pour mettre à jour les filtres
+    const updateFilter = (key: string, value: string) => {
+        const newFilters = { ...currentFilters, [key]: value };
+        onFiltersChange(newFilters);
+    };
+
+    // Fetch des victimes filtrées pour la confirmation groupée
+    React.useEffect(() => {
+        const fetchFilteredVictims = async () => {
+            if (!currentFilters.province && !currentFilters.territoire && !currentFilters.secteur) {
+                setFilteredVictims([]);
+                return;
+            }
+            
+            try {
+                const params = new URLSearchParams();
+                if (currentFilters.categorie) params.append('categorie', currentFilters.categorie);
+                if (currentFilters.province) params.append('province', currentFilters.province);
+                if (currentFilters.territoire) params.append('territoire', currentFilters.territoire);
+                if (currentFilters.secteur) params.append('secteur', currentFilters.secteur);
+                if (currentFilters.prejudice) params.append('prejudice', currentFilters.prejudice);
+                if (currentFilters.statut) params.append('statut', currentFilters.statut);
+                
+                const queryString = params.toString();
+                const url = queryString ? `/victime?${queryString}` : "/victime";
+                
+                const data = await fetcher(url);
+                setFilteredVictims(data || []);
+            } catch (err: any) {
+                console.error("Erreur lors du fetch des victimes filtrées:", err);
+                setFilteredVictims([]);
+            }
+        };
+        
+        fetchFilteredVictims();
+    }, [currentFilters, fetcher]);
     const handleGroupConfirmation = async () => {
-        console.log("cliqued")
-        if (!province && !territoire && !secteur) {
+        console.log("Bouton confirmation groupée cliqué");
+        if (!currentFilters.province && !currentFilters.territoire && !currentFilters.secteur) {
             alert("Veuillez sélectionner au moins un filtre (province, territoire ou secteur) pour la confirmation groupée");
             return;
         }
@@ -72,8 +95,7 @@ const VictimsWithFilters = ({ mockPrejudices, mockCategories }: any) => {
             console.log("Données de confirmation groupée:", confirmationData);
 
             // Envoyer la requête POST
-            const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "";
-            const response = await fetcher(`${baseUrl}/programme-prejudice-mesure/classify`, {
+            const response = await fetcher("/programme-prejudice-mesure/classify", {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -131,46 +153,6 @@ const VictimsWithFilters = ({ mockPrejudices, mockCategories }: any) => {
         { value: "4", label: "> 50 ans" },
     ];
 
-    // Barre de recherche (simple, à améliorer selon besoins)
-    const [search, setSearch] = React.useState("");
-
-    // Recherche + filtres combinés
-    const filteredVictims = victims.filter(v => {
-        let ok = true;
-        if (programme && String(v.programme) !== programme) ok = false;
-        if (prejudices.length > 0 && !prejudices.every(p => v.prejudices.includes(Number(p)))) ok = false;
-        if (categorie && String(v.categorie) !== categorie) ok = false;
-        if (letter && !v.fullname.toUpperCase().startsWith(letter)) ok = false;
-        if (ageRange) {
-            if (ageRange === "1" && v.age >= 18) ok = false;
-            if (ageRange === "2" && (v.age < 18 || v.age > 30)) ok = false;
-            if (ageRange === "3" && (v.age < 31 || v.age > 50)) ok = false;
-            if (ageRange === "4" && v.age <= 50) ok = false;
-        }
-        if (statut) {
-            // Pour la démo, on suppose que la propriété v.statut existe ('confirme' ou 'nonconfirme')
-            if (v.statut !== statut) ok = false;
-        }
-        if (province && v.province !== province) ok = false;
-        if (secteur && v.secteur !== secteur) ok = false;
-        if (search && !v.fullname.toLowerCase().includes(search.toLowerCase())) ok = false;
-        return ok;
-    });
-
-    // Log un échantillon des victimes filtrées à chaque changement de filtre ou de données
-    React.useEffect(() => {
-        if (filteredVictims.length > 0) {
-            console.log('Sample filteredVictims:', filteredVictims.slice(0, 5).map(v => ({
-                id: v.id,
-                fullname: v.fullname,
-                categorie: v.categorie
-            })));
-        } else {
-            console.log('Aucune victime filtrée trouvée pour les filtres actuels.');
-        }
-    }, [filteredVictims]);
-
-
     return (
         <div>
             {/* Barre de recherche + bouton filtre alignés */}
@@ -189,34 +171,18 @@ const VictimsWithFilters = ({ mockPrejudices, mockCategories }: any) => {
             {/* Panneau de filtres moderne */}
             {showFilters && (
                 <div className="mb-6 p-6 w-full bg-white rounded-2xl border border-pink-100 shadow-lg flex flex-wrap gap-6 items-end animate-fadein">
-                    {/* Statut */}
-                    {/* <div className="flex flex-col min-w-[170px]">
-                        <label className="block text-xs text-gray-400 mb-2 font-semibold tracking-wide">Statut</label>
-                        <Select
-                            isClearable
-                            options={statuts}
-                            value={statuts.find(s => s.value === statut) || statuts[0]}
-                            onChange={(opt: any) => setStatut(opt ? opt.value : '')}
-                            placeholder="Sélectionner un statut"
-                            classNamePrefix="react-select"
-                            styles={{
-                                control: (base) => ({ ...base, minHeight: 46, borderColor: '#f9a8d4', boxShadow: 'none', '&:hover': { borderColor: '#f472b6' } }),
-                                option: (base, state) => ({ ...base, backgroundColor: state.isSelected ? '#f472b6' : state.isFocused ? '#fce7f3' : 'white', color: '#831843' }),
-                            }}
-                        />
-                    </div>
-                             {/* Catégorie */}
+                    {/* Catégorie */}
                     <div className="flex flex-col min-w-[170px]">
                         <label className="block text-xs text-gray-400 mb-2 font-semibold tracking-wide">Catégorie</label>
                         <Select
                             isClearable
                             options={[{ value: '', label: 'Sélectionner un item' }, ...mockCategories.map((c: any) => ({ value: String(c.id), label: c.nom }))]}
                             value={(() => {
-                                if (!categorie) return { value: '', label: 'Sélectionner un item' };
-                                const found = mockCategories.find((c: any) => String(c.id) === categorie);
+                                if (!currentFilters.categorie) return { value: '', label: 'Sélectionner un item' };
+                                const found = mockCategories.find((c: any) => String(c.id) === currentFilters.categorie);
                                 return found ? { value: String(found.id), label: found.nom } : null;
                             })()}
-                            onChange={(opt: any) => setCategorie(opt ? opt.value : '')}
+                            onChange={(opt: any) => updateFilter('categorie', opt ? opt.value : '')}
                             placeholder="Sélectionner un item"
                             classNamePrefix="react-select"
                             styles={{
@@ -231,8 +197,8 @@ const VictimsWithFilters = ({ mockPrejudices, mockCategories }: any) => {
                         <Select
                             isClearable
                             options={provinces}
-                            value={provinces.find(p => p.value === province) || provinces[0]}
-                            onChange={(opt: any) => setProvince(opt ? opt.value : '')}
+                            value={provinces.find(p => p.value === currentFilters.province) || provinces[0]}
+                            onChange={(opt: any) => updateFilter('province', opt ? opt.value : '')}
                             placeholder="Sélectionner une province"
                             classNamePrefix="react-select"
                             styles={{
@@ -247,8 +213,8 @@ const VictimsWithFilters = ({ mockPrejudices, mockCategories }: any) => {
                         <Select
                             isClearable
                             options={territoires}
-                            value={territoires.find(t => t.value === territoire) || territoires[0]}
-                            onChange={(opt: any) => setTerritoire(opt ? opt.value : '')}
+                            value={territoires.find(t => t.value === currentFilters.territoire) || territoires[0]}
+                            onChange={(opt: any) => updateFilter('territoire', opt ? opt.value : '')}
                             placeholder="Sélectionner un territoire"
                             classNamePrefix="react-select"
                             styles={{
@@ -263,8 +229,8 @@ const VictimsWithFilters = ({ mockPrejudices, mockCategories }: any) => {
                         <Select
                             isClearable
                             options={secteurs}
-                            value={secteurs.find(s => s.value === secteur) || secteurs[0]}
-                            onChange={(opt: any) => setSecteur(opt ? opt.value : '')}
+                            value={secteurs.find(s => s.value === currentFilters.secteur) || secteurs[0]}
+                            onChange={(opt: any) => updateFilter('secteur', opt ? opt.value : '')}
                             placeholder="Sélectionner un secteur"
                             classNamePrefix="react-select"
                             styles={{
@@ -274,41 +240,36 @@ const VictimsWithFilters = ({ mockPrejudices, mockCategories }: any) => {
                         />
                     </div>
 
-                    {/* Préjudices multi */}
+                    {/* Préjudices */}
                     <div className="flex flex-col min-w-[320px]">
                         <label className="block text-xs text-gray-400 mb-2 font-semibold tracking-wide">Préjudices</label>
                         <Select
-                            isMulti
-                            options={mockPrejudices.map((p: any) => ({ value: String(p.id), label: p.nom }))}
-                            value={mockPrejudices
-                                .map((p: any) => ({ value: String(p.id), label: p.nom }))
-                                .filter((opt: any) => prejudices.includes(opt.value))}
-                            onChange={(opts: any) => setPrejudices(opts ? opts.map((o: any) => o.value) : [])}
-                            placeholder="Sélectionner..."
+                            isClearable
+                            options={[{ value: '', label: 'Sélectionner un préjudice' }, ...mockPrejudices.map((p: any) => ({ value: String(p.id), label: p.nom }))]}
+                            value={(() => {
+                                if (!currentFilters.prejudice) return { value: '', label: 'Sélectionner un préjudice' };
+                                const found = mockPrejudices.find((p: any) => String(p.id) === currentFilters.prejudice);
+                                return found ? { value: String(found.id), label: found.nom } : null;
+                            })()}
+                            onChange={(opt: any) => updateFilter('prejudice', opt ? opt.value : '')}
+                            placeholder="Sélectionner un préjudice"
                             classNamePrefix="react-select"
                             styles={{
                                 control: (base) => ({ ...base, minHeight: 46, borderColor: '#f9a8d4', boxShadow: 'none', '&:hover': { borderColor: '#f472b6' } }),
-                                multiValue: (base) => ({ ...base, backgroundColor: '#fce7f3', color: '#db2777' }),
-                                multiValueLabel: (base) => ({ ...base, color: '#db2777', fontWeight: 500 }),
-                                multiValueRemove: (base) => ({ ...base, color: '#db2777', ':hover': { backgroundColor: '#f472b6', color: 'white' } }),
                                 option: (base, state) => ({ ...base, backgroundColor: state.isSelected ? '#f472b6' : state.isFocused ? '#fce7f3' : 'white', color: '#831843' }),
                             }}
                         />
                     </div>
 
-                    {/* Tranche d'âge */}
+                    {/* Statut */}
                     <div className="flex flex-col min-w-[170px]">
-                        <label className="block text-xs text-gray-400 mb-2 font-semibold tracking-wide">Tranche d'âge</label>
+                        <label className="block text-xs text-gray-400 mb-2 font-semibold tracking-wide">Statut</label>
                         <Select
                             isClearable
-                            options={[{ value: '', label: 'Sélectionner un item' }, ...ageRanges.filter(r => r.value !== '').map(r => ({ value: r.value, label: r.label }))]}
-                            value={(() => {
-                                if (!ageRange) return { value: '', label: 'Sélectionner un item' };
-                                const found = ageRanges.find((r: any) => r.value === ageRange);
-                                return found ? { value: found.value, label: found.label } : null;
-                            })()}
-                            onChange={(opt: any) => setAgeRange(opt ? opt.value : '')}
-                            placeholder="Sélectionner un item"
+                            options={statuts}
+                            value={statuts.find(s => s.value === currentFilters.statut) || statuts[0]}
+                            onChange={(opt: any) => updateFilter('statut', opt ? opt.value : '')}
+                            placeholder="Sélectionner un statut"
                             classNamePrefix="react-select"
                             styles={{
                                 control: (base) => ({ ...base, minHeight: 46, borderColor: '#f9a8d4', boxShadow: 'none', '&:hover': { borderColor: '#f472b6' } }),
@@ -316,26 +277,23 @@ const VictimsWithFilters = ({ mockPrejudices, mockCategories }: any) => {
                             }}
                         />
                     </div>
-                    {/* Lettre alphabétique */}
-                    <div className="flex flex-col min-w-[170px]">
-                        <label className="block text-xs text-gray-400 mb-2 font-semibold tracking-wide">Lettre</label>
-                        <div className="flex flex-wrap gap-1">
-                            {"ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").map(l => (
-                                <button
-                                    key={l}
-                                    className={`px-2 py-1 rounded-full text-xs font-mono border transition focus:outline-none focus:ring-2 focus:ring-pink-300 ${letter === l ? "bg-pink-600 text-white border-pink-600 shadow" : "bg-white text-gray-500 border-gray-200 hover:bg-pink-50"}`}
-                                    onClick={() => setLetter(l === letter ? "" : l)}
-                                    type="button"
-                                >{l}</button>
-                            ))}
-                        </div>
-                    </div>
-                    {(categorie || province || territoire || secteur) && (
+                    
+                    {/* Boutons d'action */}
+                    {(currentFilters.categorie || currentFilters.province || currentFilters.territoire || currentFilters.secteur) && (
                         <div className="w-full flex justify-end mt-4 gap-4">
                             <button
                                 className="px-6 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-all transform hover:-translate-y-0.5 shadow-md focus:outline-none focus:ring-2 focus:ring-blue-300"
+                                onClick={handleGroupConfirmation}
+                                disabled={isConfirming}
                             >
-                                Confirmer les victimes
+                                {isConfirming ? (
+                                    <>
+                                        <span className="inline-block animate-spin mr-2">⏳</span>
+                                        Confirmation en cours...
+                                    </>
+                                ) : (
+                                    `Confirmer les victimes (${filteredVictims.length})`
+                                )}
                             </button>
                             <button
                                 className="px-6 py-2 rounded-lg bg-gradient-to-r from-fona-pink via-fona-blue to-fona-purple text-blue-600 font-bold shadow hover:scale-105 transition focus:outline-none focus:ring-2 focus:ring-fona-pink font-400"
@@ -348,29 +306,8 @@ const VictimsWithFilters = ({ mockPrejudices, mockCategories }: any) => {
 
                     <ProgressionModal isOpen={isProgressionOpen} onClose={() => setIsProgressionOpen(false)} />
 
-                    {/* Bouton de confirmation groupée */}
-                    {(province || territoire || secteur) && filteredVictims.length > 0 && (
-                        <div className="w-full flex justify-center mt-6">
-                            <button
-                                className="px-8 py-3 rounded-lg bg-gradient-to-r from-green-500 to-blue-500 text-white font-bold shadow-lg hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                                onClick={handleGroupConfirmation}
-                                disabled={isConfirming}
-                            >
-                                {isConfirming ? (
-                                    <>
-                                        <span className="inline-block animate-spin mr-2">⏳</span>
-                                        Confirmation en cours...
-                                    </>
-                                ) : (
-                                    `Confirmation groupée (${filteredVictims.length} victimes)`
-                                )}
-                            </button>
-                        </div>
-                    )}
                 </div>
             )}
-
-
 
         </div>
     );
