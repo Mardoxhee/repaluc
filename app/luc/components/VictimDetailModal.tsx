@@ -14,7 +14,7 @@ import {
   UserCheck,
   Loader2
 } from 'lucide-react';
-import Modal from './Modal';
+import { Modal } from 'flowbite-react';
 
 interface Victim {
   id: number;
@@ -158,8 +158,11 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
   ];
 
   return (
-    <>
-      <Modal title={`Détails de la victime : ${nom || "-"}`} onClose={onClose}>
+    <Modal show={true} onClose={onClose} size="7xl">
+      <Modal.Header>
+        Détails de la victime : {nom || "-"}
+      </Modal.Header>
+      <Modal.Body>
         <div className="mb-6">
           <div className="flex border-b border-gray-200">
             {tabs.map((tabItem) => {
@@ -492,23 +495,28 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
             )}
           </div>
         )}
-      </Modal>
+      </Modal.Body>
+    </Modal>
 
       {/* Aperçu fichier */}
       {selectedFile && (
-        <Modal title={selectedFile.label} onClose={() => setSelectedFile(null)}>
-          <div className="text-center py-8">
-            <FileText className="mx-auto text-gray-400 mb-4" size={48} />
-            <div className="text-gray-700">
-              Aperçu du fichier : <span className="font-semibold">{selectedFile.name}</span>
+        <Modal show={true} onClose={() => setSelectedFile(null)}>
+          <Modal.Header>
+            {selectedFile.label}
+          </Modal.Header>
+          <Modal.Body>
+            <div className="text-center py-8">
+              <FileText className="mx-auto text-gray-400 mb-4" size={48} />
+              <div className="text-gray-700">
+                Aperçu du fichier : <span className="font-semibold">{selectedFile.name}</span>
+              </div>
+              <div className="text-sm text-gray-500 mt-2">
+                Fonctionnalité d'aperçu à implémenter
+              </div>
             </div>
-            <div className="text-sm text-gray-500 mt-2">
-              Fonctionnalité d'aperçu à implémenter
-            </div>
-          </div>
+          </Modal.Body>
         </Modal>
       )}
-    </>
   );
 };
 
