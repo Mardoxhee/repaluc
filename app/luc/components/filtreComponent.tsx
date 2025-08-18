@@ -142,7 +142,7 @@ const VictimsWithFilters = ({ mockPrejudices, mockCategories }: any) => {
         }
 
         setIsConfirming(true);
-        
+
         try {
             // Préparer les données selon le format demandé
             const confirmationData = filteredVictims.map(victim => ({
@@ -155,7 +155,8 @@ const VictimsWithFilters = ({ mockPrejudices, mockCategories }: any) => {
             console.log("Données de confirmation groupée:", confirmationData);
 
             // Envoyer la requête POST
-            const response = await fetcher('/programme-prejudice-mesure/classify', {
+            const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+            const response = await fetcher(`${baseUrl}/programme-prejudice-mesure/classify`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -350,7 +351,7 @@ const VictimsWithFilters = ({ mockPrejudices, mockCategories }: any) => {
                     )}
 
                     <ProgressionModal isOpen={isProgressionOpen} onClose={() => setIsProgressionOpen(false)} />
-                    
+
                     {/* Bouton de confirmation groupée */}
                     {(province || territoire || secteur) && filteredVictims.length > 0 && (
                         <div className="w-full flex justify-center mt-6">
