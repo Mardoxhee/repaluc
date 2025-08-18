@@ -11,10 +11,10 @@ const mockProgrammes = [
   { id: 2, nom: "Programme B", categoryId: 2, categoryNom: "Victimes des ménages collectifs" },
 ];
 const mockCategories = [
-  { id: 1, nom: "Victimes des ménages ordinaires" },
-  { id: 2, nom: "Victimes des ménages collectifs" },
-  { id: 3, nom: "Victimes en urgence médicale" },
-  { id: 4, nom: "Victimes detenant les décisions de justice" },
+  { id: 1, nom: "Victimes vivant dans les ménages ordinaires" },
+  { id: 2, nom: "Victimes vivant dans les ménages ordinaires" },
+  { id: 3, nom: "Victime en cas d'urgence médicale" },
+  { id: 4, nom: "Victimes détenant des décisions de justice définitives" },
 
 ];
 const mockPrejudices = [
@@ -370,7 +370,7 @@ const VictimDetailModal = ({ victim, onClose }: { victim: any, onClose: () => vo
                 <div className="text-xs mt-2">La progression de cette victime n'a pas encore été ajoutée.</div>
               </div>
             )}
-            
+
           </div>
         </div>
       </div>
@@ -435,7 +435,7 @@ const ReparationsTabs = () => {
 
       {/* Contenu de l’onglet actif */}
       <div className="bg-white shadow-lg rounded-b-xl w-full min-h-[calc(100vh-200px)] p-4">
-        {activeTab === "dashboard" && <DashboardVictims /> }
+        {activeTab === "dashboard" && <DashboardVictims />}
         {activeTab === "victimes" && (
           <ListVictims
             mockPrejudices={mockPrejudices}

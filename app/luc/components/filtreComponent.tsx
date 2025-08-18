@@ -8,6 +8,27 @@ import { useFetch } from "../../context/FetchContext";
 const VictimsWithFilters = ({ mockPrejudices, mockCategories }: any) => {
     const { fetcher } = useFetch();
 
+    // State pour les victimes dynamiques
+    const [victims, setVictims] = React.useState<any[]>([]);
+    const [loadingVictims, setLoadingVictims] = React.useState(false);
+    const [errorVictims, setErrorVictims] = React.useState<string | null>(null);
+
+    React.useEffect(() => {
+        const fetchVictims = async () => {
+            setLoadingVictims(true);
+            setErrorVictims(null);
+            try {
+                const data = await fetcher('/victime');
+                setVictims(data || []);
+            } catch (err: any) {
+                setErrorVictims(err.message || 'Erreur lors du chargement des victimes');
+            } finally {
+                setLoadingVictims(false);
+            }
+        };
+        fetchVictims();
+    }, [fetcher]);
+
     // États filtres
     const [showFilters, setShowFilters] = React.useState(false);
     // Modal progression
@@ -135,6 +156,19 @@ const VictimsWithFilters = ({ mockPrejudices, mockCategories }: any) => {
         if (search && !v.fullname.toLowerCase().includes(search.toLowerCase())) ok = false;
         return ok;
     });
+
+    // Log un échantillon des victimes filtrées à chaque changement de filtre ou de données
+    React.useEffect(() => {
+        if (filteredVictims.length > 0) {
+            console.log('Sample filteredVictims:', filteredVictims.slice(0, 5).map(v => ({
+                id: v.id,
+                fullname: v.fullname,
+                categorie: v.categorie
+            })));
+        } else {
+            console.log('Aucune victime filtrée trouvée pour les filtres actuels.');
+        }
+    }, [filteredVictims]);
 
 
     return (
@@ -335,6 +369,7 @@ const VictimsWithFilters = ({ mockPrejudices, mockCategories }: any) => {
                     )}
                 </div>
             )}
+
 
 
         </div>
