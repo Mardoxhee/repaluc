@@ -155,7 +155,7 @@ const VictimsWithFilters = ({ mockPrejudices, mockCategories }: any) => {
             console.log("Données de confirmation groupée:", confirmationData);
 
             // Envoyer la requête POST
-            const response = await fetcher('/victimes/confirmation-groupee', {
+            const response = await fetcher('/programme-prejudice-mesure/classify', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
