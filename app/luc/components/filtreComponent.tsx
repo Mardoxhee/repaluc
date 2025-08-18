@@ -39,85 +39,60 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
         onFiltersChange(newFilters);
     }, [currentFilters, onFiltersChange]);
 
-    // Fetch des victimes filtrées SEULEMENT pour la confirmation groupée
-    // Afficher toutes les victimes par défaut au premier chargement
+    // Fetch des victimes avec le nouvel endpoint
     React.useEffect(() => {
         let cancelled = false;
-        const fetchAllVictims = async () => {
+        
+        const fetchVictims = async () => {
             try {
-                const data = await fetcher("/victime");
-                if (!cancelled) {
-                    const victimsData = data?.data || data || [];
-                    setFilteredVictims(victimsData);
-                }
-            } catch (err: any) {
-                if (!cancelled) {
-                    setFilteredVictims([]);
-                }
-            }
-        };
-        // Si aucun filtre n'est appliqué, fetch toutes les victimes
-        if (!Object.values(currentFilters).some(value => value !== "")) {
-            fetchAllVictims();
-        }
-        return () => { cancelled = true; };
-    }, [fetcher, currentFilters]);
-
-    // Debounce robuste pour éviter les requêtes multiples rapides lors du filtrage
-    const lastFiltersRef = React.useRef<any>(currentFilters);
-    React.useEffect(() => {
-        if (JSON.stringify(currentFilters) === JSON.stringify(lastFiltersRef.current)) return;
-        lastFiltersRef.current = currentFilters;
-        let cancelled = false;
-        const fetchFilteredVictims = async () => {
-            const hasFilters = Object.values(currentFilters).some(value => value !== "");
-            if (!hasFilters) return; // La liste par défaut est déjà affichée
-            try {
-                const activeFilters = Object.entries(currentFilters).filter(([key, value]) => value !== "");
-                let baseUrl = "/victime/paginate/filtered";
+                // Construire les paramètres de requête
                 const params = new URLSearchParams();
-                activeFilters.forEach(([key, value]) => {
-                    let finalValue = value;
-                    if (key === 'categorie') {
-                        const category = mockCategories.find(c => String(c.id) === value);
-                        finalValue = category ? category.nom : value;
+                
+                // Ajouter les filtres actifs comme paramètres de requête
+                Object.entries(currentFilters).forEach(([key, value]) => {
+                    if (value && value !== "") {
+                        // Pour la catégorie, utiliser le nom au lieu de l'ID
+                        if (key === 'categorie') {
+                            const category = mockCategories.find(c => String(c.id) === value);
+                            if (category) {
+                                params.append(key, category.nom);
+                            }
+                        } else {
+                            params.append(key, value);
+                        }
                     }
-                    params.append(key, finalValue);
                 });
-                const url = `${baseUrl}?${params.toString()}`;
+                
+                // Construire l'URL finale
+                const url = `/victime/paginate/filtered${params.toString() ? `?${params.toString()}` : ''}`;
+                
                 const data = await fetcher(url);
                 if (!cancelled) {
                     const victimsData = data?.data || data || [];
                     setFilteredVictims(victimsData);
                 }
             } catch (err: any) {
+                console.error("Erreur lors du fetch des victimes:", err);
                 if (!cancelled) {
                     setFilteredVictims([]);
                 }
             }
         };
-        // Ne fetch que si un filtre est appliqué
-        if (Object.values(currentFilters).some(value => value !== "")) {
-            const timeoutId = setTimeout(fetchFilteredVictims, 350);
-            return () => {
-                cancelled = true;
-                clearTimeout(timeoutId);
-            };
-        }
+        
+        // Debounce pour éviter trop de requêtes
+        const timeoutId = setTimeout(fetchVictims, 300);
+        
+        return () => {
+            cancelled = true;
+            clearTimeout(timeoutId);
+        };
     }, [currentFilters, mockCategories, fetcher]);
 
     const handleGroupConfirmation = React.useCallback(async () => {
         console.log("Bouton confirmation groupée cliqué");
 
-        // Vérifier qu'au moins un filtre est appliqué
-        const hasFilters = Object.values(currentFilters).some(value => value !== "");
-        if (!hasFilters) {
-            alert("Veuillez sélectionner au moins un filtre pour la confirmation groupée");
-            return;
-        }
-
         if (filteredVictims.length === 0) {
-            alert("Aucune victime trouvée avec les filtres sélectionnés");
+            alert("Aucune victime trouvée");
             return;
         }
 
@@ -152,7 +127,7 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
         } finally {
             setIsConfirming(false);
         }
-    }, [currentFilters, filteredVictims, fetcher, mockCategories, mockPrejudices]);
+    }, [filteredVictims, fetcher, mockCategories, mockPrejudices]);
 
     // Mock territoires
     const territoires = [
@@ -342,7 +317,7 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
                     </div>
 
                     {/* Boutons d'action */}
-                    {Object.values(currentFilters).some(value => value !== "") && filteredVictims.length > 0 && (
+                    {filteredVictims.length > 0 && (
                         <div className="w-full flex justify-end mt-4 gap-4">
                             <button
                                 className="px-6 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-all transform hover:-translate-y-0.5 shadow-md focus:outline-none focus:ring-2 focus:ring-blue-300"

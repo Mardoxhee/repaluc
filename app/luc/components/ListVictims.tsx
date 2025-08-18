@@ -45,24 +45,25 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
 
     // Fonction pour construire l'URL avec la nouvelle logique - memoized
     const buildFilterUrl = useCallback(() => {
-        const activeFilters = Object.entries(filters).filter(([key, value]) => value !== "");
-
-        if (activeFilters.length === 0) {
-            return "/victime"; // Toutes les victimes
-        }
-
-        // Construire l'URL avec le format /victime/categorie/:param/:value
-        const [firstFilter] = activeFilters;
-        const [param, value] = firstFilter;
-
-        // Pour la catégorie, utiliser le nom au lieu de l'ID
-        let finalValue = value;
-        if (param === 'categorie') {
-            const category = mockCategories.find(c => String(c.id) === value);
-            finalValue = category ? category.nom : value;
-        }
-
-        return `/victime/categorie/${param}/${encodeURIComponent(finalValue)}`;
+        const params = new URLSearchParams();
+        
+        // Ajouter les filtres actifs comme paramètres de requête
+        Object.entries(filters).forEach(([key, value]) => {
+            if (value && value !== "") {
+                // Pour la catégorie, utiliser le nom au lieu de l'ID
+                if (key === 'categorie') {
+                    const category = mockCategories.find(c => String(c.id) === value);
+                    if (category) {
+                        params.append(key, category.nom);
+                    }
+                } else {
+                    params.append(key, value);
+                }
+            }
+        });
+        
+        // Construire l'URL finale
+        return `/victime/paginate/filtered${params.toString() ? `?${params.toString()}` : ''}`;
     }, [filters, mockCategories]);
 
     // Vérifier s'il y a des filtres actifs - memoized
@@ -70,41 +71,28 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, moc
         return Object.values(filters).some(value => value !== "");
     }, [filters]);
 
-    // Fetch des victimes seulement si des filtres sont appliqués
-    // Premier fetch uniquement au montage (liste complète)
+    // Fetch des victimes avec le nouvel endpoint
     useEffect(() => {
-        const fetchInitialVictims = async () => {
+        const fetchVictims = async () => {
             try {
-                const data = await fetchCtx?.fetcher("/victime");
-                console.log("data", data)
+                const url = buildFilterUrl();
+                console.log("Fetching from URL:", url);
+                const data = await fetchCtx?.fetcher(url);
+                console.log("Response data:", data);
                 const victimsData = data || [];
                 setVictims(victimsData.map((v: any) => ({ ...v, status: v.status ?? null })));
             } catch (e) {
-                console.error("Erreur lors du fetch initial des victimes:", e);
+                console.error("Erreur lors du fetch des victimes:", e);
                 setVictims([]);
             }
         };
-        fetchInitialVictims();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    // Fetch uniquement lors d'un changement de filtre (et si un filtre est actif)
-    useEffect(() => {
+        
         setHasActiveFilters(checkActiveFilters);
-        if (!checkActiveFilters) return;
-        const fetchFilteredVictims = async () => {
-            try {
-                const url = buildFilterUrl();
-                const data = await fetchCtx?.fetcher(url);
-                const victimsData = data?.data || data || [];
-                setVictims(victimsData.map((v: any) => ({ ...v, status: v.status ?? null })));
-            } catch (e) {
-                console.error("Erreur lors du fetch des victimes filtrées:", e);
-                setVictims([]);
-            }
-        };
-        fetchFilteredVictims();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        
+        // Debounce pour éviter trop de requêtes
+        const timeoutId = setTimeout(fetchVictims, 300);
+        
+        return () => clearTimeout(timeoutId);
     }, [filters, fetchCtx, buildFilterUrl, checkActiveFilters]);
 
     // Calcul de la pagination - memoized

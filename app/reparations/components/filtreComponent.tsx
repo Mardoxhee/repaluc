@@ -2,48 +2,107 @@ import React, { useState, useEffect } from "react";
 // --- FILTRES AVANCÉS POUR LA LISTE DES VICTIMES ---
 import { FiFilter } from "react-icons/fi";
 import Select from "react-select";
+import { useFetch } from "../../context/FetchContext";
 
-const VictimsWithFilters = ({ mockPrejudices, mockMesures, mockProgrammes, mockCategories }: any) => {
-    // Mocks de victimes (à remplacer par API plus tard)
-    const [victims] = React.useState([
-        {
-            id: 1,
-            fullname: "Alice Moke",
-            age: 24,
-            sexe: "F",
-            programme: 1,
-            prejudices: [1, 2],
-            categorie: 2,
-            letter: "A"
-        },
-        {
-            id: 2,
-            fullname: "Benoît Kamba",
-            age: 42,
-            sexe: "M",
-            programme: 2,
-            prejudices: [3],
-            categorie: 1,
-            letter: "B"
-        },
-        {
-            id: 3,
-            fullname: "Clara Moke",
-            age: 17,
-            sexe: "F",
-            programme: 1,
-            prejudices: [2, 5],
-            categorie: 1,
-            letter: "C"
-        },
-    ]);
+interface VictimsWithFiltersProps {
+    mockPrejudices: any[];
+    mockCategories: any[];
+    mockMesures: any[];
+    mockProgrammes: any[];
+    onFiltersChange?: (filters: any) => void;
+    currentFilters?: any;
+}
+
+const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({ 
+    mockPrejudices, 
+    mockMesures, 
+    mockProgrammes, 
+    mockCategories,
+    onFiltersChange,
+    currentFilters = {}
+}) => {
+    const { fetcher } = useFetch();
+    const [victims, setVictims] = React.useState<any[]>([]);
+    
     // États filtres
     const [showFilters, setShowFilters] = React.useState(false);
-    const [programme, setProgramme] = React.useState<string>("");
-    const [prejudices, setPrejudices] = React.useState<string[]>([]);
-    const [categorie, setCategorie] = React.useState<string>("");
-    const [letter, setLetter] = React.useState<string>("");
-    const [ageRange, setAgeRange] = React.useState<string>("");
+    const [filters, setFilters] = React.useState({
+        programme: "",
+        prejudices: [] as string[],
+        categorie: "",
+        province: "",
+        territoire: "",
+        secteur: "",
+        letter: "",
+        ageRange: "",
+        statut: ""
+    });
+
+    // Fonction pour mettre à jour les filtres
+    const updateFilter = React.useCallback((key: string, value: string | string[]) => {
+        const newFilters = { ...filters, [key]: value };
+        setFilters(newFilters);
+        if (onFiltersChange) {
+            onFiltersChange(newFilters);
+        }
+    }, [filters, onFiltersChange]);
+
+    // Fetch des victimes avec le nouvel endpoint
+    React.useEffect(() => {
+        let cancelled = false;
+        
+        const fetchVictims = async () => {
+            try {
+                // Construire les paramètres de requête
+                const params = new URLSearchParams();
+                
+                // Ajouter les filtres actifs comme paramètres de requête
+                Object.entries(filters).forEach(([key, value]) => {
+                    if (value && value !== "" && (!Array.isArray(value) || value.length > 0)) {
+                        if (key === 'categorie') {
+                            const category = mockCategories.find(c => String(c.id) === value);
+                            if (category) {
+                                params.append(key, category.nom);
+                            }
+                        } else if (key === 'prejudices' && Array.isArray(value)) {
+                            // Pour les préjudices multiples, ajouter chaque valeur
+                            value.forEach(v => {
+                                const prejudice = mockPrejudices.find(p => String(p.id) === v);
+                                if (prejudice) {
+                                    params.append('prejudice', prejudice.nom);
+                                }
+                            });
+                        } else if (!Array.isArray(value)) {
+                            params.append(key, value);
+                        }
+                    }
+                });
+                
+                // Construire l'URL finale
+                const url = `/victime/paginate/filtered${params.toString() ? `?${params.toString()}` : ''}`;
+                console.log("Fetching from URL:", url);
+                
+                const data = await fetcher(url);
+                if (!cancelled) {
+                    const victimsData = data?.data || data || [];
+                    setVictims(victimsData);
+                }
+            } catch (err: any) {
+                console.error("Erreur lors du fetch des victimes:", err);
+                if (!cancelled) {
+                    setVictims([]);
+                }
+            }
+        };
+        
+        // Debounce pour éviter trop de requêtes
+        const timeoutId = setTimeout(fetchVictims, 300);
+        
+        return () => {
+            cancelled = true;
+            clearTimeout(timeoutId);
+        };
+    }, [filters, mockCategories, mockPrejudices, fetcher]);
 
     // Options tranches d'âge
     const ageRanges = [
@@ -54,25 +113,35 @@ const VictimsWithFilters = ({ mockPrejudices, mockMesures, mockProgrammes, mockC
         { value: "4", label: "> 50 ans" },
     ];
 
-    // Barre de recherche (simple, à améliorer selon besoins)
-    const [search, setSearch] = React.useState("");
-
-    // Recherche + filtres combinés
-    const filteredVictims = victims.filter(v => {
-        let ok = true;
-        if (programme && String(v.programme) !== programme) ok = false;
-        if (prejudices.length > 0 && !prejudices.every(p => v.prejudices.includes(Number(p)))) ok = false;
-        if (categorie && String(v.categorie) !== categorie) ok = false;
-        if (letter && !v.fullname.toUpperCase().startsWith(letter)) ok = false;
-        if (ageRange) {
-            if (ageRange === "1" && v.age >= 18) ok = false;
-            if (ageRange === "2" && (v.age < 18 || v.age > 30)) ok = false;
-            if (ageRange === "3" && (v.age < 31 || v.age > 50)) ok = false;
-            if (ageRange === "4" && v.age <= 50) ok = false;
-        }
-        if (search && !v.fullname.toLowerCase().includes(search.toLowerCase())) ok = false;
-        return ok;
-    });
+    // Options pour Province, Territoire, Secteur
+    const provinces = [
+        { value: '', label: 'Toutes les provinces' },
+        { value: 'Kinshasa', label: 'Kinshasa' },
+        { value: 'Kongo-Central', label: 'Kongo-Central' },
+        { value: 'Sud-Kivu', label: 'Sud-Kivu' },
+    ];
+    
+    const territoires = [
+        { value: '', label: 'Tous les territoires' },
+        { value: 'Funa', label: 'Funa' },
+        { value: 'Tshangu', label: 'Tshangu' },
+        { value: 'Mont-Amba', label: 'Mont-Amba' },
+        { value: 'Lukunga', label: 'Lukunga' },
+    ];
+    
+    const secteurs = [
+        { value: '', label: 'Tous les secteurs' },
+        { value: 'Katoka', label: 'Katoka' },
+        { value: 'Lubunga', label: 'Lubunga' },
+        { value: 'Kipushi', label: 'Kipushi' },
+        { value: 'Kasenga', label: 'Kasenga' },
+    ];
+    
+    const statuts = [
+        { value: '', label: 'Tous' },
+        { value: 'confirmé', label: 'Confirmés' },
+        { value: 'non confirmé', label: 'Non confirmés' },
+    ];
 
     return (
         <div>
@@ -99,12 +168,60 @@ const VictimsWithFilters = ({ mockPrejudices, mockMesures, mockProgrammes, mockC
                             isClearable
                             options={[{ value: '', label: 'Sélectionner un item' }, ...mockProgrammes.map((p: any) => ({ value: String(p.id), label: p.nom }))]}
                             value={(() => {
-                                if (!programme) return { value: '', label: 'Sélectionner un item' };
-                                const found = mockProgrammes.find((p: any) => String(p.id) === programme);
+                                if (!filters.programme) return { value: '', label: 'Sélectionner un item' };
+                                const found = mockProgrammes.find((p: any) => String(p.id) === filters.programme);
                                 return found ? { value: String(found.id), label: found.nom } : null;
                             })()}
-                            onChange={(opt: any) => setProgramme(opt ? opt.value : '')}
+                            onChange={(opt: any) => updateFilter('programme', opt ? opt.value : '')}
                             placeholder="Sélectionner un item"
+                            classNamePrefix="react-select"
+                            styles={{
+                                control: (base) => ({ ...base, minHeight: 46, borderColor: '#f9a8d4', boxShadow: 'none', '&:hover': { borderColor: '#f472b6' } }),
+                                option: (base, state) => ({ ...base, backgroundColor: state.isSelected ? '#f472b6' : state.isFocused ? '#fce7f3' : 'white', color: '#831843' }),
+                            }}
+                        />
+                    </div>
+                    {/* Province */}
+                    <div className="flex flex-col min-w-[170px]">
+                        <label className="block text-xs text-gray-400 mb-2 font-semibold tracking-wide">Province</label>
+                        <Select
+                            isClearable
+                            options={provinces}
+                            value={provinces.find(p => p.value === filters.province) || provinces[0]}
+                            onChange={(opt: any) => updateFilter('province', opt ? opt.value : '')}
+                            placeholder="Sélectionner une province"
+                            classNamePrefix="react-select"
+                            styles={{
+                                control: (base) => ({ ...base, minHeight: 46, borderColor: '#f9a8d4', boxShadow: 'none', '&:hover': { borderColor: '#f472b6' } }),
+                                option: (base, state) => ({ ...base, backgroundColor: state.isSelected ? '#f472b6' : state.isFocused ? '#fce7f3' : 'white', color: '#831843' }),
+                            }}
+                        />
+                    </div>
+                    {/* Territoire */}
+                    <div className="flex flex-col min-w-[170px]">
+                        <label className="block text-xs text-gray-400 mb-2 font-semibold tracking-wide">Territoire</label>
+                        <Select
+                            isClearable
+                            options={territoires}
+                            value={territoires.find(t => t.value === filters.territoire) || territoires[0]}
+                            onChange={(opt: any) => updateFilter('territoire', opt ? opt.value : '')}
+                            placeholder="Sélectionner un territoire"
+                            classNamePrefix="react-select"
+                            styles={{
+                                control: (base) => ({ ...base, minHeight: 46, borderColor: '#f9a8d4', boxShadow: 'none', '&:hover': { borderColor: '#f472b6' } }),
+                                option: (base, state) => ({ ...base, backgroundColor: state.isSelected ? '#f472b6' : state.isFocused ? '#fce7f3' : 'white', color: '#831843' }),
+                            }}
+                        />
+                    </div>
+                    {/* Secteur */}
+                    <div className="flex flex-col min-w-[170px]">
+                        <label className="block text-xs text-gray-400 mb-2 font-semibold tracking-wide">Secteur</label>
+                        <Select
+                            isClearable
+                            options={secteurs}
+                            value={secteurs.find(s => s.value === filters.secteur) || secteurs[0]}
+                            onChange={(opt: any) => updateFilter('secteur', opt ? opt.value : '')}
+                            placeholder="Sélectionner un secteur"
                             classNamePrefix="react-select"
                             styles={{
                                 control: (base) => ({ ...base, minHeight: 46, borderColor: '#f9a8d4', boxShadow: 'none', '&:hover': { borderColor: '#f472b6' } }),
@@ -120,8 +237,8 @@ const VictimsWithFilters = ({ mockPrejudices, mockMesures, mockProgrammes, mockC
                             options={mockPrejudices.map((p: any) => ({ value: String(p.id), label: p.nom }))}
                             value={mockPrejudices
                                 .map((p: any) => ({ value: String(p.id), label: p.nom }))
-                                .filter((opt: any) => prejudices.includes(opt.value))}
-                            onChange={(opts: any) => setPrejudices(opts ? opts.map((o: any) => o.value) : [])}
+                                .filter((opt: any) => filters.prejudices.includes(opt.value))}
+                            onChange={(opts: any) => updateFilter('prejudices', opts ? opts.map((o: any) => o.value) : [])}
                             placeholder="Sélectionner..."
                             classNamePrefix="react-select"
                             styles={{
@@ -140,12 +257,28 @@ const VictimsWithFilters = ({ mockPrejudices, mockMesures, mockProgrammes, mockC
                             isClearable
                             options={[{ value: '', label: 'Sélectionner un item' }, ...mockCategories.map((c: any) => ({ value: String(c.id), label: c.nom }))]}
                             value={(() => {
-                                if (!categorie) return { value: '', label: 'Sélectionner un item' };
-                                const found = mockCategories.find((c: any) => String(c.id) === categorie);
+                                if (!filters.categorie) return { value: '', label: 'Sélectionner un item' };
+                                const found = mockCategories.find((c: any) => String(c.id) === filters.categorie);
                                 return found ? { value: String(found.id), label: found.nom } : null;
                             })()}
-                            onChange={(opt: any) => setCategorie(opt ? opt.value : '')}
+                            onChange={(opt: any) => updateFilter('categorie', opt ? opt.value : '')}
                             placeholder="Sélectionner un item"
+                            classNamePrefix="react-select"
+                            styles={{
+                                control: (base) => ({ ...base, minHeight: 46, borderColor: '#f9a8d4', boxShadow: 'none', '&:hover': { borderColor: '#f472b6' } }),
+                                option: (base, state) => ({ ...base, backgroundColor: state.isSelected ? '#f472b6' : state.isFocused ? '#fce7f3' : 'white', color: '#831843' }),
+                            }}
+                        />
+                    </div>
+                    {/* Statut */}
+                    <div className="flex flex-col min-w-[170px]">
+                        <label className="block text-xs text-gray-400 mb-2 font-semibold tracking-wide">Statut</label>
+                        <Select
+                            isClearable
+                            options={statuts}
+                            value={statuts.find(s => s.value === filters.statut) || statuts[0]}
+                            onChange={(opt: any) => updateFilter('statut', opt ? opt.value : '')}
+                            placeholder="Sélectionner un statut"
                             classNamePrefix="react-select"
                             styles={{
                                 control: (base) => ({ ...base, minHeight: 46, borderColor: '#f9a8d4', boxShadow: 'none', '&:hover': { borderColor: '#f472b6' } }),
@@ -160,11 +293,11 @@ const VictimsWithFilters = ({ mockPrejudices, mockMesures, mockProgrammes, mockC
                             isClearable
                             options={[{ value: '', label: 'Sélectionner un item' }, ...ageRanges.filter(r => r.value !== '').map(r => ({ value: r.value, label: r.label }))]}
                             value={(() => {
-                                if (!ageRange) return { value: '', label: 'Sélectionner un item' };
-                                const found = ageRanges.find((r: any) => r.value === ageRange);
+                                if (!filters.ageRange) return { value: '', label: 'Sélectionner un item' };
+                                const found = ageRanges.find((r: any) => r.value === filters.ageRange);
                                 return found ? { value: found.value, label: found.label } : null;
                             })()}
-                            onChange={(opt: any) => setAgeRange(opt ? opt.value : '')}
+                            onChange={(opt: any) => updateFilter('ageRange', opt ? opt.value : '')}
                             placeholder="Sélectionner un item"
                             classNamePrefix="react-select"
                             styles={{
@@ -180,17 +313,40 @@ const VictimsWithFilters = ({ mockPrejudices, mockMesures, mockProgrammes, mockC
                             {"ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").map(l => (
                                 <button
                                     key={l}
-                                    className={`px-2 py-1 rounded-full text-xs font-mono border transition focus:outline-none focus:ring-2 focus:ring-pink-300 ${letter === l ? "bg-pink-600 text-white border-pink-600 shadow" : "bg-white text-gray-500 border-gray-200 hover:bg-pink-50"}`}
-                                    onClick={() => setLetter(l === letter ? "" : l)}
+                                    className={`px-2 py-1 rounded-full text-xs font-mono border transition focus:outline-none focus:ring-2 focus:ring-pink-300 ${filters.letter === l ? "bg-pink-600 text-white border-pink-600 shadow" : "bg-white text-gray-500 border-gray-200 hover:bg-pink-50"}`}
+                                    onClick={() => updateFilter('letter', l === filters.letter ? "" : l)}
                                     type="button"
                                 >{l}</button>
                             ))}
                         </div>
                     </div>
 
+                    {/* Affichage du nombre de victimes trouvées */}
+                    {victims.length > 0 && (
+                        <div className="w-full flex justify-center mt-4">
+                            <div className="px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 font-medium">
+                                {victims.length} victime{victims.length > 1 ? 's' : ''} trouvée{victims.length > 1 ? 's' : ''}
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 
+            {/* Affichage simple de la liste des victimes */}
+            {victims.length > 0 && (
+                <div className="mt-6 bg-white rounded-2xl shadow-lg border border-gray-100 p-4">
+                    <h3 className="font-semibold text-gray-700 mb-4">Victimes filtrées</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {victims.map((victim: any) => (
+                            <div key={victim.id} className="p-4 border border-gray-200 rounded-lg hover:shadow-md transition-shadow">
+                                <div className="font-medium text-gray-900">{victim.nom}</div>
+                                <div className="text-sm text-gray-600">{victim.province}, {victim.territoire}</div>
+                                <div className="text-xs text-gray-500 mt-1">{victim.sexe} • {victim.status || 'Non confirmé'}</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

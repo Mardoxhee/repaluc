@@ -33,7 +33,11 @@ const ListVictims: React.FC<ListVictimsProps> = ({
     useEffect(() => {
         setLoading(true);
         setError("");
-        fetch("http://10.140.0.106:8006/victime/categorie/status/confirmé")
+        // Utiliser le nouvel endpoint avec les paramètres par défaut
+        const params = new URLSearchParams();
+        params.append('status', 'confirmé'); // Filtrer par défaut les victimes confirmées
+        
+        fetch(`http://10.140.0.106:8006/victime/paginate/filtered?${params.toString()}`)
             .then(res => {
                 if (!res.ok) throw new Error("Erreur lors du chargement des victimes");
                 return res.json();
