@@ -5,9 +5,9 @@ import DashboardStats from "@/components/DashboardStats";
 export default function Home() {
   return (
     <MainLayout>
-      <div className="fixed inset-0 flex items-center justify-center overflow-hidden">
+      <div className="min-h-screen flex items-center justify-center p-4">
         {/* Background avec image fixe */}
-        <div className="absolute inset-0 w-full h-full z-0">
+        <div className="fixed inset-0 w-full h-full z-0">
           <div className="absolute inset-0 bg-gradient-to-br from-blue-900/60 via-pink-900/40 to-white/70 z-10" />
           <div
             className="absolute inset-0 w-full h-full bg-center bg-cover bg-no-repeat"
@@ -19,7 +19,7 @@ export default function Home() {
         </div>
 
         {/* Conteneur principal centré */}
-        <div className="relative z-20 w-full max-w-4xl mx-auto px-6">
+        <div className="relative z-20 w-full max-w-4xl mx-auto">
           <div className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/40 p-8 md:p-12">
             
             {/* Hero Section */}
