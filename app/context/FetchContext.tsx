@@ -15,7 +15,6 @@ export const FetchProvider = ({ children }: { children: ReactNode }) => {
     const [error, setError] = useState<string | null>(null);
 
     const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "";
-    console.log("baseUrl", baseUrl);
 
     const fetcher = useCallback(async (url: string, options?: RequestInit) => {
         setLoading(true);
