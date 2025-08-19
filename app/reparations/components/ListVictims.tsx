@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { FiEdit, FiTrash, FiPlus, FiEye, FiGrid, FiUsers, FiTrendingUp, FiSettings, FiInfo, FiMapPin, FiHome, FiPhone, FiFolder, FiFileText, FiBarChart2, FiSearch, FiUser } from "react-icons/fi";
 import VictimForm from "./VictimForm";
 import VictimDetailModal from "./VictimDetailModal";
@@ -121,7 +121,7 @@ const ListVictims: React.FC<ListVictimsProps> = ({
     const searchFilteredVictims = useMemo(() => {
         if (!search) return filteredVictims;
         const searchTerm = search.toLowerCase();
-        return filteredVictims.filter(victim => 
+        return filteredVictims.filter(victim =>
             (victim.nom?.toLowerCase().includes(searchTerm)) ||
             (victim.province?.toLowerCase().includes(searchTerm)) ||
             (victim.territoire?.toLowerCase().includes(searchTerm))
@@ -255,115 +255,115 @@ const ListVictims: React.FC<ListVictimsProps> = ({
 
                     {searchFilteredVictims.length > 0 && (
                         <div className="overflow-x-auto rounded-2xl shadow-lg bg-white/90 border border-gray-100 mt-6">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-white">
-                                <tr>
-                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">N*</th>
-                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Nom complet</th>
-                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Province</th>
-                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Territoire</th>
-                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Sexe</th>
-                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Statut</th>
-                                    <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-gray-100">
-                                {loading && (
-                                    <tr><td colSpan={7} className="text-center py-8 text-gray-400">Chargement...</td></tr>
-                                )}
-                                {error && (
-                                    <tr><td colSpan={7} className="text-center py-8 text-red-400">Erreur : {error}</td></tr>
-                                )}
-                                {!loading && !error && paginatedVictims.length === 0 ? (
+                            <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-white">
                                     <tr>
-                                        <td colSpan={7} className="text-center py-8 text-gray-400">
-                                            Aucune victime trouvée
-                                        </td>
+                                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">N*</th>
+                                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Nom complet</th>
+                                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Province</th>
+                                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Territoire</th>
+                                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Sexe</th>
+                                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Statut</th>
+                                        <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
                                     </tr>
-                                ) : (
-                                    !loading && !error && paginatedVictims.map((victim: any, index: number) => (
-                                        <tr key={victim.id || index} className="hover:bg-gray-50">
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                {(page - 1) * perPage + index + 1}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                                {victim.nom || 'Non spécifié'}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                {victim.province || 'Non spécifié'}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                {victim.territoire || 'Non spécifié'}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                {victim.sexe || 'Non spécifié'}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                {victim.status || 'Non confirmé'}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-center">
-                                                <button
-                                                    onClick={() => {
-                                                        setVictimDetail(victim);
-                                                        setShowVictimModal(true);
-                                                    }}
-                                                    className="text-pink-600 hover:text-pink-900 mr-3 flex items-center justify-center gap-1"
-                                                >
-                                                    <FiEye className="w-5 h-5" />
-                                                    <span className="hidden sm:inline">Détails</span>
-                                                </button>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-100">
+                                    {loading && (
+                                        <tr><td colSpan={7} className="text-center py-8 text-gray-400">Chargement...</td></tr>
+                                    )}
+                                    {error && (
+                                        <tr><td colSpan={7} className="text-center py-8 text-red-400">Erreur : {error}</td></tr>
+                                    )}
+                                    {!loading && !error && paginatedVictims.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={7} className="text-center py-8 text-gray-400">
+                                                Aucune victime trouvée
                                             </td>
                                         </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
+                                    ) : (
+                                        !loading && !error && paginatedVictims.map((victim: any, index: number) => (
+                                            <tr key={victim.id || index} className="hover:bg-gray-50">
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                    {(page - 1) * perPage + index + 1}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                                    {victim.nom || 'Non spécifié'}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                    {victim.province || 'Non spécifié'}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                    {victim.territoire || 'Non spécifié'}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                    {victim.sexe || 'Non spécifié'}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                    {victim.status || 'Non confirmé'}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-center">
+                                                    <button
+                                                        onClick={() => {
+                                                            setVictimDetail(victim);
+                                                            setShowVictimModal(true);
+                                                        }}
+                                                        className="text-pink-600 hover:text-pink-900 mr-3 flex items-center justify-center gap-1"
+                                                    >
+                                                        <FiEye className="w-5 h-5" />
+                                                        <span className="hidden sm:inline">Détails</span>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
                         </div>
                     )}
 
                     {/* Pagination */}
                     {totalPages > 1 && (
                         <div className="flex justify-end gap-2 mt-6">
-                        <button
-                            onClick={() => setPage(p => Math.max(1, p - 1))}
-                            className="px-4 py-2 rounded-lg border bg-white text-gray-600 hover:bg-pink-50 disabled:opacity-50"
-                            disabled={page === 1}
-                        >
-                            Précédent
-                        </button>
-                        <span className="px-2 py-2 text-gray-700 font-medium">
-                            Page {page} / {totalPages}
-                        </span>
-                        <button
-                            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                            className="px-4 py-2 rounded-lg border bg-white text-gray-600 hover:bg-pink-50 disabled:opacity-50"
-                            disabled={page === totalPages}
-                        >
-                            Suivant
-                        </button>
+                            <button
+                                onClick={() => setPage(p => Math.max(1, p - 1))}
+                                className="px-4 py-2 rounded-lg border bg-white text-gray-600 hover:bg-pink-50 disabled:opacity-50"
+                                disabled={page === 1}
+                            >
+                                Précédent
+                            </button>
+                            <span className="px-2 py-2 text-gray-700 font-medium">
+                                Page {page} / {totalPages}
+                            </span>
+                            <button
+                                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                                className="px-4 py-2 rounded-lg border bg-white text-gray-600 hover:bg-pink-50 disabled:opacity-50"
+                                disabled={page === totalPages}
+                            >
+                                Suivant
+                            </button>
                         </div>
                     )}
                 </div>
             </div>
 
-                {showModal && editClient && (
-                    <EditClientModal
-                        client={editClient}
-                        onClose={() => { setShowModal(false); setEditClient(null); }}
-                        onSave={(updated: any) => {
-                            setAllVictims(prev => prev.map(c => c.id === updated.id ? updated : c));
-                            setShowModal(false);
-                            setEditClient(null);
-                        }}
-                    />
-                )}
+            {showModal && editClient && (
+                <EditClientModal
+                    client={editClient}
+                    onClose={() => { setShowModal(false); setEditClient(null); }}
+                    onSave={(updated: any) => {
+                        setAllVictims(prev => prev.map(c => c.id === updated.id ? updated : c));
+                        setShowModal(false);
+                        setEditClient(null);
+                    }}
+                />
+            )}
 
-                {showVictimModal && victimDetail && (
-                    <VictimDetailModal
-                        victim={victimDetail}
-                        onClose={() => setShowVictimModal(false)}
-                    />
-                )}
+            {showVictimModal && victimDetail && (
+                <VictimDetailModal
+                    victim={victimDetail}
+                    onClose={() => setShowVictimModal(false)}
+                />
+            )}
         </>
     );
 };

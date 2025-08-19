@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { FiEye, FiGrid, FiUsers, FiTrendingUp, FiSettings, FiInfo, FiMapPin, FiHome, FiPhone, FiFolder, FiFileText, FiBarChart2, FiSearch, FiUser } from "react-icons/fi";
 import ReglagesPanel from "./components/reglagePanel";
 import ListVictims from './components/ListVictims'
+import FiltreComponent from './components/filtreComponent'
 import DashboardVictims from './components/dashboardVictims'
 
 
@@ -401,6 +402,15 @@ const ReparationsTabs = () => {
   const sliderRef = React.useRef<HTMLSpanElement | null>(null);
   const [sliderStyle, setSliderStyle] = React.useState({ left: 0, width: 0 });
 
+  // Lifting state for filters
+  const [filters, setFilters] = useState({
+    categorie: "",
+    province: "",
+    territory: "",
+    sector: "",
+    search: ""
+  });
+
   React.useEffect(() => {
     const idx = TAB_LIST.findIndex(tab => tab.key === activeTab);
     const el = tabRefs.current[idx];
@@ -444,12 +454,23 @@ const ReparationsTabs = () => {
       <div className="bg-white shadow-lg rounded-b-xl w-full min-h-[calc(100vh-200px)] p-4">
         {activeTab === "dashboard" && <DashboardVictims /> }
         {activeTab === "victimes" && (
-          <ListVictims
-            mockPrejudices={mockPrejudices}
-            mockMesures={mockMesures}
-            mockProgrammes={mockProgrammes}
-            mockCategories={mockCategories}
-          />
+          <>
+            <FiltreComponent
+              mockPrejudices={mockPrejudices}
+              mockMesures={mockMesures}
+              mockProgrammes={mockProgrammes}
+              mockCategories={mockCategories}
+              currentFilters={filters}
+              onFiltersChange={setFilters}
+              allVictims={[]}
+            />
+            <ListVictims
+              mockPrejudices={mockPrejudices}
+              mockMesures={mockMesures}
+              mockProgrammes={mockProgrammes}
+              mockCategories={mockCategories}
+            />
+          </>
         )}
         {activeTab === "programme" && <div>Contenu programme de réparations</div>}
         {activeTab === "indemnisation" && <div>Contenu demandes d’indemnisation</div>}

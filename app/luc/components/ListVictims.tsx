@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useContext, useCallback, useMemo } from "react";
 import { FetchContext } from "../../context/FetchContext";
-import CreateVictimModal from './CreateVictimModal';
+import Swal from 'sweetalert2';
+import VictimDetailModal from "./VictimDetailModal"
 import { FiEdit, FiTrash, FiPlus, FiEye, FiGrid, FiUsers, FiTrendingUp, FiSettings, FiInfo, FiMapPin, FiHome, FiPhone, FiFolder, FiFileText, FiBarChart2, FiSearch, FiUser } from "react-icons/fi";
+import { GrCertificate } from "react-icons/gr";
 
 
 interface ReglagesProps {
@@ -59,6 +61,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
         hasNextPage: false,
         hasPreviousPage: false,
     });
+    const [showVictimModal, setShowVictimModal] = useState(false);
+    const [selectedVictim, setSelectedVictim] = useState<any | null>(null);
 
     const fetchCtx = useContext(FetchContext);
 
@@ -134,6 +138,52 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
         setMeta((prev) => ({ ...prev, page: 1 })); // Reset to first page when filters change
     };
 
+    // Détection filtre actif (hors recherche textuelle)
+    const isAnyFilterActive = Object.values(filters).some(val => val);
+
+    // Fonction pour construire le payload à partir des victimes filtrées
+    const buildClassificationPayload = () => {
+        return victims.map(v => ({
+            programmeCategorie: v.categorie || filters.categorie || '',
+            prejudiceType: v.prejudicesSubis || '',
+            violation: v.typeViolation || '',
+            victimeId: v.id
+        }));
+    };
+
+    // Confirmation groupée
+    const [isConfirming, setIsConfirming] = useState(false);
+    const [confirmResult, setConfirmResult] = useState<string | null>(null);
+
+    const handleClassify = async () => {
+        setIsConfirming(true);
+        setConfirmResult(null);
+        try {
+            const payload = buildClassificationPayload();
+            const response = await fetchCtx.fetcher("/programme-prejudice-mesure/classify/multiple", {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (response && response.status === 804) {
+                Swal.fire({
+                    icon: 'info',
+                    title: 'Victimes confirmées',
+                    text: 'Victimes confirmées mais aucun programme de réparations ne peut les prendre en charge pour le moment',
+                });
+                setConfirmResult('Victime confirmée mais aucun programme de réparations ne peut la prendre en charge');
+            } else if (response && response.ok) {
+                setConfirmResult(`Confirmation groupée réussie pour ${victims.length} victimes.`);
+            } else {
+                setConfirmResult("Erreur lors de la confirmation groupée.");
+            }
+        } catch (err: any) {
+            setConfirmResult("Erreur lors de la confirmation groupée.");
+        } finally {
+            setIsConfirming(false);
+        }
+    };
+
     return (
         <>
             <div className="w-full p-6">
@@ -189,6 +239,20 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                         </select>
                     </div>
 
+                    {/* Bouton de confirmation groupée si filtre actif & victimes */}
+                    {isAnyFilterActive && victims.length > 0 && (
+                        <div className="mb-6 flex items-center gap-4">
+                            <button
+                                onClick={handleClassify}
+                                disabled={isConfirming}
+                                className="px-5 py-2 rounded-lg bg-blue-600 text-white font-semibold shadow hover:bg-blue-700 disabled:opacity-60 transition"
+                            >
+                                {isConfirming ? 'Confirmation en cours...' : 'Confirmer les victimes filtrées'}
+                            </button>
+                            {confirmResult && <span className="text-sm font-medium text-green-600">{confirmResult}</span>}
+                        </div>
+                    )}
+
                     {/* Tableau des victimes */}
                     <div className="overflow-x-auto rounded-2xl shadow-lg bg-white/90 border border-gray-100">
                         <table className="min-w-full divide-y divide-gray-200">
@@ -228,7 +292,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                         <td className="px-4 py-3">{victim.sexe === "Homme" ? "M" : "F"}</td>
                                         <td className="px-4 py-3">
                                             <span
-                                                className={`px-3 py-1 rounded-full text-xs font-semibold capitalize ${victim.status === "confirmé"
+                                                className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold capitalize
+    ${victim.status.toLowerCase() === "confirmé"
                                                         ? "bg-blue-100 text-blue-800" // Bleu pour confirmé
                                                         : victim.status === "Non confirmé"
                                                             ? "bg-orange-100 text-orange-800" // Orange pour non confirmé
@@ -239,15 +304,25 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                                                     : "bg-red-100 text-red-800"
                                                     }`}
                                             >
-                                                {victim.status || "Non vérifié"}
+                                                {victim.status ? (
+                                                    <>
+                                                        <span>{victim.status}</span>
+                                                        <GrCertificate />
+                                                    </>
+                                                ) : (
+                                                    "Non vérifié"
+                                                )}
                                             </span>
+
+
                                         </td>
                                         <td className="px-4 py-3 flex gap-2 justify-center">
                                             <button
                                                 className="group flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-blue-500 hover:bg-blue-700 text-white border border-blue-600 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-blue-300"
                                                 title="Voir les détails"
                                                 onClick={() => {
-                                                    // Logique pour afficher les détails
+                                                    setSelectedVictim(victim);
+                                                    setShowVictimModal(true);
                                                 }}
                                             >
                                                 <FiEye className="w-5 h-5" />
@@ -282,6 +357,16 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                     </div>
                 </div>
             </div>
+            {/* Modal détail victime */}
+            {showVictimModal && selectedVictim && (
+                <VictimDetailModal
+                    victim={selectedVictim}
+                    onClose={() => setShowVictimModal(false)}
+                    onVictimUpdate={(updatedVictim) => {
+                        setVictims((prevVictims) => prevVictims.map(v => v.id === updatedVictim.id ? updatedVictim : v));
+                    }}
+                />
+            )}
         </>
     );
 };
