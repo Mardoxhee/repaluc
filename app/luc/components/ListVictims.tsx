@@ -160,7 +160,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
         setConfirmResult(null);
         try {
             const payload = buildClassificationPayload();
-            const response = await fetchCtx.fetcher("/programme-prejudice-mesure/classify/multiple", {
+            const response = await fetchCtx?.fetcher("/programme-prejudice-mesure/classify/multiple", {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)

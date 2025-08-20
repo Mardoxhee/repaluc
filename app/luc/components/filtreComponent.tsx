@@ -98,7 +98,7 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
 
         try {
             // Construire l'URL avec les filtres pour l'API
-            const params = new URLSearchParams();
+            const params: any = new URLSearchParams();
             Object.entries(currentFilters).forEach(([key, value]) => {
                 if (value && value !== "") {
                     if (key === 'categorie') {
@@ -113,7 +113,7 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
             });
 
             const url = `/victime/paginate/filtered${params.toString() ? `?${params.toString()}` : ''}`;
-            
+
             // Préparer les données selon le format demandé
             const confirmationData = filteredVictims.map(victim => ({
                 programmeCategorie: victim.categorie || mockCategories.find(c => c.id === victim.categorie) || "",
