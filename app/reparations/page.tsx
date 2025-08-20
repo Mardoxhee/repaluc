@@ -452,18 +452,10 @@ const ReparationsTabs = () => {
 
       {/* Contenu de l’onglet actif */}
       <div className="bg-white shadow-lg rounded-b-xl w-full min-h-[calc(100vh-200px)] p-4">
-        {activeTab === "dashboard" && <DashboardVictims /> }
+        {activeTab === "dashboard" && <DashboardVictims />}
         {activeTab === "victimes" && (
           <>
-            <FiltreComponent
-              mockPrejudices={mockPrejudices}
-              mockMesures={mockMesures}
-              mockProgrammes={mockProgrammes}
-              mockCategories={mockCategories}
-              currentFilters={filters}
-              onFiltersChange={setFilters}
-              allVictims={[]}
-            />
+
             <ListVictims
               mockPrejudices={mockPrejudices}
               mockMesures={mockMesures}

@@ -81,7 +81,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
   };
 
   const viewProgram = async () => {
-    if (!currentVictim.categorie || !currentVictim.prejudicesSubis || !currentVictim.typeViolation) {
+    if (!currentVictim.categorie || !currentVictim.prejudicesSubis || !currentVictim.typeViolation || !currentVictim.id) {
       alert('Informations manquantes pour classifier le programme');
       return;
     }
@@ -96,7 +96,8 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
         body: JSON.stringify({
           programmeCategorie: currentVictim.categorie,
           prejudiceType: currentVictim.prejudicesSubis,
-          violation: currentVictim.typeViolation
+          violation: currentVictim.typeViolation,
+          victimeId: currentVictim.id
         })
       });
 
@@ -108,7 +109,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
           setProgramData(null); // Réinitialiser les données
           return;
         }
-        throw new Error(data.message || 'Erreur lors de la classification');
+        console.log(data.message, 'Erreur lors de la classification');
       }
 
       console.log('Programme trouvé:', data);
@@ -402,15 +403,15 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                         <div>
                           <div className="text-sm font-medium !text-gray-700">Programme:</div>
                           <div className="text-base !text-green-600 font-semibold">
-                            {programData[0].programme?.programme}
+                            {programData[0].programme}
                           </div>
                         </div>
-                        <div>
+                        {/* <div>
                           <div className="text-sm font-medium !text-gray-700">Mesures:</div>
                           <ul className="list-disc list-inside !text-green-800">
                             {programData[0].mesure.mesure}
                           </ul>
-                        </div>
+                        </div> */}
                       </div>
                     </div>
                   )}

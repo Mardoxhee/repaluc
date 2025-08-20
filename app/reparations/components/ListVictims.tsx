@@ -46,8 +46,9 @@ const ListVictims: React.FC<ListVictimsProps> = ({
             setLoading(true);
             setError("");
             try {
-                const data = await fetch('http://10.140.0.106:8006/victime').then(res => res.json());
-                setAllVictims(Array.isArray(data) ? data : []);
+                const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+                const data = await fetch(`${baseUrl}/victime/paginate/filtered?status=confirmé`).then(res => res.json());
+                setAllVictims(Array.isArray(data?.data) ? data.data : []);
             } catch (err: any) {
                 setError(err.message || "Erreur lors du chargement des victimes");
                 setAllVictims([]);
@@ -169,21 +170,6 @@ const ListVictims: React.FC<ListVictimsProps> = ({
     }, [filters, mockCategories, mockPrejudices]);
 
     // Fonction pour appliquer les filtres via API (optionnelle)
-    const applyFiltersToAPI = useCallback(async () => {
-        setLoading(true);
-        setError("");
-        try {
-            const url = buildFilterUrl();
-            console.log("Applying filters to API:", url);
-            const response = await fetch(`http://10.140.0.106:8006${url}`);
-            const data = await response.json();
-            setAllVictims(Array.isArray(data.data) ? data.data : Array.isArray(data) ? data : []);
-        } catch (err: any) {
-            setError(err.message || "Erreur lors de l'application des filtres");
-        } finally {
-            setLoading(false);
-        }
-    }, [buildFilterUrl]);
 
     const EditClientModal = ({ client, onClose, onSave }: { client: any, onClose: () => void, onSave: (c: any) => void }) => {
         const [form, setForm] = useState<any>(client);
@@ -229,7 +215,7 @@ const ListVictims: React.FC<ListVictimsProps> = ({
                         <h1 className="text-3xl font-bold text-gray-900">Victimes</h1>
                     </div>
 
-                    {/* Filtres */}
+
                     <div className="flex flex-col md:flex-row gap-4 mb-6 items-center">
                         <div className="relative w-full max-w-md">
                             <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
