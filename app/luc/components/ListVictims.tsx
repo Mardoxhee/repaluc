@@ -1,3 +1,4 @@
+"use client"
 import React, { useState, useEffect, useContext, useCallback, useMemo } from "react";
 import { FetchContext } from "../../context/FetchContext";
 import Swal from 'sweetalert2';
@@ -160,21 +161,26 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
         setConfirmResult(null);
         try {
             const payload = buildClassificationPayload();
-            const response = await fetchCtx?.fetcher("/programme-prejudice-mesure/classify/multiple", {
+            console.log("payload", payload)
+            const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+            const response: any = await fetch(`${baseUrl}/programme-prejudice-mesure/classify/multiple`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
-            if (response && response.status === 804) {
+            console.log("response from out", response)
+            if (response) {
+                console.log("response", response)
                 Swal.fire({
                     icon: 'info',
                     title: 'Victimes confirmées',
                     text: 'Victimes confirmées mais aucun programme de réparations ne peut les prendre en charge pour le moment',
                 });
                 setConfirmResult('Victime confirmée mais aucun programme de réparations ne peut la prendre en charge');
-            } else if (response && response.ok) {
+            } else if (response && response?.ok) {
                 setConfirmResult(`Confirmation groupée réussie pour ${victims.length} victimes.`);
             } else {
+                console.log("response from else", response)
                 setConfirmResult("Erreur lors de la confirmation groupée.");
             }
         } catch (err: any) {

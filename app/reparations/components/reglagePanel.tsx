@@ -544,30 +544,32 @@ const ReglagesPanel: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, m
                 </ul>
                 {/* Modal Mesure (Flowbite) */}
                 <Modal show={showMesureModal} onClose={() => setShowMesureModal(false)}>
-    {editMesure && (
-        <div className="p-6 bg-white text-gray-900 rounded-xl">
-            <div className="mb-4">
-                <h3 className="text-lg font-bold">
-                    {editMesure.id ? "Modifier la mesure" : "Ajouter une mesure"}
-                </h3>
+                    {editMesure && (
+                        <div className="p-6 bg-white text-gray-900 rounded-xl">
+                            <div className="mb-4">
+                                <h3 className="text-lg font-bold">
+                                    {editMesure.id ? "Modifier la mesure" : "Ajouter une mesure"}
+                                </h3>
+                            </div>
+                            <form className="space-y-4" onSubmit={e => { e.preventDefault(); handleSaveMesure(editMesure); }}>
+                                <input
+                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    placeholder="Nom"
+                                    value={editMesure.nom}
+                                    onChange={e => setEditMesure({ ...editMesure, nom: e.target.value })}
+                                    required
+                                />
+                                <div className="flex gap-2 justify-end mt-6">
+                                    <button type="button" className="px-4 py-2 rounded bg-gray-100 text-gray-700 hover:bg-gray-200" onClick={() => setShowMesureModal(false)}>Annuler</button>
+                                    <button type="submit" className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Enregistrer</button>
+                                </div>
+                            </form>
+                        </div>
+                    )}
+                </Modal>
             </div>
-            <form className="space-y-4" onSubmit={e => { e.preventDefault(); handleSaveMesure(editMesure); }}>
-                <input
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Nom"
-                    value={editMesure.nom}
-                    onChange={e => setEditMesure({ ...editMesure, nom: e.target.value })}
-                    required
-                />
-                <div className="flex gap-2 justify-end mt-6">
-                    <button type="button" className="px-4 py-2 rounded bg-gray-100 text-gray-700 hover:bg-gray-200" onClick={() => setShowMesureModal(false)}>Annuler</button>
-                    <button type="submit" className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Enregistrer</button>
-                </div>
-            </form>
-        </div>
-    )}
-</Modal>
-            </div>
+
+            <ProgrammeConfigPanel programmes={programmes} prejudices={prejudices} mesures={mesures} violations={violations} />
         </div>
     )
 }
