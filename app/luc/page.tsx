@@ -50,51 +50,40 @@ const TAB_LIST = [
 
 const ReparationsTabs = () => {
   const [activeTab, setActiveTab] = React.useState(TAB_LIST[0].key);
-  const tabRefs = React.useRef<(HTMLButtonElement | null)[]>([]);
-  const sliderRef = React.useRef<HTMLSpanElement | null>(null);
-  const [sliderStyle, setSliderStyle] = React.useState({ left: 0, width: 0 });
-
-  React.useEffect(() => {
-    const idx = TAB_LIST.findIndex(tab => tab.key === activeTab);
-    const el = tabRefs.current[idx];
-    if (el && el.offsetParent) {
-      setSliderStyle({
-        left: el.offsetLeft,
-        width: el.offsetWidth
-      });
-    }
-  }, [activeTab]);
 
   return (
-    <div className="w-full px-4 pt-4">
+    <div className="w-full">
       {/* Onglets */}
-      <div className="relative flex gap-2 border-b mb-8 bg-white rounded-t-xl px-6 py-4 shadow-sm">
+      <div className="bg-white border-b-4 border-primary-500 shadow-sm">
+        <div className="flex">
         {TAB_LIST.map((tab, idx) => (
           <button
             key={tab.key}
-            ref={el => { tabRefs.current[idx] = el; }}
             onClick={() => setActiveTab(tab.key)}
-            className={
-              `relative px-6 py-3 font-semibold transition-all outline-none focus-visible:ring-2 focus-visible:ring-pink-300 ` +
-              (activeTab === tab.key
-                ? "text-blue-600 font-bold"
-                : "text-gray-500 hover:text-blue-600")
-            }
-            style={{ background: "none", border: "none" }}
+            className={`
+              relative px-8 py-4 font-semibold text-sm uppercase tracking-wide transition-all duration-300 border-r border-gray-200 last:border-r-0
+              ${activeTab === tab.key
+                ? "bg-primary-500 text-white shadow-lg"
+                : "bg-gray-50 text-gray-600 hover:bg-primary-50 hover:text-primary-700"
+              }
+            `}
           >
-            <span className="relative z-10 flex items-center">{tab.icon}{tab.label}</span>
+            <span className="flex items-center gap-2">
+              {tab.icon}
+              {tab.label}
+            </span>
+            {activeTab === tab.key && (
+              <div className="absolute bottom-0 left-0 right-0 h-1 bg-secondary-500"></div>
+            )}
           </button>
         ))}
-        {/* Barre slider dégradée animée */}
-        <span
-          ref={sliderRef}
-          className="absolute bottom-0 h-1.5 rounded-t bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 pointer-events-none transition-all duration-300"
-          style={{ left: sliderStyle.left, width: sliderStyle.width }}
-        />
+        </div>
       </div>
 
       {/* Contenu de l’onglet actif */}
-      <div className="bg-white shadow-lg rounded-b-xl w-full min-h-[calc(100vh-200px)] p-4">
+      <div className="bg-gray-50 w-full min-h-[calc(100vh-200px)]">
+        <div className="bg-white shadow-sm border-l-4 border-primary-500 mx-4 mt-4">
+          <div className="p-6">
         {activeTab === "dashboard" && <DashboardVictims />}
         {activeTab === "victimes" && (
           <ListVictims
@@ -107,6 +96,8 @@ const ReparationsTabs = () => {
         {activeTab === "programme" && <div>Contenu programme de réparations</div>}
         {activeTab === "indemnisation" && <div>Contenu demandes d’indemnisation</div>}
         {activeTab === "stats" && <Reglages />}
+      </div>
+    </div>
       </div>
     </div>
   );
