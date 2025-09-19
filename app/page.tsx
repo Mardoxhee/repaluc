@@ -111,7 +111,7 @@ export default function Home() {
         </div>
 
         {/* Section institutionnelle */}
-        <div className="bg-gradient-to-r from-primary-600 to-primary-700 text-white py-8 mt-8">
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-r from-primary-600 to-primary-700 text-white py-6">
           <div className="max-w-5xl mx-auto px-6 text-center">
             <h2 className="text-2xl font-bold mb-4">Engagement de l'État</h2>
             <p className="text-lg text-primary-100 max-w-3xl mx-auto mb-6 leading-relaxed">
