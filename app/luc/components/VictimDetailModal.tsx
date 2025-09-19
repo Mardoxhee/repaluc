@@ -14,7 +14,9 @@ import {
   UserCheck,
   Loader2
 } from 'lucide-react';
+import { GiReceiveMoney } from "react-icons/gi";
 import { Modal } from 'flowbite-react';
+import InfosVictim from './infosVictim';
 
 interface Victim {
   id: number;
@@ -49,6 +51,8 @@ interface Victim {
   avatar?: string;
   comment?: string;
   commentaire?: string;
+  prejudiceFinal?: string;
+  indemnisation?: number;
   prejudices?: Array<{
     id: number;
     label: string;
@@ -116,35 +120,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
   };
 
   const {
-    nom,
-    dateNaissance,
-    age,
-    sexe,
-    categorie,
-    nationalite,
-    etatMatrimonial,
-    adresse,
-    commune,
-    province,
-    territoire,
-    village,
-    provinceOrigine,
-    communeOrigine,
-    territoireOrigine,
-    villageOrigine,
-    groupement,
-    nomPere,
-    nomMere,
-    provinceIncident,
-    communeIncident,
-    territoireIncident,
-    lieuIncident,
-    dateIncident,
-    typeViolation,
-    prejudicesSubis,
     status,
-    dossier,
-    avatar = "https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=500",
   } = currentVictim;
 
   const tabs = [
@@ -190,104 +166,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
           </div>
 
           {tab === 'info' && (
-            <div className="flex flex-col md:flex-row gap-8 !bg-white !text-gray-900">
-              <div className="flex flex-col items-center md:items-start gap-4 md:w-1/3">
-                <img
-                  src={avatar}
-                  alt="avatar"
-                  className="w-28 h-28 rounded-full object-cover border-2 !border-pink-200"
-                />
-                <div>
-                  <span className="block text-xs !text-gray-400">Catégorie</span>
-                  <span className="inline-block mt-1 px-3 py-1 text-sm font-semibold rounded-full !bg-pink-100 !text-pink-700 shadow">
-                    {categorie || "-"}
-                  </span>
-                </div>
-                <div>
-                  <span className="block text-xs !text-gray-400">Violation</span>
-                  <span className="inline-block mt-1 px-3 py-1 text-sm font-semibold rounded-full !bg-blue-100 !text-blue-700 shadow">
-                    {typeViolation || "-"}
-                  </span>
-                </div>
-                <div>
-                  <span className="block text-xs !text-gray-400">Préjudice</span>
-                  <span className="inline-block mt-1 px-3 py-1 text-sm font-semibold rounded-full !bg-yellow-100 !text-yellow-800 shadow">
-                    {prejudicesSubis || "-"}
-                  </span>
-                </div>
-                <div>
-                  <span className="block text-xs !text-gray-400">Statut</span>
-                  <span className={`inline-block mt-1 px-3 py-1 text-sm font-semibold rounded-full shadow ${!status || status === 'non confirmé'
-                    ? '!bg-orange-100 !text-orange-700'
-                    : '!bg-green-100 !text-green-700'
-                    }`}>
-                    {status && status !== '' ? status : 'non confirmé'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex-1">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3 mb-6 !text-gray-900">
-                  <div><span className="font-semibold !text-gray-700">Nom :</span> {nom || "-"}</div>
-                  <div><span className="font-semibold !text-gray-700">Date de naissance :</span> {dateNaissance || "-"}</div>
-                  <div><span className="font-semibold !text-gray-700">Âge :</span> {age || "-"}</div>
-                  <div><span className="font-semibold !text-gray-700">Sexe :</span> {sexe || "-"}</div>
-                  <div><span className="font-semibold !text-gray-700">Nationalité :</span> {nationalite || "-"}</div>
-                  <div><span className="font-semibold !text-gray-700">État matrimonial :</span> {etatMatrimonial || "-"}</div>
-                  <div><span className="font-semibold !text-gray-700">Adresse :</span> {adresse || "-"}</div>
-                  <div><span className="font-semibold !text-gray-700">Commune :</span> {commune || "-"}</div>
-                  <div><span className="font-semibold !text-gray-700">Province :</span> {province || "-"}</div>
-                  <div><span className="font-semibold !text-gray-700">Territoire :</span> {territoire || "-"}</div>
-                  <div><span className="font-semibold !text-gray-700">Village :</span> {village || "-"}</div>
-                  <div><span className="font-semibold !text-gray-700">Province d'origine :</span> {provinceOrigine || "-"}</div>
-                  <div><span className="font-semibold !text-gray-700">Commune d'origine :</span> {communeOrigine || "-"}</div>
-                  <div><span className="font-semibold !text-gray-700">Territoire d'origine :</span> {territoireOrigine || "-"}</div>
-                  <div><span className="font-semibold !text-gray-700">Village d'origine :</span> {villageOrigine || "-"}</div>
-                  <div><span className="font-semibold !text-gray-700">Groupement :</span> {groupement || "-"}</div>
-                  <div><span className="font-semibold !text-gray-700">Nom du père :</span> {nomPere || "-"}</div>
-                  <div><span className="font-semibold !text-gray-700">Nom de la mère :</span> {nomMere || "-"}</div>
-                  <div><span className="font-semibold !text-gray-700">Province de l'incident :</span> {provinceIncident || "-"}</div>
-                  <div><span className="font-semibold !text-gray-700">Commune de l'incident :</span> {communeIncident || "-"}</div>
-                  <div><span className="font-semibold !text-gray-700">Territoire de l'incident :</span> {territoireIncident || "-"}</div>
-                  <div><span className="font-semibold !text-gray-700">Lieu de l'incident :</span> {lieuIncident || "-"}</div>
-                  <div><span className="font-semibold !text-gray-700">Date de l'incident :</span> {dateIncident || "-"}</div>
-                  <div><span className="font-semibold !text-gray-700">Dossier :</span> {dossier || "-"}</div>
-                </div>
-
-                {/* Préjudices subis */}
-                <div className="mb-6">
-                  <h4 className="text-base font-bold !text-pink-700 mb-2 flex items-center">
-                    <Info className="mr-2 !text-pink-700" size={16} /> Préjudices subis
-                  </h4>
-                  <div className="space-y-4">
-                    {prejudicesSubis ? (
-                      <div className="p-4 rounded-lg !border-gray-200 !bg-gray-50 flex flex-col md:flex-row md:items-center md:gap-6 shadow-sm">
-                        <div className="flex items-center gap-2 mb-2 md:mb-0">
-                          <span className="font-semibold !text-gray-800 text-base">
-                            {prejudicesSubis}
-                          </span>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="text-sm !text-gray-500 italic">
-                        Aucun préjudice renseigné pour cette victime.
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Commentaire */}
-                  <div className="mt-6 p-4 !bg-gray-50 rounded !border !border-gray-200 flex items-start gap-2">
-                    <FileText className="mt-1 !text-gray-400" size={16} />
-                    <div>
-                      <div className="text-xs !text-gray-500 mb-1 font-semibold">Commentaire :</div>
-                      <div className="text-sm !text-gray-700 italic">
-                        {currentVictim.comment || currentVictim.commentaire || "Aucun commentaire pour cette victime."}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <InfosVictim victim={currentVictim} />
           )}
 
           {tab === 'dossier' && (

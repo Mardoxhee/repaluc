@@ -1,8 +1,10 @@
 "use client";
 import React, { useState } from "react";
 import { FiEye, FiGrid, FiUsers, FiTrendingUp, FiSettings, FiInfo, FiMapPin, FiHome, FiPhone, FiFolder, FiFileText, FiBarChart2, FiSearch, FiUser } from "react-icons/fi";
+import { IoSettings } from "react-icons/io5";
 import ListVictims from './components/ListVictims'
 import DashboardVictims from './components/dashboardVictims'
+import Reglages from './components/reglages'
 
 
 
@@ -383,7 +385,7 @@ const VictimDetailModal = ({ victim, onClose }: { victim: any, onClose: () => vo
 const TAB_LIST = [
   { label: "Dashboard", key: "dashboard", icon: <FiGrid size={18} className="mr-2" /> },
   { label: "Victimes", key: "victimes", icon: <FiUsers size={18} className="mr-2" /> },
-  // { label: "Statistiques & rapports", key: "stats", icon: <FiTrendingUp size={18} className="mr-2" /> },
+  { label: "Reglages", key: "stats", icon: <IoSettings size={18} className="mr-2" /> },
   // { label: "Reglages", key: "reglage", icon: <FiSettings size={18} className="mr-2" /> },
 ];
 
@@ -446,7 +448,7 @@ const ReparationsTabs = () => {
         )}
         {activeTab === "programme" && <div>Contenu programme de réparations</div>}
         {activeTab === "indemnisation" && <div>Contenu demandes d’indemnisation</div>}
-        {activeTab === "stats" && <div>Contenu statistiques & rapports</div>}
+        {activeTab === "stats" && <Reglages />}
       </div>
     </div>
   );
