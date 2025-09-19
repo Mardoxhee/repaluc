@@ -203,7 +203,7 @@ const Header = () => {
                 <hr className="my-2 border-gray-100" />
 
                 <button
-                  className="flex items-center gap-3 w-full text-left px-6 py-3 text-secondary-600 hover:bg-secondary-50 font-medium transition-colors"
+                  className="flex items-center gap-3 w-full text-left px-6 py-3 text-red-600 hover:bg-red-50 font-medium transition-colors"
                   onClick={() => {
                     window.location.href = 'http://10.140.0.106:4201/login';
                   }}
