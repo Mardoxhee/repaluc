@@ -67,7 +67,7 @@ const ReparationsTabs = () => {
   }, [activeTab]);
 
   return (
-    <div className="w-full px-4 pt-24">
+    <div className="w-full px-4 pt-4">
       {/* Onglets */}
       <div className="relative flex gap-2 border-b mb-8 bg-white rounded-t-xl px-6 py-4 shadow-sm">
         {TAB_LIST.map((tab, idx) => (
