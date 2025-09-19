@@ -10,9 +10,9 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   return (
     <div className="flex min-h-screen bg-gray-50">
       <SideBar />
-      <div className="flex-1 ml-64">
+      <div className="flex-1 ml-64 pt-20">
         <Header />
-        <main className="zoom-90">
+        <main className="zoom-90 pt-4">
           {children}
         </main>
       </div>

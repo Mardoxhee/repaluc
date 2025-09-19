@@ -43,7 +43,7 @@ const Header = () => {
   });
 
   return (
-    <header className="w-full h-20 bg-white/98 backdrop-blur-md shadow-sm border-b border-gray-200/80 flex items-center justify-between px-8 fixed top-0 left-0 z-20">
+    <header className="w-full h-20 bg-white/98 backdrop-blur-md shadow-sm border-b border-gray-200/80 flex items-center justify-between px-8 fixed top-0 left-64 z-20 ml-0">
       {/* Section gauche - Informations système */}
       <div className="flex items-center gap-6">
         {/* Logo République */}
