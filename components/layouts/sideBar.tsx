@@ -23,24 +23,12 @@ const SideBar = () => {
           <div className="w-16 h-16 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center shadow-lg border border-white/20 mb-4">
             <FiShield className="text-white text-2xl" />
           </div>
-
-          {/* Titre de l'institution */}
-          <div className="text-white">
-            <h1 className="text-lg font-bold tracking-wide mb-1">OPERATIONAL</h1>
-            <p className="text-xs text-primary-100 font-medium uppercase tracking-wider">
-              Suivi des Victimes
-            </p>
-          </div>
         </div>
       </div>
 
       {/* Navigation principale */}
       <div className="flex-1 px-4 py-6">
         <nav className="space-y-2">
-          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-3 mb-4">
-            Modules
-          </div>
-
           {navItems.map(item => {
             const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
             return (

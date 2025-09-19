@@ -8,7 +8,7 @@ const user = {
   email: 'mardox@justice.gov.cd',
   avatar: '/avatar.jpg',
   role: 'Administrateur Système',
-  department: 'Ministère de la Justice'
+  department: 'FONAREV OPERATIONAL'
 };
 
 const Header = () => {
@@ -37,9 +37,9 @@ const Header = () => {
     { id: 3, title: 'Maintenance programmée', time: '2h', type: 'warning' }
   ];
 
-  const currentTime = new Date().toLocaleTimeString('fr-FR', { 
-    hour: '2-digit', 
-    minute: '2-digit' 
+  const currentTime = new Date().toLocaleTimeString('fr-FR', {
+    hour: '2-digit',
+    minute: '2-digit'
   });
 
   return (
@@ -52,7 +52,7 @@ const Header = () => {
             <FiShield className="text-white text-lg" />
           </div>
           <div className="hidden md:block">
-            <div className="text-sm font-bold text-gray-800 tracking-wide">RÉPUBLIQUE DÉMOCRATIQUE DU CONGO</div>
+            <div className="text-sm font-bold text-gray-800 tracking-wide">FONAREV OPERATIONAL</div>
             <div className="text-xs text-primary-600 font-medium">Système de Suivi des Victimes</div>
           </div>
         </div>
@@ -99,10 +99,9 @@ const Header = () => {
                 {notifications.map(notif => (
                   <div key={notif.id} className="px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0">
                     <div className="flex items-start gap-3">
-                      <div className={`w-2 h-2 rounded-full mt-2 ${
-                        notif.type === 'info' ? 'bg-blue-500' :
-                        notif.type === 'success' ? 'bg-green-500' : 'bg-yellow-500'
-                      }`}></div>
+                      <div className={`w-2 h-2 rounded-full mt-2 ${notif.type === 'info' ? 'bg-blue-500' :
+                          notif.type === 'success' ? 'bg-green-500' : 'bg-yellow-500'
+                        }`}></div>
                       <div className="flex-1">
                         <p className="text-sm font-medium text-gray-800">{notif.title}</p>
                         <p className="text-xs text-gray-500 mt-1">Il y a {notif.time}</p>
@@ -146,12 +145,12 @@ const Header = () => {
               </div>
               <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></div>
             </div>
-            
+
             <div className="hidden md:block text-left">
               <div className="text-sm font-semibold text-gray-800">{user.name}</div>
               <div className="text-xs text-gray-500">{user.role}</div>
             </div>
-            
+
             <FiChevronDown className={`text-gray-400 group-hover:text-primary-600 transition-all duration-200 ${open ? 'rotate-180' : ''}`} size={16} />
           </button>
 
@@ -161,12 +160,12 @@ const Header = () => {
               <div className="px-6 py-4 border-b border-gray-100">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-primary-200">
-                    <Image 
-                      src={user.avatar} 
-                      alt="Avatar" 
-                      width={48} 
-                      height={48} 
-                      className="rounded-full object-cover w-full h-full" 
+                    <Image
+                      src={user.avatar}
+                      alt="Avatar"
+                      width={48}
+                      height={48}
+                      className="rounded-full object-cover w-full h-full"
                     />
                   </div>
                   <div className="flex-1">
@@ -195,7 +194,7 @@ const Header = () => {
                   <FiUser className="text-gray-500" size={18} />
                   <span className="font-medium">Mon profil</span>
                 </button>
-                
+
                 <button className="flex items-center gap-3 w-full text-left px-6 py-3 text-gray-700 hover:bg-gray-50 transition-colors">
                   <FiSettings className="text-gray-500" size={18} />
                   <span className="font-medium">Paramètres</span>
