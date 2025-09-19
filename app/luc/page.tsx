@@ -52,7 +52,7 @@ const ReparationsTabs = () => {
   const [activeTab, setActiveTab] = React.useState(TAB_LIST[0].key);
 
   return (
-    <div className="w-full pt-20">
+    <div className="w-full pt-16">
       {/* Onglets */}
       <div className="bg-white border-b-4 border-primary-500 shadow-sm">
         <div className="flex">
