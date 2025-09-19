@@ -23,7 +23,7 @@ const SideBar = () => {
           <div className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center shadow-lg border border-white/20 mb-2">
             <FiShield className="text-white text-xl" />
           </div>
-          <div className="text-white text-xs font-bold tracking-wide">SYSTÈME LUC</div>
+          {/* <div className="text-white text-xs font-bold tracking-wide">SYSTÈME LUC</div> */}
         </div>
       </div>
 
