@@ -46,7 +46,7 @@ const SideBar = () => {
               >
                 {/* Indicateur actif */}
                 {isActive && (
-                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary-500 rounded-r-full"></div>
+                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary-500"></div>
                 )}
 
                 <span className={`
