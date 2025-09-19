@@ -17,12 +17,13 @@ const SideBar = () => {
   return (
     <aside className="h-screen w-64 min-w-64 max-w-64 bg-white border-r border-gray-200 flex flex-col shadow-lg fixed top-0 left-0 z-30">
       {/* En-tête institutionnel */}
-      <div className="bg-gradient-to-r from-primary-500 to-primary-600 px-6 py-8">
+      <div className="bg-gradient-to-r from-primary-500 to-primary-600 px-6 py-4 h-20 flex items-center justify-center">
         <div className="flex flex-col items-center text-center">
           {/* Logo institutionnel */}
-          <div className="w-16 h-16 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center shadow-lg border border-white/20 mb-4">
-            <FiShield className="text-white text-2xl" />
+          <div className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center shadow-lg border border-white/20 mb-2">
+            <FiShield className="text-white text-xl" />
           </div>
+          <div className="text-white text-xs font-bold tracking-wide">SYSTÈME LUC</div>
         </div>
       </div>
 
