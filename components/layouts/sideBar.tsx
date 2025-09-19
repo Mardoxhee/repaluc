@@ -13,7 +13,7 @@ const navItems = [
 
 const SideBar = () => {
   const pathname = usePathname();
-  
+
   return (
     <aside className="h-screen w-64 min-w-64 max-w-64 bg-white border-r border-gray-200 flex flex-col shadow-lg fixed top-0 left-0 z-30">
       {/* En-tête institutionnel */}
@@ -23,10 +23,10 @@ const SideBar = () => {
           <div className="w-16 h-16 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center shadow-lg border border-white/20 mb-4">
             <FiShield className="text-white text-2xl" />
           </div>
-          
+
           {/* Titre de l'institution */}
           <div className="text-white">
-            <h1 className="text-lg font-bold tracking-wide mb-1">SYSTÈME LUC</h1>
+            <h1 className="text-lg font-bold tracking-wide mb-1">OPERATIONAL</h1>
             <p className="text-xs text-primary-100 font-medium uppercase tracking-wider">
               Suivi des Victimes
             </p>
@@ -40,7 +40,7 @@ const SideBar = () => {
           <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-3 mb-4">
             Modules
           </div>
-          
+
           {navItems.map(item => {
             const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
             return (
@@ -59,22 +59,15 @@ const SideBar = () => {
                 {isActive && (
                   <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary-500 rounded-r-full"></div>
                 )}
-                
+
                 <span className={`
                   transition-colors duration-200
                   ${isActive ? 'text-primary-600' : 'text-gray-500 group-hover:text-primary-500'}
                 `}>
                   {item.icon}
                 </span>
-                
+
                 <span className="font-medium text-sm">{item.label}</span>
-                
-                {/* Badge pour les notifications (optionnel) */}
-                {item.label === 'LUC' && (
-                  <span className="ml-auto bg-secondary-500 text-white text-xs px-2 py-0.5 rounded-full font-semibold">
-                    12
-                  </span>
-                )}
               </Link>
             );
           })}
@@ -111,7 +104,7 @@ const SideBar = () => {
             République Démocratique du Congo
           </p>
           <p className="text-xs text-gray-400 mt-1">
-            Ministère de la Justice
+            FONAREV RDC
           </p>
         </div>
       </div>

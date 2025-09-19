@@ -57,13 +57,13 @@ const Header = () => {
             </div>
             <hr className="my-2 border-gray-100" />
             <button
-  className="flex items-center gap-2 w-full text-left px-5 py-2 text-secondary-600 hover:bg-secondary-50 font-medium transition"
-  onClick={() => {
-    window.location.href = '/auth/login';
-  }}
->
-  <FiLogOut /> Se déconnecter
-</button>
+              className="flex items-center gap-2 w-full text-left px-5 py-2 text-secondary-600 hover:bg-secondary-50 font-medium transition"
+              onClick={() => {
+                window.location.href = 'http://10.140.0.106:4201/login';
+              }}
+            >
+              <FiLogOut /> Se déconnecter
+            </button>
           </div>
         )}
       </div>
