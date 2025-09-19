@@ -44,40 +44,6 @@ export default function Home() {
               </p>
             </div>
 
-            {/* Statistiques rapides */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-16">
-              <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 text-center border border-gray-100 shadow-lg">
-                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                  <FiUsers className="text-blue-600 text-xl" />
-                </div>
-                <div className="text-3xl font-bold text-gray-900 mb-1">2,847</div>
-                <div className="text-sm text-gray-600">Victimes enregistrées</div>
-              </div>
-              
-              <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 text-center border border-gray-100 shadow-lg">
-                <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                  <FiCheck className="text-green-600 text-xl" />
-                </div>
-                <div className="text-3xl font-bold text-gray-900 mb-1">1,523</div>
-                <div className="text-sm text-gray-600">Dossiers traités</div>
-              </div>
-              
-              <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 text-center border border-gray-100 shadow-lg">
-                <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                  <FiFileText className="text-purple-600 text-xl" />
-                </div>
-                <div className="text-3xl font-bold text-gray-900 mb-1">892</div>
-                <div className="text-sm text-gray-600">Réparations accordées</div>
-              </div>
-              
-              <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 text-center border border-gray-100 shadow-lg">
-                <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                  <FiTrendingUp className="text-orange-600 text-xl" />
-                </div>
-                <div className="text-3xl font-bold text-gray-900 mb-1">94%</div>
-                <div className="text-sm text-gray-600">Taux de satisfaction</div>
-              </div>
-            </div>
 
             {/* Modules principaux */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-5xl mx-auto">
