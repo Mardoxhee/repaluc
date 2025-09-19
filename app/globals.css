@@ -5,11 +5,15 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --primary: #007fba;
+  --secondary: #7f2360;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-secondary: var(--secondary);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -125,12 +129,22 @@ body {
 
 /* Force mode clair partout, même si l'OS est en darkmode */
 html, body {
-  background: #f8fafc !important;
+  background: #fafbfc !important;
   color: #1e293b !important;
 }
 @media (prefers-color-scheme: dark) {
   html, body {
-    background: #f8fafc !important;
+    background: #fafbfc !important;
     color: #1e293b !important;
   }
+}
+
+/* Styles pour les bordures institutionnelles */
+.border-r-3 {
+  border-right-width: 3px;
+}
+
+/* Styles pour les éléments institutionnels */
+.institutional-gradient {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
 }
