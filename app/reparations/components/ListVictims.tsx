@@ -106,7 +106,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
         setError("");
         try {
             const queryParams = buildQueryParams();
-            const url = queryParams ? `/victime/paginate/filtered?status=confirmé&${queryParams}` : `/victime/paginate/filtered`;
+            const url = queryParams ? `/victime/paginate/filtered?${queryParams}` : `/victime/paginate/filtered`;
             const response = await fetchCtx?.fetcher(url);
             if (response?.data) {
                 setVictims(response.data);
@@ -268,8 +268,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                 <button
                                     onClick={() => setShowFilterBuilder(!showFilterBuilder)}
                                     className={`px-6 py-3 border flex items-center gap-2 font-medium transition-colors ${showFilterBuilder
-                                            ? 'bg-blue-50 border-blue-300 text-blue-700'
-                                            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                                        ? 'bg-blue-50 border-blue-300 text-blue-700'
+                                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
                                         }`}
                                 >
                                     <Filter size={20} />
@@ -322,7 +322,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                             );
 
                                             return (
-                                                <div key={rule.id} className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200">
+                                                <div key={rule.id} className="flex items-center gap-2 p-3 bg-gray-50 border border-gray-200">
                                                     {index > 0 && (
                                                         <span className="text-sm font-medium text-gray-500 px-2">ET</span>
                                                     )}
@@ -360,7 +360,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                                         <select
                                                             value={rule.value}
                                                             onChange={(e) => updateFilterRule(rule.id, { value: e.target.value })}
-                                                            className="px-3 py-2 border border-gray-300 bg-white focus:outline-none focus:border-blue-500 min-w-48"
+                                                            className="px-3 py-2 border border-gray-300 bg-white focus:outline-none focus:border-blue-500 min-w-28"
                                                         >
                                                             <option value="">Sélectionner...</option>
                                                             {field.options?.map(option => (
@@ -375,7 +375,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                                             value={rule.value}
                                                             onChange={(e) => updateFilterRule(rule.id, { value: e.target.value })}
                                                             placeholder="Valeur..."
-                                                            className="px-3 py-2 border border-gray-300 bg-white focus:outline-none focus:border-blue-500 min-w-48"
+                                                            className="px-3 py-2 border border-gray-300 bg-white focus:outline-none focus:border-blue-500 min-w-28"
                                                         />
                                                     )}
 
