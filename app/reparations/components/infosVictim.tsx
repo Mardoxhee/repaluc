@@ -334,7 +334,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                     {/* Compensation & Final Damage */}
                     <div className="mb-6">
                         <div className="bg-gray-800 text-white px-4 py-2 border-b">
-                            <h2 className="font-bold text-sm uppercase tracking-wide">5. Préjudice et Indemnisation</h2>
+                            <h2 className="font-bold text-sm uppercase tracking-wide">5. Préjudice et Mésure de réparation</h2>
                         </div>
                         <div className="border border-gray-300 border-t-0 p-4">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -362,7 +362,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
 
                             {reparations && (
                                 <div className="mt-6">
-                                    <h4 className="text-xs font-semibold text-gray-600 uppercase mb-2">Formes de réparations déjà reçues</h4>
+                                    <h4 className="text-xs font-semibold text-gray-600 uppercase mb-2">Formes de réparations</h4>
                                     <ul className="divide-y divide-gray-100 bg-gray-50 border border-gray-200 rounded-lg">
                                         {reparations.split(',').map((item, idx) => (
                                             <li key={idx} className="flex items-center justify-between px-4 py-2">

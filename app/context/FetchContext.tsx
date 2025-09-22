@@ -22,7 +22,11 @@ export const FetchProvider = ({ children }: { children: ReactNode }) => {
         try {
             const fullUrl = url.startsWith('http') ? url : `${baseUrl}${url}`;
             const response = await fetch(fullUrl, options);
-            if (!response.ok) throw new Error(`Erreur ${response.status}`);
+            if (!response.ok) {
+                console.log('Aucune donnée retournée ou erreur pour', fullUrl, 'Status:', response.status);
+                console.log('throw new Error sur status', response.status, 'pour', fullUrl);
+                throw new Error(`Erreur ${response.status}`);
+            }
             let data = null;
             const contentType = response.headers.get('content-type');
             if (contentType && contentType.includes('application/json')) {
@@ -36,6 +40,7 @@ export const FetchProvider = ({ children }: { children: ReactNode }) => {
             return data;
         } catch (err: any) {
             setError(err.message || 'Erreur réseau');
+            console.log('Erreur réseau ou aucune donnée:', err);
             setLoading(false);
             throw err;
         }
