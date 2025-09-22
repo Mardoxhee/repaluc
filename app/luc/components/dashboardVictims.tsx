@@ -1,176 +1,465 @@
-import React from 'react';
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, LineChart, Line, CartesianGrid } from 'recharts';
-import { FiUsers, FiLayers, FiGrid, FiAward } from 'react-icons/fi';
+"use client";
+import React, { useState, useEffect } from 'react';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, LineChart, Line, CartesianGrid, AreaChart, Area } from 'recharts';
+import { FiUsers, FiShield, FiMapPin, FiAward, FiDollarSign, FiTrendingUp, FiAlertTriangle, FiCheckCircle } from 'react-icons/fi';
+import { FaHospitalSymbol, FaUserCheck, FaBalanceScale } from "react-icons/fa";
 import { GiInjustice } from "react-icons/gi";
-import { FaHospitalSymbol } from "react-icons/fa";
 import { BsFillHousesFill } from "react-icons/bs";
-import { FaHouseUser } from "react-icons/fa";
-import { FaUserCheck } from "react-icons/fa";
+import { useFetch } from '../../context/FetchContext';
 
-// Ces mocks doivent être passés en props ou importés selon l'usage réel
-// Ici on met des exemples pour la démo
-const victims = [
-  { id: 1, fullname: "Alice Moke", age: 24, sexe: "F", programme: 1, prejudices: [1, 2], categorie: 2, letter: "A", province: "Kinshasa", priseEnCharge: true },
-  { id: 2, fullname: "Benoît Kamba", age: 42, sexe: "M", programme: 2, prejudices: [3], categorie: 1, letter: "B", province: "Kasaï", priseEnCharge: false },
-  { id: 3, fullname: "Clara Moke", age: 17, sexe: "F", programme: 1, prejudices: [2, 5], categorie: 1, letter: "C", province: "Kinshasa", priseEnCharge: true },
-];
-const mockCategories = [
-  { id: 1, nom: "Femme" },
-  { id: 2, nom: "Homme" },
-];
-const mockProgrammes = [
-  { id: 1, nom: "Programme A" },
-  { id: 2, nom: "Programme B" },
-];
-const mockPrejudices = [
-  { id: 1, nom: "Violences" },
-  { id: 2, nom: "Spoliation" },
-  { id: 3, nom: "Discrimination" },
-  { id: 5, nom: "Autre" },
-];
+const COLORS = ["#007fba", "#7f2360", "#0066cc", "#cc3366", "#0080ff", "#ff6b9d", "#4da6ff", "#ff8fab", "#80bfff", "#ffb3d1"];
 
-const COLORS = ["#f472b6", "#a78bfa", "#fbbf24", "#34d399", "#60a5fa", "#f87171", "#6366f1", "#f59e42", "#10b981"];
-
-function statBy(key: string, items: any[], labelSource: any[] = []) {
-  const map = new Map();
-  items.forEach(v => {
-    let k = v[key];
-    if (Array.isArray(k)) {
-      k.forEach(sub => map.set(sub, (map.get(sub) || 0) + 1));
-    } else {
-      map.set(k, (map.get(k) || 0) + 1);
-    }
-  });
-  return Array.from(map.entries()).map(([id, count], i) => ({
-    name: labelSource.find(l => l.id === id)?.nom || id,
-    value: count,
-    id,
-    color: COLORS[i % COLORS.length],
-  }));
+interface StatCardProps {
+  title: string;
+  value: string | number;
+  icon: React.ReactNode;
+  color: string;
+  subtitle?: string;
+  trend?: string;
+  loading?: boolean;
 }
 
-const DashboardVictims = () => {
-  // Stats
-  const totalVictims = victims.length;
-  const victimsByCat = statBy('categorie', victims, mockCategories);;
-  const victimsByProg = statBy('programme', victims, mockProgrammes);
-  const victimsByPrej = statBy('prejudices', victims, mockPrejudices);
-  const victimsByProvince = statBy('province', victims);
-  const totalPrisEnCharge = victims.filter(v => v.priseEnCharge).length;
+const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color, subtitle, trend, loading }) => (
+  <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-all duration-300 group">
+    <div className="flex items-start justify-between">
+      <div className="flex-1">
+        <div className="flex items-center gap-3 mb-3">
+          <div className={`p-3 rounded-xl ${color} shadow-md group-hover:scale-110 transition-transform duration-300`}>
+            {icon}
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">{title}</h3>
+            {subtitle && <p className="text-xs text-gray-500 mt-1">{subtitle}</p>}
+          </div>
+        </div>
+        <div className="flex items-end gap-2">
+          {loading ? (
+            <div className="h-8 w-16 bg-gray-200 animate-pulse rounded"></div>
+          ) : (
+            <span className="text-3xl font-bold text-gray-900">{value}</span>
+          )}
+          {trend && (
+            <span className="text-sm font-medium text-green-600 mb-1">{trend}</span>
+          )}
+        </div>
+      </div>
+    </div>
+  </div>
+);
 
-  // Pour la courbe, on simule une évolution mensuelle (exemple)
-  const months = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin'];
-  const curveData = months.map((m, i) => ({
-    month: m,
-    victimes: Math.floor(2 + Math.random() * 5),
+const DashboardVictims = () => {
+  const { fetcher } = useFetch();
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    sexe: [],
+    trancheAge: [],
+    province: [],
+    programme: [],
+    territoire: [],
+    prejudiceFinal: [],
+    totalIndemnisation: 0,
+    categorie: [],
+    prejudice: []
+  });
+
+  useEffect(() => {
+    const fetchAllStats = async () => {
+      setLoading(true);
+      try {
+        const [
+          sexeData,
+          trancheAgeData,
+          provinceData,
+          programmeData,
+          territoireData,
+          prejudiceFinalData,
+          totalIndemnisationData,
+          categorieData,
+          prejudiceData
+        ] = await Promise.all([
+          fetcher('/victime/stats/sexe'),
+          fetcher('/victime/stats/tranche-age'),
+          fetcher('/victime/stats/province'),
+          fetcher('/victime/stats/programme'),
+          fetcher('/victime/stats/territoire'),
+          fetcher('/victime/stats/prejudice-final'),
+          fetcher('/victime/stats/total-indemnisation'),
+          fetcher('/victime/stats/categorie'),
+          fetcher('/victime/stats/prejudice')
+        ]);
+
+        setStats({
+          sexe: sexeData || [],
+          trancheAge: trancheAgeData || [],
+          province: provinceData || [],
+          programme: programmeData || [],
+          territoire: territoireData || [],
+          prejudiceFinal: prejudiceFinalData || [],
+          totalIndemnisation: totalIndemnisationData?.totalIndemnisation || 0,
+          categorie: categorieData || [],
+          prejudice: prejudiceData || []
+        });
+      } catch (error) {
+        console.error('Erreur lors du chargement des statistiques:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAllStats();
+  }, [fetcher]);
+
+  // Calculs des totaux
+  const totalVictimes = stats.sexe.reduce((acc, item) => acc + parseInt(item.total), 0);
+  const totalFemmes = stats.sexe.find(item => item.sexe === 'Femme')?.total || 0;
+  const totalHommes = stats.sexe.find(item => item.sexe === 'Homme')?.total || 0;
+  const totalProvinces = stats.province.length;
+  const totalTerritoires = stats.territoire.length;
+
+  // Préparation des données pour les graphiques
+  const sexeChartData = stats.sexe.map((item, index) => ({
+    name: item.sexe,
+    value: parseInt(item.total),
+    color: COLORS[index % COLORS.length]
   }));
 
+  const provinceChartData = stats.province.map((item, index) => ({
+    name: item.province,
+    value: parseInt(item.total),
+    color: COLORS[index % COLORS.length]
+  }));
+
+  const prejudiceChartData = stats.prejudiceFinal.map((item, index) => ({
+    name: item.prejudiceFinal.length > 30 ? item.prejudiceFinal.substring(0, 30) + '...' : item.prejudiceFinal,
+    fullName: item.prejudiceFinal,
+    value: parseInt(item.total),
+    color: COLORS[index % COLORS.length]
+  }));
+
+  const programmeChartData = stats.programme.map((item, index) => ({
+    name: item.programme.length > 40 ? item.programme.substring(0, 40) + '...' : item.programme,
+    fullName: item.programme,
+    value: parseInt(item.total),
+    color: COLORS[index % COLORS.length]
+  }));
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
+          <p className="font-semibold text-gray-800">{data.fullName || data.name}</p>
+          <p className="text-blue-600">
+            <span className="font-medium">Total: {data.value}</span>
+          </p>
+        </div>
+      );
+    }
+    return null;
+  };
+
   return (
-    <div className="w-full px-6 py-8">
-      <h2 className="text-2xl font-bold mb-6 text-gray-900">Tableau de bord des victimes</h2>
-      {/* Cartes stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6 mb-8">
-        <div className="bg-white rounded-2xl shadow p-6 flex flex-col items-center justify-center border border-gray-100">
-          <FiUsers className="text-pink-400 text-3xl mb-2" />
-          <span className="text-3xl font-bold text-gray-900">{totalVictims}</span>
-          <span className="text-xs text-gray-500 mt-1">Total victimes enregistrées</span>
-        </div>
-        <div className="bg-white rounded-2xl shadow p-6 flex flex-col items-center justify-center border border-gray-100">
-          <FaHouseUser className="text-purple-400 text-3xl mb-2" />
-          <span className="text-3xl font-bold text-gray-900">{victimsByCat.reduce((a, b) => a + b.value, 0)}</span>
-          <span className="text-xs text-gray-500 mt-1 text-center">Victimes des ménages ordinaires</span>
-        </div>
-        <div className="bg-white rounded-2xl shadow p-6 flex flex-col items-center justify-center border border-gray-100">
-          <BsFillHousesFill className="text-blue-400 text-3xl mb-2" />
-          <span className="text-3xl font-bold text-gray-900">{victimsByProg.reduce((a, b) => a + b.value, 0)}</span>
-          <span className="text-xs text-gray-500 mt-1 text-center">Victimes des menages collectifs</span>
-        </div>
-        <div className="bg-white rounded-2xl shadow p-6 flex flex-col items-center justify-center border border-gray-100">
-          <GiInjustice className="text-yellow-400 text-3xl mb-2" />
-          <span className="text-3xl font-bold text-gray-900">{victimsByPrej.reduce((a, b) => a + b.value, 0)}</span>
-          <span className="text-xs text-gray-500 mt-1 text-center">Victimes detenant les décisions de justice</span>
-        </div>
-        <div className="bg-white rounded-2xl shadow p-6 flex flex-col items-center justify-center border border-gray-100">
-
-          <FaHospitalSymbol className="text-red-600 text-3xl mb-2" />
-
-          <span className="text-3xl font-bold text-gray-900">{totalPrisEnCharge}</span>
-          <span className="text-xs text-gray-500 mt-1 text-center">Victimes en situation d'urgence medicale</span>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow p-6 flex flex-col items-center justify-center border border-gray-100">
-          <span className="inline-block bg-green-100 text-green-700 rounded-full px-2 py-1 text-xl mb-2"><FaUserCheck className="text-green-700" /></span>
-          <span className="text-3xl font-bold text-gray-900">{totalPrisEnCharge}</span>
-          <span className="text-xs text-gray-500 mt-1 text-center">Victimes confirmées</span>
-        </div>
+    <div className="w-full px-6 py-8 bg-gray-50 min-h-screen">
+      {/* En-tête */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Tableau de Bord des Victimes</h1>
+        <p className="text-gray-600">Vue d'ensemble des données et statistiques du système FONAREV</p>
       </div>
-      {/* Graphiques */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-        <div className="bg-white rounded-2xl shadow p-6 border border-gray-100">
-          <h3 className="font-semibold text-gray-700 mb-4">Répartition par catégorie</h3>
-          <ResponsiveContainer width="100%" height={320}>
-            <PieChart>
-              <Pie data={victimsByCat} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={110} label>
-                {victimsByCat.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-              </Pie>
-              <Tooltip />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="bg-white rounded-2xl shadow p-6 border border-gray-100">
-          <h3 className="font-semibold text-gray-700 mb-4">Victimes par programme</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={victimsByProg}>
-              <XAxis dataKey="name" stroke="#888" />
-              <YAxis allowDecimals={false} />
-              <Tooltip />
-              <Bar dataKey="value" radius={[8, 8, 0, 0]} fill="#a78bfa">
-                {victimsByProg.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+
+      {/* Cartes de statistiques principales */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <StatCard
+          title="Total Victimes"
+          value={loading ? "..." : totalVictimes.toLocaleString()}
+          icon={<FiUsers className="text-white text-xl" />}
+          color="bg-gradient-to-br from-blue-500 to-blue-600"
+          subtitle="Victimes enregistrées"
+          loading={loading}
+        />
+        
+        <StatCard
+          title="Indemnisation Totale"
+          value={loading ? "..." : `${stats.totalIndemnisation.toLocaleString()} USD`}
+          icon={<FiDollarSign className="text-white text-xl" />}
+          color="bg-gradient-to-br from-green-500 to-green-600"
+          subtitle="Montant total versé"
+          loading={loading}
+        />
+        
+        <StatCard
+          title="Provinces Couvertes"
+          value={loading ? "..." : totalProvinces}
+          icon={<FiMapPin className="text-white text-xl" />}
+          color="bg-gradient-to-br from-purple-500 to-purple-600"
+          subtitle="Zones géographiques"
+          loading={loading}
+        />
+        
+        <StatCard
+          title="Territoires"
+          value={loading ? "..." : totalTerritoires}
+          icon={<BsFillHousesFill className="text-white text-xl" />}
+          color="bg-gradient-to-br from-pink-500 to-pink-600"
+          subtitle="Territoires actifs"
+          loading={loading}
+        />
       </div>
-      {/* Courbe comparative */}
-      <div className="bg-white rounded-2xl shadow p-6 border border-gray-100 mb-8">
-        <h3 className="font-semibold text-gray-700 mb-4">Évolution mensuelle (exemple)</h3>
-        <ResponsiveContainer width="100%" height={220}>
-          <LineChart data={curveData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="month" stroke="#888" />
-            <YAxis allowDecimals={false} />
-            <Tooltip />
-            <Legend />
-            <Line type="monotone" dataKey="victimes" stroke="#f472b6" strokeWidth={3} dot={{ r: 5 }} />
-          </LineChart>
-        </ResponsiveContainer>
+
+      {/* Cartes de répartition par sexe */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
+        <StatCard
+          title="Victimes Femmes"
+          value={loading ? "..." : totalFemmes}
+          icon={<FaUserCheck className="text-white text-xl" />}
+          color="bg-gradient-to-br from-pink-400 to-pink-500"
+          subtitle={`${totalVictimes > 0 ? Math.round((totalFemmes / totalVictimes) * 100) : 0}% du total`}
+          loading={loading}
+        />
+        
+        <StatCard
+          title="Victimes Hommes"
+          value={loading ? "..." : totalHommes}
+          icon={<FaUserCheck className="text-white text-xl" />}
+          color="bg-gradient-to-br from-blue-400 to-blue-500"
+          subtitle={`${totalVictimes > 0 ? Math.round((totalHommes / totalVictimes) * 100) : 0}% du total`}
+          loading={loading}
+        />
       </div>
-      {/* Badges victimes par préjudice */}
-      <div className="bg-white rounded-2xl shadow p-4 border border-gray-100 mb-8">
-        <h3 className="font-semibold text-gray-700 mb-4">Victimes par préjudice</h3>
-        <div className="flex flex-wrap gap-2">
-          {victimsByPrej.map(pj => (
-            <div key={pj.id} className="flex items-center gap-2 bg-pink-50 border border-pink-200 rounded-full px-4 py-1 text-sm font-semibold text-pink-700">
-              <span>{pj.name}</span>
-              <span className="bg-pink-200 text-pink-800 rounded-full px-2 py-0.5 text-xs font-bold">{pj.value}</span>
+
+      {/* Graphiques principaux */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        {/* Répartition par sexe */}
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 rounded-lg bg-blue-50">
+              <FiUsers className="text-blue-600" size={20} />
             </div>
-          ))}
+            <h3 className="text-lg font-bold text-gray-900">Répartition par Sexe</h3>
+          </div>
+          {loading ? (
+            <div className="h-80 flex items-center justify-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={320}>
+              <PieChart>
+                <Pie
+                  data={sexeChartData}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={120}
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  labelLine={false}
+                >
+                  {sexeChartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Répartition par province */}
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 rounded-lg bg-purple-50">
+              <FiMapPin className="text-purple-600" size={20} />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900">Victimes par Province</h3>
+          </div>
+          {loading ? (
+            <div className="h-80 flex items-center justify-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={320}>
+              <BarChart data={provinceChartData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis 
+                  dataKey="name" 
+                  angle={-45}
+                  textAnchor="end"
+                  height={80}
+                  fontSize={12}
+                />
+                <YAxis />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                  {provinceChartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
-      {/* Victimes par province */}
-      <div className="bg-white rounded-2xl shadow p-4 border border-gray-100 mb-8">
-        <h3 className="font-semibold text-gray-700 mb-4">Victimes par province</h3>
-        <ResponsiveContainer width="100%" height={180}>
-          <BarChart data={victimsByProvince} layout="vertical" margin={{ left: 20, right: 20 }}>
-            <XAxis type="number" allowDecimals={false} hide />
-            <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 13, fill: '#555' }} />
-            <Tooltip />
-            <Bar dataKey="value" radius={[0, 12, 12, 0]} fill="#60a5fa">
-              {victimsByProvince.map((entry, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+
+      {/* Graphiques secondaires */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        {/* Types de préjudices */}
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 rounded-lg bg-red-50">
+              <FiAlertTriangle className="text-red-600" size={20} />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900">Types de Préjudices</h3>
+          </div>
+          {loading ? (
+            <div className="h-80 flex items-center justify-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600"></div>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={320}>
+              <PieChart>
+                <Pie
+                  data={prejudiceChartData}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={100}
+                  label={({ value }) => value}
+                >
+                  {prejudiceChartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Programmes de réparation */}
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 rounded-lg bg-green-50">
+              <FiAward className="text-green-600" size={20} />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900">Programmes de Réparation</h3>
+          </div>
+          {loading ? (
+            <div className="h-80 flex items-center justify-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={320}>
+              <BarChart data={programmeChartData} margin={{ top: 20, right: 30, left: 20, bottom: 100 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis 
+                  dataKey="name" 
+                  angle={-45}
+                  textAnchor="end"
+                  height={120}
+                  fontSize={11}
+                  interval={0}
+                />
+                <YAxis />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar dataKey="value" radius={[4, 4, 0, 0]} fill="#10b981" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+
+      {/* Tableaux de données détaillées */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Répartition par territoire */}
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 rounded-lg bg-indigo-50">
+              <BsFillHousesFill className="text-indigo-600" size={20} />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900">Victimes par Territoire</h3>
+          </div>
+          {loading ? (
+            <div className="space-y-3">
+              {[1, 2, 3, 4, 5].map(i => (
+                <div key={i} className="h-4 bg-gray-200 animate-pulse rounded"></div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-80 overflow-y-auto">
+              {stats.territoire.map((item, index) => (
+                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
+                    <span className="font-medium text-gray-800">{item.territoire}</span>
+                  </div>
+                  <span className="bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full text-sm font-semibold">
+                    {item.total}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Répartition par catégorie */}
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 rounded-lg bg-yellow-50">
+              <FiShield className="text-yellow-600" size={20} />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900">Catégories de Victimes</h3>
+          </div>
+          {loading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="h-4 bg-gray-200 animate-pulse rounded"></div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {stats.categorie.map((item, index) => (
+                <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
+                    <span className="font-medium text-gray-800 text-sm">{item.categorie}</span>
+                  </div>
+                  <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-semibold">
+                    {item.total}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Section de résumé */}
+      <div className="mt-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl p-6 text-white">
+        <div className="flex items-center gap-4 mb-4">
+          <div className="p-3 bg-white/20 rounded-xl">
+            <FiTrendingUp className="text-white" size={24} />
+          </div>
+          <div>
+            <h3 className="text-xl font-bold">Résumé Exécutif</h3>
+            <p className="text-blue-100">Aperçu global du système FONAREV</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+          <div className="bg-white/10 rounded-lg p-4">
+            <div className="text-2xl font-bold">{loading ? "..." : totalVictimes}</div>
+            <div className="text-blue-100 text-sm">Victimes totales enregistrées</div>
+          </div>
+          <div className="bg-white/10 rounded-lg p-4">
+            <div className="text-2xl font-bold">{loading ? "..." : `${stats.totalIndemnisation.toLocaleString()} USD`}</div>
+            <div className="text-blue-100 text-sm">Indemnisations versées</div>
+          </div>
+          <div className="bg-white/10 rounded-lg p-4">
+            <div className="text-2xl font-bold">{loading ? "..." : `${totalProvinces} provinces`}</div>
+            <div className="text-blue-100 text-sm">Couverture géographique</div>
+          </div>
+        </div>
       </div>
     </div>
   );
