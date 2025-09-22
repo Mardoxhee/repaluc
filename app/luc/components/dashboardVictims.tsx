@@ -9,6 +9,33 @@ import { useFetch } from '../../context/FetchContext';
 
 const COLORS = ["#007fba", "#7f2360", "#0066cc", "#cc3366", "#0080ff", "#ff6b9d", "#4da6ff", "#ff8fab", "#80bfff", "#ffb3d1"];
 
+// Define interfaces for your data structures
+interface StatItem {
+  total: string | number;
+  [key: string]: any; // Allow other properties
+}
+
+
+
+interface ProvinceStat extends StatItem {
+  province: string;
+}
+
+interface PrejudiceStat extends StatItem {
+  prejudiceFinal: string;
+}
+
+interface ProgrammeStat extends StatItem {
+  programme: string;
+}
+
+interface TerritoireStat extends StatItem {
+  territoire: string;
+}
+
+interface CategorieStat extends StatItem {
+  categorie: string;
+}
 interface StatCardProps {
   title: string;
   value: string | number;
@@ -47,10 +74,22 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color, subtitle
   </div>
 );
 
+type SexeStat = { sexe: string; total: number };
+
 const DashboardVictims = () => {
   const { fetcher } = useFetch();
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<{
+    sexe: SexeStat[];
+    trancheAge: any[];
+    province: any[];
+    programme: any[];
+    territoire: any[];
+    prejudiceFinal: any[];
+    totalIndemnisation: number;
+    categorie: any[];
+    prejudice: any[];
+  }>({
     sexe: [],
     trancheAge: [],
     province: [],
@@ -110,33 +149,33 @@ const DashboardVictims = () => {
   }, [fetcher]);
 
   // Calculs des totaux
-  const totalVictimes = stats.sexe.reduce((acc, item) => acc + parseInt(item.total), 0);
-  const totalFemmes = stats.sexe.find(item => item.sexe === 'Femme')?.total || 0;
-  const totalHommes = stats.sexe.find(item => item.sexe === 'Homme')?.total || 0;
+  const totalVictimes = stats.sexe.reduce((acc, item: any) => acc + parseInt(item.total), 0);
+  const totalFemmes = stats.sexe.find((item: any) => item.sexe === 'Femme')?.total || 0;
+  const totalHommes = stats.sexe.find((item: any) => item.sexe === 'Homme')?.total || 0;
   const totalProvinces = stats.province.length;
   const totalTerritoires = stats.territoire.length;
 
   // Préparation des données pour les graphiques
-  const sexeChartData = stats.sexe.map((item, index) => ({
+  const sexeChartData = stats.sexe.map((item: any, index) => ({
     name: item.sexe,
     value: parseInt(item.total),
     color: COLORS[index % COLORS.length]
   }));
 
-  const provinceChartData = stats.province.map((item, index) => ({
+  const provinceChartData = stats.province.map((item: any, index) => ({
     name: item.province,
     value: parseInt(item.total),
     color: COLORS[index % COLORS.length]
   }));
 
-  const prejudiceChartData = stats.prejudiceFinal.map((item, index) => ({
+  const prejudiceChartData = stats.prejudiceFinal.map((item: any, index) => ({
     name: item.prejudiceFinal.length > 30 ? item.prejudiceFinal.substring(0, 30) + '...' : item.prejudiceFinal,
     fullName: item.prejudiceFinal,
     value: parseInt(item.total),
     color: COLORS[index % COLORS.length]
   }));
 
-  const programmeChartData = stats.programme.map((item, index) => ({
+  const programmeChartData = stats.programme.map((item: any, index) => ({
     name: item.programme.length > 40 ? item.programme.substring(0, 40) + '...' : item.programme,
     fullName: item.programme,
     value: parseInt(item.total),
@@ -176,7 +215,7 @@ const DashboardVictims = () => {
           subtitle="Victimes enregistrées"
           loading={loading}
         />
-        
+
         <StatCard
           title="Indemnisation Totale"
           value={loading ? "..." : `${stats.totalIndemnisation.toLocaleString()} USD`}
@@ -185,7 +224,7 @@ const DashboardVictims = () => {
           subtitle="Montant total versé"
           loading={loading}
         />
-        
+
         <StatCard
           title="Provinces Couvertes"
           value={loading ? "..." : totalProvinces}
@@ -194,7 +233,7 @@ const DashboardVictims = () => {
           subtitle="Zones géographiques"
           loading={loading}
         />
-        
+
         <StatCard
           title="Territoires"
           value={loading ? "..." : totalTerritoires}
@@ -215,7 +254,7 @@ const DashboardVictims = () => {
           subtitle={`${totalVictimes > 0 ? Math.round((totalFemmes / totalVictimes) * 100) : 0}% du total`}
           loading={loading}
         />
-        
+
         <StatCard
           title="Victimes Hommes"
           value={loading ? "..." : totalHommes}
@@ -250,7 +289,7 @@ const DashboardVictims = () => {
                   cx="50%"
                   cy="50%"
                   outerRadius={120}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
                   labelLine={false}
                 >
                   {sexeChartData.map((entry, index) => (
@@ -280,8 +319,8 @@ const DashboardVictims = () => {
             <ResponsiveContainer width="100%" height={320}>
               <BarChart data={provinceChartData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis 
-                  dataKey="name" 
+                <XAxis
+                  dataKey="name"
                   angle={-45}
                   textAnchor="end"
                   height={80}
@@ -353,8 +392,8 @@ const DashboardVictims = () => {
             <ResponsiveContainer width="100%" height={320}>
               <BarChart data={programmeChartData} margin={{ top: 20, right: 30, left: 20, bottom: 100 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis 
-                  dataKey="name" 
+                <XAxis
+                  dataKey="name"
                   angle={-45}
                   textAnchor="end"
                   height={120}
@@ -388,7 +427,7 @@ const DashboardVictims = () => {
             </div>
           ) : (
             <div className="space-y-3 max-h-80 overflow-y-auto">
-              {stats.territoire.map((item, index) => (
+              {stats.territoire.map((item: any, index) => (
                 <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
                   <div className="flex items-center gap-3">
                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
@@ -419,7 +458,7 @@ const DashboardVictims = () => {
             </div>
           ) : (
             <div className="space-y-3">
-              {stats.categorie.map((item, index) => (
+              {stats.categorie.map((item: any, index) => (
                 <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
                   <div className="flex items-center gap-3">
                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
