@@ -92,10 +92,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
         if (search) params.nom = search;
 
         // Build filters from rules
-        filterRules.forEach((rule, index) => {
-            params[`filter[${index}][field]`] = rule.field;
-            params[`filter[${index}][operator]`] = rule.operator;
-            params[`filter[${index}][value]`] = rule.value;
+        filterRules.forEach((rule) => {
+            if (rule.value) params[rule.field] = rule.value;
         });
 
         return new URLSearchParams(params).toString();
@@ -268,8 +266,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                 <button
                                     onClick={() => setShowFilterBuilder(!showFilterBuilder)}
                                     className={`px-6 py-3 border flex items-center gap-2 font-medium transition-colors ${showFilterBuilder
-                                            ? 'bg-blue-50 border-blue-300 text-blue-700'
-                                            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                                        ? 'bg-blue-50 border-blue-300 text-blue-700'
+                                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
                                         }`}
                                 >
                                     <Filter size={20} />
