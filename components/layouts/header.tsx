@@ -100,7 +100,7 @@ const Header = () => {
                   <div key={notif.id} className="px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0">
                     <div className="flex items-start gap-3">
                       <div className={`w-2 h-2 rounded-full mt-2 ${notif.type === 'info' ? 'bg-blue-500' :
-                          notif.type === 'success' ? 'bg-green-500' : 'bg-yellow-500'
+                        notif.type === 'success' ? 'bg-green-500' : 'bg-yellow-500'
                         }`}></div>
                       <div className="flex-1">
                         <p className="text-sm font-medium text-gray-800">{notif.title}</p>
@@ -180,17 +180,17 @@ const Header = () => {
               </div>
 
               {/* Informations institutionnelles */}
-              <div className="px-6 py-3 bg-gradient-to-r from-primary-50 to-secondary-50 border-b border-gray-100">
+              {/* <div className="px-6 py-3 bg-gradient-to-r from-primary-50 to-secondary-50 border-b border-gray-100">
                 <div className="flex items-center gap-2 text-sm">
                   <FiShield className="text-primary-600" size={16} />
                   <span className="font-medium text-gray-700">{user.department}</span>
                 </div>
                 <div className="text-xs text-gray-500 mt-1">Session active depuis 09:30</div>
-              </div>
+              </div> */}
 
               {/* Actions */}
-              <div className="py-2">
-                <button className="flex items-center gap-3 w-full text-left px-6 py-3 text-gray-700 hover:bg-gray-50 transition-colors">
+              <div className="pointer">
+                {/* <button className="flex items-center gap-3 w-full text-left px-6 py-3 text-gray-700 hover:bg-gray-50 transition-colors">
                   <FiUser className="text-gray-500" size={18} />
                   <span className="font-medium">Mon profil</span>
                 </button>
@@ -198,12 +198,12 @@ const Header = () => {
                 <button className="flex items-center gap-3 w-full text-left px-6 py-3 text-gray-700 hover:bg-gray-50 transition-colors">
                   <FiSettings className="text-gray-500" size={18} />
                   <span className="font-medium">Paramètres</span>
-                </button>
+                </button> */}
 
-                <hr className="my-2 border-gray-100" />
+                {/* <hr className="my-2 border-gray-100" /> */}
 
                 <button
-                  className="flex items-center gap-3 w-full text-left px-6 py-3 text-red-600 hover:bg-red-50 font-medium transition-colors"
+                  className="flex items-center gap-3 w-full text-left px-6 py-3 text-red-600 hover:bg-red-50 font-medium transition-colors bg-red-100"
                   onClick={() => {
                     window.location.href = 'http://10.140.0.106:4201/login';
                   }}

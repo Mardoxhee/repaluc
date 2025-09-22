@@ -37,11 +37,6 @@ export default function Home() {
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                 <span className="text-primary-700 font-semibold text-sm">FONAREV OPÉRATIONNEL</span>
               </div>
-
-              {/* <p className="text-[14px] text-gray-600 max-w-3xl mx-auto leading-relaxed">
-                Plateforme officielle de la République Démocratique du Congo pour le suivi, 
-                la gestion et l'accompagnement des victimes dans leur parcours vers la justice et la réparation.
-              </p> */}
             </div>
 
 
@@ -136,12 +131,6 @@ export default function Home() {
         {/* Section institutionnelle */}
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-r from-primary-600 to-primary-700 text-white py-2">
           <div className="max-w-5xl mx-auto px-6 text-center">
-            {/* <h2 className="text-[16px] font-bold mb-4">Engagement de l'État</h2> */}
-            {/* <p className="text-[14px] text-primary-100 max-w-3xl mx-auto mb-6 leading-relaxed">
-              Dans le cadre de sa politique de justice transitionnelle, la République Démocratique du Congo 
-              s'engage à garantir les droits des victimes et à assurer leur accès effectif à la justice et aux réparations.
-            </p> */}
-
             <div className="flex flex-wrap justify-center gap-6">
               <div className="flex items-center gap-2 bg-white/10 rounded-full px-4 py-2">
                 <FiCheck className="text-green-300" />
