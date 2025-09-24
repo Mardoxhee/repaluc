@@ -1,5 +1,5 @@
 import React from 'react';
-import { DollarSign, FileText, User, MapPin, Calendar, Shield, Check } from 'lucide-react';
+import { DollarSign, FileText, User, MapPin, Calendar, Shield, Check, UserCircle } from 'lucide-react';
 
 interface InfosVictimProps {
     victim: {
@@ -76,7 +76,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
         reparations,
         comment,
         commentaire,
-        avatar = "https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=500",
+        avatar,
     } = victim;
     const { isDirect } = victim;
 
@@ -106,11 +106,17 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                 {/* Left Column - Photo & Key Info */}
                 <div className="col-span-12 md:col-span-4">
                     <div className="border border-gray-300 p-4 mb-4">
-                        <img
-                            src={avatar}
-                            alt="Photo d'identité"
-                            className="w-32 h-32 object-cover border border-gray-400 mx-auto block"
-                        />
+                        {avatar ? (
+                            <img
+                                src={avatar}
+                                alt="Photo d'identité"
+                                className="w-32 h-32 object-cover border border-gray-400 mx-auto block rounded-lg"
+                            />
+                        ) : (
+                            <div className="w-32 h-32 mx-auto flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 border border-gray-400 rounded-lg">
+                                <UserCircle className="w-20 h-20 text-gray-400" />
+                            </div>
+                        )}
                         <p className="text-xs text-gray-500 text-center mt-2">Photo d'identité</p>
                     </div>
 
