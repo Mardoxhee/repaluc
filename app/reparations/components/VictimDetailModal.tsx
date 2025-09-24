@@ -14,7 +14,6 @@ import {
   UserCheck,
   Loader2
 } from 'lucide-react';
-import { GiReceiveMoney } from "react-icons/gi";
 import { Modal } from 'flowbite-react';
 import InfosVictim from './infosVictim';
 
@@ -72,11 +71,12 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
   const [tab, setTab] = useState<'info' | 'dossier' | 'progression' | 'reglages'>('info');
   const [currentVictim, setCurrentVictim] = useState<Victim>(victim);
   const [isConfirming, setIsConfirming] = useState(false);
-  const [files, setFiles] = useState([
+  const [files, setFiles] = useState<Array<{ id: number; label: string; name: string; lien?: string }>>([
     { id: 1, label: 'Rapport médical', name: 'rapport_medical.pdf' },
     { id: 2, label: 'Témoignage', name: 'temoignage.docx' },
     { id: 3, label: 'Photos', name: 'photos.zip' }
   ]);
+  const [newFileFile, setNewFileFile] = useState<File | null>(null);
   const [selectedFile, setSelectedFile] = useState<{ id: number; label: string; name: string } | null>(null);
   const [editFileIdx, setEditFileIdx] = useState<number | null>(null);
   const [editFileLabel, setEditFileLabel] = useState('');
@@ -330,44 +330,76 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
               </div>
 
               {addFileMode ? (
-                <div className="flex items-center gap-2 p-3 !bg-gray-50 rounded-lg !border !border-gray-200">
+                <form
+                  className="flex items-center gap-2 p-3 !bg-gray-50 rounded-lg !border !border-gray-200"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!newFileLabel || !newFileFile || !currentVictim.id) return;
+                    try {
+                      // 1. Upload fichier sur Minio
+                      const formData = new FormData();
+                      formData.append('file', newFileFile);
+                      const uploadRes = await fetch('http://10.140.0.106:8006/minio/files/upload', {
+                        method: 'POST',
+                        body: formData
+                      });
+                      const uploadData = await uploadRes.json();
+                      const lien = uploadData?.url;
+                      if (!lien) throw new Error('Erreur upload fichier');
+                      // 2. POST sur /document_victime
+                      const docRes = await fetch('http://10.140.0.106:8006/document-victime', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          label: newFileLabel,
+                          lien,
+                          victimeId: currentVictim.id,
+                          userId: 1
+                        })
+                      });
+                      if (!docRes.ok) throw new Error('Erreur enregistrement document');
+                      // 3. Ajoute à la liste locale
+                      setFiles([
+                        ...files,
+                        { id: Math.random(), label: newFileLabel, name: newFileFile.name, lien }
+                      ]);
+                      setNewFileLabel('');
+                      setNewFileFile(null);
+                      setAddFileMode(false);
+                    } catch (err: any) {
+                      alert(err.message || 'Erreur lors de l\'upload');
+                    }
+                  }}
+                >
                   <input
                     className="!border !border-gray-300 px-2 py-1 rounded text-sm flex-1 !bg-white !text-gray-900"
                     value={newFileLabel}
                     onChange={e => setNewFileLabel(e.target.value)}
                     placeholder="Label du fichier"
+                    required
                   />
                   <input
+                    type="file"
                     className="!border !border-gray-300 px-2 py-1 rounded text-sm flex-1 !bg-white !text-gray-900"
-                    value={newFileName}
-                    onChange={e => setNewFileName(e.target.value)}
-                    placeholder="Nom du fichier"
+                    onChange={e => setNewFileFile(e.target.files?.[0] || null)}
+                    required
                   />
                   <button
+                    type="submit"
                     className="px-3 py-1 !bg-green-500 !text-white text-sm rounded hover:!bg-green-600 flex items-center gap-1"
-                    onClick={() => {
-                      if (newFileLabel && newFileName) {
-                        setFiles([
-                          ...files,
-                          { id: Math.random(), label: newFileLabel, name: newFileName }
-                        ]);
-                        setNewFileLabel('');
-                        setNewFileName('');
-                        setAddFileMode(false);
-                      }
-                    }}
                   >
                     <Check size={14} />
                     Ajouter
                   </button>
                   <button
+                    type="button"
                     className="px-3 py-1 !bg-gray-300 !text-gray-700 text-sm rounded hover:!bg-gray-400 flex items-center gap-1"
                     onClick={() => setAddFileMode(false)}
                   >
                     <X size={14} />
                     Annuler
                   </button>
-                </div>
+                </form>
               ) : (
                 <button
                   className="flex items-center gap-2 px-4 py-2 !bg-pink-600 !text-white text-sm font-medium rounded hover:!bg-pink-700 transition-colors"

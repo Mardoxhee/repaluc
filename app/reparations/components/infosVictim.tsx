@@ -37,6 +37,7 @@ interface InfosVictimProps {
         comment?: string;
         commentaire?: string;
         avatar?: string;
+        isDirect?: boolean;
     }
 }
 
@@ -77,6 +78,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
         commentaire,
         avatar = "https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=500",
     } = victim;
+    const { isDirect } = victim;
 
 
 
@@ -132,6 +134,16 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
 
                     {/* Status Badges */}
                     <div className="space-y-3 mb-6">
+                        {/* Flag Victime Directe/Indirecte (badge discret) */}
+                        {isDirect === true ? (
+                            <span className="inline-block px-2 py-1 text-xs font-semibold rounded bg-green-100 text-green-700 border border-green-300 mb-2">
+                                Victime directe
+                            </span>
+                        ) : isDirect === false ? (
+                            <span className="inline-block px-2 py-1 text-xs font-semibold rounded bg-gray-100 text-gray-700 border border-gray-300 mb-2">
+                                Victime indirecte
+                            </span>
+                        ) : null}
                         <div className="border border-gray-300 p-3">
                             <div className="flex items-center gap-2 mb-2">
                                 <User className="text-gray-600" size={14} />

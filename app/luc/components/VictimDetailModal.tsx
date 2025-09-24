@@ -72,12 +72,25 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
   const [tab, setTab] = useState<'info' | 'dossier' | 'progression' | 'reglages'>('info');
   const [currentVictim, setCurrentVictim] = useState<Victim>(victim);
   const [isConfirming, setIsConfirming] = useState(false);
-  const [files, setFiles] = useState<Array<{ id: number; label: string; name: string; lien?: string }>>([
-    { id: 1, label: 'Rapport médical', name: 'rapport_medical.pdf' },
-    { id: 2, label: 'Témoignage', name: 'temoignage.docx' },
-    { id: 3, label: 'Photos', name: 'photos.zip' }
-  ]);
+  const [files, setFiles] = useState<Array<{ id: number; label: string; name?: string; lien?: string }>>([]);
   const [newFileFile, setNewFileFile] = useState<File | null>(null);
+
+  // Charger la liste des documents réels
+  React.useEffect(() => {
+    if (!currentVictim?.id) return;
+    const fetchDocs = async () => {
+      try {
+        const res = await fetch(`http://10.140.0.106:8006/victime/document/${currentVictim.id}`);
+        if (!res.ok) throw new Error('Erreur récupération des documents');
+        const data = await res.json();
+        // data attendu: tableau d'objets {id, label, lien, ...}
+        setFiles(Array.isArray(data) ? data : []);
+      } catch (e) {
+        setFiles([]);
+      }
+    };
+    fetchDocs();
+  }, [currentVictim?.id]);
   const [selectedFile, setSelectedFile] = useState<{ id: number; label: string; name: string } | null>(null);
   const [editFileIdx, setEditFileIdx] = useState<number | null>(null);
   const [editFileLabel, setEditFileLabel] = useState('');
@@ -171,28 +184,29 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
           )}
 
           {tab === 'dossier' && (
-            <div className="!bg-white !text-gray-900">
-              <h4 className="font-semibold !text-gray-700 mb-4">Fichiers du dossier</h4>
-              <div className="space-y-2">
-                {files.map(file => (
-                  <div key={file.id} className="flex items-center justify-between p-3 !bg-gray-50 rounded-lg !border !border-gray-200">
-                    <div className="flex items-center gap-3">
-                      <FileText className="!text-gray-400" size={16} />
-                      <div>
-                        <div className="text-sm font-medium !text-gray-700">{file.label}</div>
-                        <div className="text-xs !text-gray-500">{file.name}</div>
-                      </div>
-                    </div>
-                    <button
-                      className="flex items-center gap-1 px-3 py-1 !bg-blue-50 !text-blue-600 text-sm font-medium rounded hover:!bg-blue-100 transition-colors"
-                      onClick={() => setSelectedFile(file)}
-                    >
-                      <Eye size={14} />
-                      Voir
-                    </button>
-                  </div>
-                ))}
+            <div className="mt-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Documents numérisés</h3>
               </div>
+              <ul className="divide-y divide-gray-100 mb-4">
+                {files.length === 0 ? (
+                  <li className="text-gray-500 text-sm py-4 text-center">Aucun document numérisé pour cette victime.</li>
+                ) : (
+                  files.map((doc) => (
+                    <li key={doc.id} className="flex items-center justify-between py-2">
+                      <div>
+                        <span className="font-medium text-gray-800">{doc.label}</span>
+                        {doc.name && <span className="ml-2 text-xs text-gray-500">({doc.name})</span>}
+                      </div>
+                      <div className="flex gap-2">
+                        {doc.lien && (
+                          <a href={doc.lien} target="_blank" rel="noopener noreferrer" className="px-3 py-1 bg-blue-50 text-blue-700 rounded text-xs font-semibold border border-blue-100 hover:bg-blue-100 transition">Voir</a>
+                        )}
+                      </div>
+                    </li>
+                  ))
+                )}
+              </ul>
             </div>
           )}
 
@@ -359,14 +373,27 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                         })
                       });
                       if (!docRes.ok) throw new Error('Erreur enregistrement document');
-                      // 3. Ajoute à la liste locale
-                      setFiles([
-                        ...files,
-                        { id: Math.random(), label: newFileLabel, name: newFileFile.name, lien }
-                      ]);
+                      // 3. SweetAlert succès et recharge la liste
+                      const Swal = (await import('sweetalert2')).default;
+                      await Swal.fire({
+                        icon: 'success',
+                        title: 'Document numérisé',
+                        text: 'Le document a été numérisé et enregistré avec succès.',
+                        timer: 1500,
+                        showConfirmButton: false
+                      });
                       setNewFileLabel('');
                       setNewFileFile(null);
                       setAddFileMode(false);
+                      // Recharge la liste
+                      try {
+                        const res = await fetch(`http://10.140.0.106:8006/victime/document/${currentVictim.id}`);
+                        if (res.ok) {
+                          const data = await res.json();
+                          setFiles(Array.isArray(data) ? data : []);
+                        }
+                      } catch {}
+
                     } catch (err: any) {
                       alert(err.message || 'Erreur lors de l\'upload');
                     }

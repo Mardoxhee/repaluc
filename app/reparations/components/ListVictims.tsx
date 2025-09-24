@@ -92,10 +92,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
         if (search) params.nom = search;
 
         // Build filters from rules
-        filterRules.forEach((rule, index) => {
-            params[`filter[${index}][field]`] = rule.field;
-            params[`filter[${index}][operator]`] = rule.operator;
-            params[`filter[${index}][value]`] = rule.value;
+        filterRules.forEach((rule) => {
+            if (rule.value) params[rule.field] = rule.value;
         });
 
         return new URLSearchParams(params).toString();
@@ -179,51 +177,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
         }
     };
 
-    const buildClassificationPayload = () => {
-        return victims.map(v => ({
-            programmeCategorie: v.categorie || '',
-            prejudiceType: v.prejudicesSubis || '',
-            violation: v.typeViolation || '',
-            victimeId: v.id
-        }));
-    };
 
-    const [isConfirming, setIsConfirming] = useState(false);
-
-    const handleClassify = async () => {
-        setIsConfirming(true);
-        try {
-            const payload = buildClassificationPayload();
-            const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-            const response = await fetch(`${baseUrl}/programme-prejudice-mesure/classify/multiple`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            if (response.ok) {
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Confirmation réussie',
-                    text: `${victims.length} victimes ont été confirmées avec succès.`,
-                });
-            } else {
-                Swal.fire({
-                    icon: 'info',
-                    title: 'Victimes confirmées',
-                    text: 'Victimes confirmées mais aucun programme de réparations ne peut les prendre en charge pour le moment',
-                });
-            }
-        } catch (err: any) {
-            Swal.fire({
-                icon: 'error',
-                title: 'Erreur',
-                text: 'Erreur lors de la confirmation groupée.',
-            });
-        } finally {
-            setIsConfirming(false);
-        }
-    };
 
     const getStatusBadgeStyle = (status: string) => {
         switch (status?.toLowerCase()) {
@@ -322,7 +276,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                             );
 
                                             return (
-                                                <div key={rule.id} className="flex items-center gap-2 p-3 bg-gray-50 border border-gray-200">
+                                                <div key={rule.id} className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200">
                                                     {index > 0 && (
                                                         <span className="text-sm font-medium text-gray-500 px-2">ET</span>
                                                     )}
@@ -360,7 +314,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                                         <select
                                                             value={rule.value}
                                                             onChange={(e) => updateFilterRule(rule.id, { value: e.target.value })}
-                                                            className="px-3 py-2 border border-gray-300 bg-white focus:outline-none focus:border-blue-500 min-w-28"
+                                                            className="px-3 py-2 border border-gray-300 bg-white focus:outline-none focus:border-blue-500 min-w-48"
                                                         >
                                                             <option value="">Sélectionner...</option>
                                                             {field.options?.map(option => (
@@ -375,7 +329,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                                             value={rule.value}
                                                             onChange={(e) => updateFilterRule(rule.id, { value: e.target.value })}
                                                             placeholder="Valeur..."
-                                                            className="px-3 py-2 border border-gray-300 bg-white focus:outline-none focus:border-blue-500 min-w-28"
+                                                            className="px-3 py-2 border border-gray-300 bg-white focus:outline-none focus:border-blue-500 min-w-48"
                                                         />
                                                     )}
 
@@ -426,14 +380,14 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                         {victims.length} victime{victims.length > 1 ? 's' : ''} trouvée{victims.length > 1 ? 's' : ''}
                                     </span>
                                 </div>
-                                <button
+                                {/* <button
                                     onClick={handleClassify}
                                     disabled={isConfirming}
                                     className="px-4 py-2 bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-2"
                                 >
                                     <Check size={16} />
                                     {isConfirming ? 'Confirmation...' : 'Confirmer toutes les victimes'}
-                                </button>
+                                </button> */}
                             </div>
                         </div>
                     )}
