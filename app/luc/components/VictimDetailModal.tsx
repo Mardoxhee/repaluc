@@ -17,6 +17,25 @@ import {
 import { GiReceiveMoney } from "react-icons/gi";
 import { Modal } from 'flowbite-react';
 import InfosVictim from './infosVictim';
+import Swal from 'sweetalert2';
+
+// Fonction pour obtenir le lien réel du fichier
+const getFileLink = async (lien: string): Promise<string> => {
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
+    const response = await fetch(`${baseUrl}/minio/files/${lien}`);
+    
+    if (!response.ok) {
+      throw new Error('Erreur lors de la récupération du lien du fichier');
+    }
+    
+    const data = await response.json();
+    return data.url || data.link || response.url;
+  } catch (error) {
+    console.error('Erreur getFileLink:', error);
+    throw error;
+  }
+};
 
 interface Victim {
   id: number;
@@ -73,31 +92,72 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
   const [currentVictim, setCurrentVictim] = useState<Victim>(victim);
   const [isConfirming, setIsConfirming] = useState(false);
   const [files, setFiles] = useState<Array<{ id: number; label: string; name?: string; lien?: string }>>([]);
+  const [loadingFiles, setLoadingFiles] = useState(true);
+  const [uploadingFile, setUploadingFile] = useState(false);
   const [newFileFile, setNewFileFile] = useState<File | null>(null);
-
-  // Charger la liste des documents réels
-  React.useEffect(() => {
-    if (!currentVictim?.id) return;
-    const fetchDocs = async () => {
-      try {
-        const res = await fetch(`http://10.140.0.106:8006/victime/document/${currentVictim.id}`);
-        if (!res.ok) throw new Error('Erreur récupération des documents');
-        const data = await res.json();
-        // data attendu: tableau d'objets {id, label, lien, ...}
-        setFiles(Array.isArray(data) ? data : []);
-      } catch (e) {
-        setFiles([]);
-      }
-    };
-    fetchDocs();
-  }, [currentVictim?.id]);
-  const [selectedFile, setSelectedFile] = useState<{ id: number; label: string; name: string } | null>(null);
+  const [selectedFile, setSelectedFile] = useState<{ id: number; label: string; name: string; lien?: string } | null>(null);
   const [editFileIdx, setEditFileIdx] = useState<number | null>(null);
   const [editFileLabel, setEditFileLabel] = useState('');
   const [editFileName, setEditFileName] = useState('');
   const [addFileMode, setAddFileMode] = useState(false);
   const [newFileLabel, setNewFileLabel] = useState('');
   const [newFileName, setNewFileName] = useState('');
+
+  // Charger la liste des documents réels
+  React.useEffect(() => {
+    if (!currentVictim?.id) return;
+    
+    const fetchDocs = async () => {
+      setLoadingFiles(true);
+      try {
+        const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
+        const res = await fetch(`${baseUrl}/victime/${currentVictim.id}`);
+        if (!res.ok) throw new Error('Erreur récupération des documents');
+        const data = await res.json();
+        
+        // Extraire les documents de la réponse
+        const documents = data?.documentVictime || [];
+        const mappedFiles = documents.map((doc: any) => ({
+          id: doc.id,
+          label: doc.label,
+          name: doc.lien, // Le nom du fichier est dans 'lien'
+          lien: doc.lien
+        }));
+        
+        setFiles(mappedFiles);
+      } catch (e) {
+        console.error('Erreur lors du chargement des documents:', e);
+        setFiles([]);
+      } finally {
+        setLoadingFiles(false);
+      }
+    };
+    
+    fetchDocs();
+  }, [currentVictim?.id]);
+
+  // Fonction pour ouvrir un fichier
+  const handleOpenFile = async (file: { id: number; label: string; name?: string; lien?: string }) => {
+    if (!file.lien) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'Erreur',
+        text: 'Lien du fichier non disponible'
+      });
+      return;
+    }
+
+    try {
+      const fileUrl = await getFileLink(file.lien);
+      window.open(fileUrl, '_blank');
+    } catch (error) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'Erreur',
+        text: 'Impossible d\'ouvrir le fichier'
+      });
+    }
+  };
 
   const confirmVictim = async () => {
     if (!currentVictim.id) {
@@ -188,25 +248,42 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">Documents numérisés</h3>
               </div>
-              <ul className="divide-y divide-gray-100 mb-4">
-                {files.length === 0 ? (
-                  <li className="text-gray-500 text-sm py-4 text-center">Aucun document numérisé pour cette victime.</li>
-                ) : (
-                  files.map((doc) => (
-                    <li key={doc.id} className="flex items-center justify-between py-2">
-                      <div>
-                        <span className="font-medium text-gray-800">{doc.label}</span>
-                        {doc.name && <span className="ml-2 text-xs text-gray-500">({doc.name})</span>}
-                      </div>
-                      <div className="flex gap-2">
-                        {doc.lien && (
-                          <a href={doc.lien} target="_blank" rel="noopener noreferrer" className="px-3 py-1 bg-blue-50 text-blue-700 rounded text-xs font-semibold border border-blue-100 hover:bg-blue-100 transition">Voir</a>
-                        )}
-                      </div>
-                    </li>
-                  ))
-                )}
-              </ul>
+              
+              {loadingFiles ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="flex flex-col items-center gap-2">
+                    <Loader2 className="animate-spin text-blue-600" size={24} />
+                    <span className="text-gray-500 text-sm">Chargement des documents...</span>
+                  </div>
+                </div>
+              ) : (
+                <ul className="divide-y divide-gray-100 mb-4">
+                  {files.length === 0 ? (
+                    <li className="text-gray-500 text-sm py-4 text-center">Aucun document numérisé pour cette victime.</li>
+                  ) : (
+                    files.map((doc) => (
+                      <li key={doc.id} className="flex items-center justify-between py-3 hover:bg-gray-50 rounded-lg px-2 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <FileText className="text-gray-400" size={16} />
+                          <div>
+                            <span className="font-medium text-gray-800">{doc.label}</span>
+                            {doc.name && <span className="ml-2 text-xs text-gray-500">({doc.name})</span>}
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleOpenFile(doc)}
+                            className="px-3 py-1 bg-blue-50 text-blue-700 rounded text-xs font-semibold border border-blue-100 hover:bg-blue-100 transition flex items-center gap-1"
+                          >
+                            <Eye size={12} />
+                            Voir
+                          </button>
+                        </div>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              )}
             </div>
           )}
 
@@ -350,19 +427,24 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                   onSubmit={async (e) => {
                     e.preventDefault();
                     if (!newFileLabel || !newFileFile || !currentVictim.id) return;
+                    
+                    setUploadingFile(true);
                     try {
                       // 1. Upload fichier sur Minio
                       const formData = new FormData();
                       formData.append('file', newFileFile);
-                      const uploadRes = await fetch('http://10.140.0.106:8006/minio/files/upload', {
+                      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
+                      const uploadRes = await fetch(`${baseUrl}/minio/files/upload`, {
                         method: 'POST',
                         body: formData
                       });
+                      
                       const uploadData = await uploadRes.json();
                       const lien = uploadData?.url;
                       if (!lien) throw new Error('Erreur upload fichier');
+                      
                       // 2. POST sur /document_victime
-                      const docRes = await fetch('http://10.140.0.106:8006/document-victime', {
+                      const docRes = await fetch(`${baseUrl}/document-victime`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -372,9 +454,10 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                           userId: 1
                         })
                       });
+                      
                       if (!docRes.ok) throw new Error('Erreur enregistrement document');
-                      // 3. SweetAlert succès et recharge la liste
-                      const Swal = (await import('sweetalert2')).default;
+                      
+                      // 3. Succès et recharge la liste
                       await Swal.fire({
                         icon: 'success',
                         title: 'Document numérisé',
@@ -382,20 +465,40 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                         timer: 1500,
                         showConfirmButton: false
                       });
+                      
                       setNewFileLabel('');
                       setNewFileFile(null);
                       setAddFileMode(false);
-                      // Recharge la liste
+                      
+                      // Recharge la liste des documents
+                      setLoadingFiles(true);
                       try {
-                        const res = await fetch(`http://10.140.0.106:8006/victime/document/${currentVictim.id}`);
+                        const res = await fetch(`${baseUrl}/victime/${currentVictim.id}`);
                         if (res.ok) {
                           const data = await res.json();
-                          setFiles(Array.isArray(data) ? data : []);
+                          const documents = data?.documentVictime || [];
+                          const mappedFiles = documents.map((doc: any) => ({
+                            id: doc.id,
+                            label: doc.label,
+                            name: doc.lien,
+                            lien: doc.lien
+                          }));
+                          setFiles(mappedFiles);
                         }
-                      } catch {}
+                      } catch (e) {
+                        console.error('Erreur lors du rechargement des documents:', e);
+                      } finally {
+                        setLoadingFiles(false);
+                      }
 
                     } catch (err: any) {
-                      alert(err.message || 'Erreur lors de l\'upload');
+                      await Swal.fire({
+                        icon: 'error',
+                        title: 'Erreur',
+                        text: err.message || 'Erreur lors de l\'upload'
+                      });
+                    } finally {
+                      setUploadingFile(false);
                     }
                   }}
                 >
@@ -405,24 +508,37 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                     onChange={e => setNewFileLabel(e.target.value)}
                     placeholder="Label du fichier"
                     required
+                    disabled={uploadingFile}
                   />
                   <input
                     type="file"
                     className="!border !border-gray-300 px-2 py-1 rounded text-sm flex-1 !bg-white !text-gray-900"
                     onChange={e => setNewFileFile(e.target.files?.[0] || null)}
                     required
+                    disabled={uploadingFile}
                   />
                   <button
                     type="submit"
-                    className="px-3 py-1 !bg-green-500 !text-white text-sm rounded hover:!bg-green-600 flex items-center gap-1"
+                    className="px-3 py-1 !bg-green-500 !text-white text-sm rounded hover:!bg-green-600 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={uploadingFile}
                   >
-                    <Check size={14} />
-                    Ajouter
+                    {uploadingFile ? (
+                      <>
+                        <Loader2 className="animate-spin" size={14} />
+                        Upload...
+                      </>
+                    ) : (
+                      <>
+                        <Check size={14} />
+                        Ajouter
+                      </>
+                    )}
                   </button>
                   <button
                     type="button"
                     className="px-3 py-1 !bg-gray-300 !text-gray-700 text-sm rounded hover:!bg-gray-400 flex items-center gap-1"
                     onClick={() => setAddFileMode(false)}
+                    disabled={uploadingFile}
                   >
                     <X size={14} />
                     Annuler
