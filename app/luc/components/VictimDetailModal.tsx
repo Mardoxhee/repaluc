@@ -24,13 +24,17 @@ const getFileLink = async (lien: string): Promise<string> => {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
     const response = await fetch(`${baseUrl}/minio/files/${lien}`);
-    
+
     if (!response.ok) {
       throw new Error('Erreur lors de la récupération du lien du fichier');
     }
-    
-    const data = await response.json();
-    return data.url || data.link || response.url;
+
+    const resData = await response.json();
+    // Le vrai lien est dans resData.data.src
+    if (resData && resData.data && resData.data.src) {
+      return resData.data.src;
+    }
+    throw new Error('Lien du fichier non trouvé dans la réponse');
   } catch (error) {
     console.error('Erreur getFileLink:', error);
     throw error;
@@ -106,15 +110,15 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
   // Charger la liste des documents réels
   React.useEffect(() => {
     if (!currentVictim?.id) return;
-    
+
     const fetchDocs = async () => {
       setLoadingFiles(true);
       try {
         const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
-        const res = await fetch(`${baseUrl}/victime/${currentVictim.id}`);
+        const res = await fetch(`${baseUrl}/victime/document/${currentVictim.id}`);
         if (!res.ok) throw new Error('Erreur récupération des documents');
         const data = await res.json();
-        
+
         // Extraire les documents de la réponse
         const documents = data?.documentVictime || [];
         const mappedFiles = documents.map((doc: any) => ({
@@ -123,7 +127,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
           name: doc.lien, // Le nom du fichier est dans 'lien'
           lien: doc.lien
         }));
-        
+
         setFiles(mappedFiles);
       } catch (e) {
         console.error('Erreur lors du chargement des documents:', e);
@@ -132,7 +136,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
         setLoadingFiles(false);
       }
     };
-    
+
     fetchDocs();
   }, [currentVictim?.id]);
 
@@ -246,105 +250,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
           {tab === 'dossier' && (
             <div className="mt-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Documents numérisés</h3>
-              </div>
-              
-              {loadingFiles ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="flex flex-col items-center gap-2">
-                    <Loader2 className="animate-spin text-blue-600" size={24} />
-                    <span className="text-gray-500 text-sm">Chargement des documents...</span>
-                  </div>
-                </div>
-              ) : (
-                <ul className="divide-y divide-gray-100 mb-4">
-                  {files.length === 0 ? (
-                    <li className="text-gray-500 text-sm py-4 text-center">Aucun document numérisé pour cette victime.</li>
-                  ) : (
-                    files.map((doc) => (
-                      <li key={doc.id} className="flex items-center justify-between py-3 hover:bg-gray-50 rounded-lg px-2 transition-colors">
-                        <div className="flex items-center gap-3">
-                          <FileText className="text-gray-400" size={16} />
-                          <div>
-                            <span className="font-medium text-gray-800">{doc.label}</span>
-                            {doc.name && <span className="ml-2 text-xs text-gray-500">({doc.name})</span>}
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleOpenFile(doc)}
-                            className="px-3 py-1 bg-blue-50 text-blue-700 rounded text-xs font-semibold border border-blue-100 hover:bg-blue-100 transition flex items-center gap-1"
-                          >
-                            <Eye size={12} />
-                            Voir
-                          </button>
-                        </div>
-                      </li>
-                    ))
-                  )}
-                </ul>
-              )}
-            </div>
-          )}
 
-          {tab === 'progression' && (
-            <div className="text-center py-8 !bg-white !text-gray-900">
-              <BarChart2 className="mx-auto !text-gray-400 mb-4" size={48} />
-              <div className="!text-gray-500">Progression du dossier (à implémenter)</div>
-            </div>
-          )}
-
-          {tab === 'reglages' && (
-            <div className="!bg-white !text-gray-900">
-              {/* Section confirmation de victime */}
-              <div className="mb-6 p-4 !bg-blue-50 rounded-lg !border !border-blue-200">
-                <h4 className="font-semibold !text-gray-700 mb-3 flex items-center gap-2">
-                  <UserCheck className="!text-blue-600" size={18} />
-                  Statut de la victime
-                </h4>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm !text-gray-600 mb-1">
-                      Statut actuel :
-                      <span className={`ml-2 px-3 py-1 text-sm font-semibold rounded-full ${!status || status === 'non confirmé'
-                        ? '!bg-orange-100 !text-orange-700'
-                        : '!bg-green-100 !text-green-700'
-                        }`}>
-                        {status && status !== '' ? status : 'non confirmé'}
-                      </span>
-                    </div>
-                    {(!status || status === 'non confirmé') && (
-                      <div className="text-xs !text-gray-500">
-                        Confirmez cette victime pour valider son dossier
-                      </div>
-                    )}
-                  </div>
-                  {(!status || status === 'non confirmé') && (
-                    <button
-                      onClick={confirmVictim}
-                      disabled={isConfirming}
-                      className="flex items-center gap-2 px-4 py-2 !bg-green-600 !text-white text-sm font-medium rounded hover:!bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isConfirming ? (
-                        <>
-                          <Loader2 className="animate-spin" size={16} />
-                          Confirmation...
-                        </>
-                      ) : (
-                        <>
-                          <Check size={16} />
-                          Confirmer la victime
-                        </>
-                      )}
-                    </button>
-                  )}
-                  {status === 'confirmé' && (
-                    <div className="flex items-center gap-2 !text-green-600 text-sm font-medium">
-                      <Check size={16} />
-                      Victime confirmée
-                    </div>
-                  )}
-                </div>
               </div>
 
               {/* Section gestion des fichiers */}
@@ -414,6 +320,14 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                           >
                             <Trash size={14} />
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenFile(file)}
+                            className="px-2 py-1 !bg-blue-50 !text-blue-600 text-sm rounded hover:!bg-blue-100 flex items-center gap-1"
+                            title="Voir le document"
+                          >
+                            <Eye size={16} className="text-blue-600" />
+                          </button>
                         </div>
                       </>
                     )}
@@ -427,7 +341,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                   onSubmit={async (e) => {
                     e.preventDefault();
                     if (!newFileLabel || !newFileFile || !currentVictim.id) return;
-                    
+
                     setUploadingFile(true);
                     try {
                       // 1. Upload fichier sur Minio
@@ -438,11 +352,11 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                         method: 'POST',
                         body: formData
                       });
-                      
+
                       const uploadData = await uploadRes.json();
                       const lien = uploadData?.url;
                       if (!lien) throw new Error('Erreur upload fichier');
-                      
+
                       // 2. POST sur /document_victime
                       const docRes = await fetch(`${baseUrl}/document-victime`, {
                         method: 'POST',
@@ -454,9 +368,9 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                           userId: 1
                         })
                       });
-                      
+
                       if (!docRes.ok) throw new Error('Erreur enregistrement document');
-                      
+
                       // 3. Succès et recharge la liste
                       await Swal.fire({
                         icon: 'success',
@@ -465,15 +379,15 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                         timer: 1500,
                         showConfirmButton: false
                       });
-                      
+
                       setNewFileLabel('');
                       setNewFileFile(null);
                       setAddFileMode(false);
-                      
+
                       // Recharge la liste des documents
                       setLoadingFiles(true);
                       try {
-                        const res = await fetch(`${baseUrl}/victime/${currentVictim.id}`);
+                        const res = await fetch(`${baseUrl}/victime/document/${currentVictim.id}`);
                         if (res.ok) {
                           const data = await res.json();
                           const documents = data?.documentVictime || [];
@@ -553,6 +467,70 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                   Ajouter un fichier
                 </button>
               )}
+            </div>
+          )}
+
+          {tab === 'progression' && (
+            <div className="text-center py-8 !bg-white !text-gray-900">
+              <BarChart2 className="mx-auto !text-gray-400 mb-4" size={48} />
+              <div className="!text-gray-500">Progression du dossier (à implémenter)</div>
+            </div>
+          )}
+
+          {tab === 'reglages' && (
+            <div className="!bg-white !text-gray-900">
+              {/* Section confirmation de victime */}
+              <div className="mb-6 p-4 !bg-blue-50 rounded-lg !border !border-blue-200">
+                <h4 className="font-semibold !text-gray-700 mb-3 flex items-center gap-2">
+                  <UserCheck className="!text-blue-600" size={18} />
+                  Statut de la victime
+                </h4>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm !text-gray-600 mb-1">
+                      Statut actuel :
+                      <span className={`ml-2 px-3 py-1 text-sm font-semibold rounded-full ${!status || status === 'non confirmé'
+                        ? '!bg-orange-100 !text-orange-700'
+                        : '!bg-green-100 !text-green-700'
+                        }`}>
+                        {status && status !== '' ? status : 'non confirmé'}
+                      </span>
+                    </div>
+                    {(!status || status === 'non confirmé') && (
+                      <div className="text-xs !text-gray-500">
+                        Confirmez cette victime pour valider son dossier
+                      </div>
+                    )}
+                  </div>
+                  {(!status || status === 'non confirmé') && (
+                    <button
+                      onClick={confirmVictim}
+                      disabled={isConfirming}
+                      className="flex items-center gap-2 px-4 py-2 !bg-green-600 !text-white text-sm font-medium rounded hover:!bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isConfirming ? (
+                        <>
+                          <Loader2 className="animate-spin" size={16} />
+                          Confirmation...
+                        </>
+                      ) : (
+                        <>
+                          <Check size={16} />
+                          Confirmer la victime
+                        </>
+                      )}
+                    </button>
+                  )}
+                  {status === 'confirmé' && (
+                    <div className="flex items-center gap-2 !text-green-600 text-sm font-medium">
+                      <Check size={16} />
+                      Victime confirmée
+                    </div>
+                  )}
+                </div>
+              </div>
+
+
             </div>
           )}
         </div>
