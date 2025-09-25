@@ -27,6 +27,9 @@ interface EvaluationProps {
     age?: number;
     dateNaissance?: string;
     dossier?: string;
+    province?: string;
+    territoire?: string;
+    commune?: string;
   };
 }
 
@@ -34,12 +37,12 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
     // Étape 1 - Informations générales
-    victime_CodeUnique: victim?.dossier || '',
+    victime_CodeUnique: victim?.id?.toString() || '',
     victime_NomComplet: victim?.nom || '',
     victime_Sexe: victim?.sexe === 'Homme' ? 'M' : victim?.sexe === 'Femme' ? 'F' : '',
     victime_Age: victim?.age || '',
     victime_DateNaissance: victim?.dateNaissance || '',
-    lieu_Evaluation: '',
+    lieu_Evaluation: `${victim?.commune || ''} ${victim?.territoire || ''} ${victim?.province || ''}`.trim(),
     date_Evaluation: new Date().toISOString().split('T')[0],
 
     // Étape 2 - Informations sur l'évaluateur partenaire
