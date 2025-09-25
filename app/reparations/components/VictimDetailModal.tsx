@@ -14,8 +14,33 @@ import {
   UserCheck,
   Loader2
 } from 'lucide-react';
+import { GiReceiveMoney } from "react-icons/gi";
 import { Modal } from 'flowbite-react';
 import InfosVictim from './infosVictim';
+import Swal from 'sweetalert2';
+import Evaluation from './evaluation';
+
+// Fonction pour obtenir le lien réel du fichier
+const getFileLink = async (lien: string): Promise<string> => {
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
+    const response = await fetch(`${baseUrl}/minio/files/${lien}`);
+
+    if (!response.ok) {
+      throw new Error('Erreur lors de la récupération du lien du fichier');
+    }
+
+    const resData = await response.json();
+    // Le vrai lien est dans resData.data.src
+    if (resData && resData.data && resData.data.src) {
+      return resData.data.src;
+    }
+    throw new Error('Lien du fichier non trouvé dans la réponse');
+  } catch (error) {
+    console.error('Erreur getFileLink:', error);
+    throw error;
+  }
+};
 
 interface Victim {
   id: number;
@@ -71,19 +96,73 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
   const [tab, setTab] = useState<'info' | 'dossier' | 'progression' | 'reglages'>('info');
   const [currentVictim, setCurrentVictim] = useState<Victim>(victim);
   const [isConfirming, setIsConfirming] = useState(false);
-  const [files, setFiles] = useState<Array<{ id: number; label: string; name: string; lien?: string }>>([
-    { id: 1, label: 'Rapport médical', name: 'rapport_medical.pdf' },
-    { id: 2, label: 'Témoignage', name: 'temoignage.docx' },
-    { id: 3, label: 'Photos', name: 'photos.zip' }
-  ]);
+  const [files, setFiles] = useState<Array<{ id: number; label: string; name?: string; lien?: string }>>([]);
+  const [loadingFiles, setLoadingFiles] = useState(true);
+  const [uploadingFile, setUploadingFile] = useState(false);
   const [newFileFile, setNewFileFile] = useState<File | null>(null);
-  const [selectedFile, setSelectedFile] = useState<{ id: number; label: string; name: string } | null>(null);
+  const [selectedFile, setSelectedFile] = useState<{ id: number; label: string; name: string; lien?: string } | null>(null);
   const [editFileIdx, setEditFileIdx] = useState<number | null>(null);
   const [editFileLabel, setEditFileLabel] = useState('');
   const [editFileName, setEditFileName] = useState('');
   const [addFileMode, setAddFileMode] = useState(false);
   const [newFileLabel, setNewFileLabel] = useState('');
   const [newFileName, setNewFileName] = useState('');
+
+  // Charger la liste des documents réels
+  React.useEffect(() => {
+    if (!currentVictim?.id) return;
+
+    const fetchDocs = async () => {
+      setLoadingFiles(true);
+      try {
+        const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
+        const res = await fetch(`${baseUrl}/victime/document/${currentVictim.id}`);
+        if (!res.ok) throw new Error('Erreur récupération des documents');
+        const data = await res.json();
+
+        // Extraire les documents de la réponse
+        const documents = data?.documentVictime || [];
+        const mappedFiles = documents.map((doc: any) => ({
+          id: doc.id,
+          label: doc.label,
+          name: doc.lien, // Le nom du fichier est dans 'lien'
+          lien: doc.lien
+        }));
+
+        setFiles(mappedFiles);
+      } catch (e) {
+        console.error('Erreur lors du chargement des documents:', e);
+        setFiles([]);
+      } finally {
+        setLoadingFiles(false);
+      }
+    };
+
+    fetchDocs();
+  }, [currentVictim?.id]);
+
+  // Fonction pour ouvrir un fichier
+  const handleOpenFile = async (file: { id: number; label: string; name?: string; lien?: string }) => {
+    if (!file.lien) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'Erreur',
+        text: 'Lien du fichier non disponible'
+      });
+      return;
+    }
+
+    try {
+      const fileUrl = await getFileLink(file.lien);
+      window.open(fileUrl, '_blank');
+    } catch (error) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'Erreur',
+        text: 'Impossible d\'ouvrir le fichier'
+      });
+    }
+  };
 
   const confirmVictim = async () => {
     if (!currentVictim.id) {
@@ -170,28 +249,225 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
           )}
 
           {tab === 'dossier' && (
-            <div className="!bg-white !text-gray-900">
-              <h4 className="font-semibold !text-gray-700 mb-4">Fichiers du dossier</h4>
-              <div className="space-y-2">
-                {files.map(file => (
+            <div className="mt-6">
+              <div className="flex items-center justify-between mb-4">
+
+              </div>
+
+              {/* Section gestion des fichiers */}
+              <h4 className="font-semibold !text-gray-700 mb-4">Gestion des fichiers</h4>
+              <div className="space-y-2 mb-4">
+                {files.map((file, idx) => (
                   <div key={file.id} className="flex items-center justify-between p-3 !bg-gray-50 rounded-lg !border !border-gray-200">
-                    <div className="flex items-center gap-3">
-                      <FileText className="!text-gray-400" size={16} />
-                      <div>
-                        <div className="text-sm font-medium !text-gray-700">{file.label}</div>
-                        <div className="text-xs !text-gray-500">{file.name}</div>
+                    {editFileIdx === idx ? (
+                      <div className="flex items-center gap-2 flex-1">
+                        <input
+                          className="!border !border-gray-300 px-2 py-1 rounded text-sm flex-1 !bg-white !text-gray-900"
+                          value={editFileLabel}
+                          onChange={e => setEditFileLabel(e.target.value)}
+                          placeholder="Label"
+                        />
+                        <input
+                          className="!border !border-gray-300 px-2 py-1 rounded text-sm flex-1 !bg-white !text-gray-900"
+                          value={editFileName}
+                          onChange={e => setEditFileName(e.target.value)}
+                          placeholder="Nom du fichier"
+                        />
+                        <button
+                          className="px-2 py-1 !bg-green-500 !text-white text-sm rounded hover:!bg-green-600 flex items-center gap-1"
+                          onClick={() => {
+                            const updated = [...files];
+                            updated[idx] = { ...file, label: editFileLabel, name: editFileName };
+                            setFiles(updated);
+                            setEditFileIdx(null);
+                          }}
+                        >
+                          <Check size={14} />
+                        </button>
+                        <button
+                          className="px-2 py-1 !bg-gray-300 !text-gray-700 text-sm rounded hover:!bg-gray-400 flex items-center gap-1"
+                          onClick={() => setEditFileIdx(null)}
+                        >
+                          <X size={14} />
+                        </button>
                       </div>
-                    </div>
-                    <button
-                      className="flex items-center gap-1 px-3 py-1 !bg-blue-50 !text-blue-600 text-sm font-medium rounded hover:!bg-blue-100 transition-colors"
-                      onClick={() => setSelectedFile(file)}
-                    >
-                      <Eye size={14} />
-                      Voir
-                    </button>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-3">
+                          <FileText className="!text-gray-400" size={16} />
+                          <div>
+                            <div className="text-sm font-medium !text-gray-700">{file.label}</div>
+                            <div className="text-xs !text-gray-500">{file.name}</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            className="px-2 py-1 !bg-blue-50 !text-blue-600 text-sm rounded hover:!bg-blue-100 flex items-center gap-1"
+                            onClick={() => {
+                              setEditFileIdx(idx);
+                              setEditFileLabel(file.label);
+                              setEditFileName(file.name || '');
+                            }}
+                          >
+                            <Edit size={14} />
+                          </button>
+                          <button
+                            className="px-2 py-1 !bg-red-50 !text-red-600 text-sm rounded hover:!bg-red-100 flex items-center gap-1"
+                            onClick={() => {
+                              if (window.confirm('Supprimer ce fichier ?')) {
+                                setFiles(files.filter((_, i) => i !== idx));
+                              }
+                            }}
+                          >
+                            <Trash size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenFile(file)}
+                            className="px-2 py-1 !bg-blue-50 !text-blue-600 text-sm rounded hover:!bg-blue-100 flex items-center gap-1"
+                            title="Voir le document"
+                          >
+                            <Eye size={16} className="text-blue-600" />
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
+
+              {addFileMode ? (
+                <form
+                  className="flex items-center gap-2 p-3 !bg-gray-50 rounded-lg !border !border-gray-200"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!newFileLabel || !newFileFile || !currentVictim.id) return;
+
+                    setUploadingFile(true);
+                    try {
+                      // 1. Upload fichier sur Minio
+                      const formData = new FormData();
+                      formData.append('file', newFileFile);
+                      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
+                      const uploadRes = await fetch(`${baseUrl}/minio/files/upload`, {
+                        method: 'POST',
+                        body: formData
+                      });
+
+                      const uploadData = await uploadRes.json();
+                      const lien = uploadData?.url;
+                      if (!lien) throw new Error('Erreur upload fichier');
+
+                      // 2. POST sur /document_victime
+                      const docRes = await fetch(`${baseUrl}/document-victime`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          label: newFileLabel,
+                          lien,
+                          victimeId: currentVictim.id,
+                          userId: 1
+                        })
+                      });
+
+                      if (!docRes.ok) throw new Error('Erreur enregistrement document');
+
+                      // 3. Succès et recharge la liste
+                      await Swal.fire({
+                        icon: 'success',
+                        title: 'Document numérisé',
+                        text: 'Le document a été numérisé et enregistré avec succès.',
+                        timer: 1500,
+                        showConfirmButton: false
+                      });
+
+                      setNewFileLabel('');
+                      setNewFileFile(null);
+                      setAddFileMode(false);
+
+                      // Recharge la liste des documents
+                      setLoadingFiles(true);
+                      try {
+                        const res = await fetch(`${baseUrl}/victime/document/${currentVictim.id}`);
+                        if (res.ok) {
+                          const data = await res.json();
+                          const documents = data?.documentVictime || [];
+                          const mappedFiles = documents.map((doc: any) => ({
+                            id: doc.id,
+                            label: doc.label,
+                            name: doc.lien,
+                            lien: doc.lien
+                          }));
+                          setFiles(mappedFiles);
+                        }
+                      } catch (e) {
+                        console.error('Erreur lors du rechargement des documents:', e);
+                      } finally {
+                        setLoadingFiles(false);
+                      }
+
+                    } catch (err: any) {
+                      await Swal.fire({
+                        icon: 'error',
+                        title: 'Erreur',
+                        text: err.message || 'Erreur lors de l\'upload'
+                      });
+                    } finally {
+                      setUploadingFile(false);
+                    }
+                  }}
+                >
+                  <input
+                    className="!border !border-gray-300 px-2 py-1 rounded text-sm flex-1 !bg-white !text-gray-900"
+                    value={newFileLabel}
+                    onChange={e => setNewFileLabel(e.target.value)}
+                    placeholder="Label du fichier"
+                    required
+                    disabled={uploadingFile}
+                  />
+                  <input
+                    type="file"
+                    className="!border !border-gray-300 px-2 py-1 rounded text-sm flex-1 !bg-white !text-gray-900"
+                    onChange={e => setNewFileFile(e.target.files?.[0] || null)}
+                    required
+                    disabled={uploadingFile}
+                  />
+                  <button
+                    type="submit"
+                    className="px-3 py-1 !bg-green-500 !text-white text-sm rounded hover:!bg-green-600 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={uploadingFile}
+                  >
+                    {uploadingFile ? (
+                      <>
+                        <Loader2 className="animate-spin" size={14} />
+                        Upload...
+                      </>
+                    ) : (
+                      <>
+                        <Check size={14} />
+                        Ajouter
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    className="px-3 py-1 !bg-gray-300 !text-gray-700 text-sm rounded hover:!bg-gray-400 flex items-center gap-1"
+                    onClick={() => setAddFileMode(false)}
+                    disabled={uploadingFile}
+                  >
+                    <X size={14} />
+                    Annuler
+                  </button>
+                </form>
+              ) : (
+                <button
+                  className="flex items-center gap-2 px-4 py-2 !bg-pink-600 !text-white text-sm font-medium rounded hover:!bg-pink-700 transition-colors"
+                  onClick={() => setAddFileMode(true)}
+                >
+                  <Plus size={16} />
+                  Ajouter un fichier
+                </button>
+              )}
             </div>
           )}
 
@@ -253,162 +529,10 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                     </div>
                   )}
                 </div>
+
               </div>
 
-              {/* Section gestion des fichiers */}
-              <h4 className="font-semibold !text-gray-700 mb-4">Gestion des fichiers</h4>
-              <div className="space-y-2 mb-4">
-                {files.map((file, idx) => (
-                  <div key={file.id} className="flex items-center justify-between p-3 !bg-gray-50 rounded-lg !border !border-gray-200">
-                    {editFileIdx === idx ? (
-                      <div className="flex items-center gap-2 flex-1">
-                        <input
-                          className="!border !border-gray-300 px-2 py-1 rounded text-sm flex-1 !bg-white !text-gray-900"
-                          value={editFileLabel}
-                          onChange={e => setEditFileLabel(e.target.value)}
-                          placeholder="Label"
-                        />
-                        <input
-                          className="!border !border-gray-300 px-2 py-1 rounded text-sm flex-1 !bg-white !text-gray-900"
-                          value={editFileName}
-                          onChange={e => setEditFileName(e.target.value)}
-                          placeholder="Nom du fichier"
-                        />
-                        <button
-                          className="px-2 py-1 !bg-green-500 !text-white text-sm rounded hover:!bg-green-600 flex items-center gap-1"
-                          onClick={() => {
-                            const updated = [...files];
-                            updated[idx] = { ...file, label: editFileLabel, name: editFileName };
-                            setFiles(updated);
-                            setEditFileIdx(null);
-                          }}
-                        >
-                          <Check size={14} />
-                        </button>
-                        <button
-                          className="px-2 py-1 !bg-gray-300 !text-gray-700 text-sm rounded hover:!bg-gray-400 flex items-center gap-1"
-                          onClick={() => setEditFileIdx(null)}
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex items-center gap-3">
-                          <FileText className="!text-gray-400" size={16} />
-                          <div>
-                            <div className="text-sm font-medium !text-gray-700">{file.label}</div>
-                            <div className="text-xs !text-gray-500">{file.name}</div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            className="px-2 py-1 !bg-blue-50 !text-blue-600 text-sm rounded hover:!bg-blue-100 flex items-center gap-1"
-                            onClick={() => {
-                              setEditFileIdx(idx);
-                              setEditFileLabel(file.label);
-                              setEditFileName(file.name);
-                            }}
-                          >
-                            <Edit size={14} />
-                          </button>
-                          <button
-                            className="px-2 py-1 !bg-red-50 !text-red-600 text-sm rounded hover:!bg-red-100 flex items-center gap-1"
-                            onClick={() => {
-                              if (window.confirm('Supprimer ce fichier ?')) {
-                                setFiles(files.filter((_, i) => i !== idx));
-                              }
-                            }}
-                          >
-                            <Trash size={14} />
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {addFileMode ? (
-                <form
-                  className="flex items-center gap-2 p-3 !bg-gray-50 rounded-lg !border !border-gray-200"
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    if (!newFileLabel || !newFileFile || !currentVictim.id) return;
-                    try {
-                      // 1. Upload fichier sur Minio
-                      const formData = new FormData();
-                      formData.append('file', newFileFile);
-                      const uploadRes = await fetch('http://10.140.0.106:8006/minio/files/upload', {
-                        method: 'POST',
-                        body: formData
-                      });
-                      const uploadData = await uploadRes.json();
-                      const lien = uploadData?.url;
-                      if (!lien) throw new Error('Erreur upload fichier');
-                      // 2. POST sur /document_victime
-                      const docRes = await fetch('http://10.140.0.106:8006/document-victime', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          label: newFileLabel,
-                          lien,
-                          victimeId: currentVictim.id,
-                          userId: 1
-                        })
-                      });
-                      if (!docRes.ok) throw new Error('Erreur enregistrement document');
-                      // 3. Ajoute à la liste locale
-                      setFiles([
-                        ...files,
-                        { id: Math.random(), label: newFileLabel, name: newFileFile.name, lien }
-                      ]);
-                      setNewFileLabel('');
-                      setNewFileFile(null);
-                      setAddFileMode(false);
-                    } catch (err: any) {
-                      alert(err.message || 'Erreur lors de l\'upload');
-                    }
-                  }}
-                >
-                  <input
-                    className="!border !border-gray-300 px-2 py-1 rounded text-sm flex-1 !bg-white !text-gray-900"
-                    value={newFileLabel}
-                    onChange={e => setNewFileLabel(e.target.value)}
-                    placeholder="Label du fichier"
-                    required
-                  />
-                  <input
-                    type="file"
-                    className="!border !border-gray-300 px-2 py-1 rounded text-sm flex-1 !bg-white !text-gray-900"
-                    onChange={e => setNewFileFile(e.target.files?.[0] || null)}
-                    required
-                  />
-                  <button
-                    type="submit"
-                    className="px-3 py-1 !bg-green-500 !text-white text-sm rounded hover:!bg-green-600 flex items-center gap-1"
-                  >
-                    <Check size={14} />
-                    Ajouter
-                  </button>
-                  <button
-                    type="button"
-                    className="px-3 py-1 !bg-gray-300 !text-gray-700 text-sm rounded hover:!bg-gray-400 flex items-center gap-1"
-                    onClick={() => setAddFileMode(false)}
-                  >
-                    <X size={14} />
-                    Annuler
-                  </button>
-                </form>
-              ) : (
-                <button
-                  className="flex items-center gap-2 px-4 py-2 !bg-pink-600 !text-white text-sm font-medium rounded hover:!bg-pink-700 transition-colors"
-                  onClick={() => setAddFileMode(true)}
-                >
-                  <Plus size={16} />
-                  Ajouter un fichier
-                </button>
-              )}
+              <Evaluation />
             </div>
           )}
         </div>
