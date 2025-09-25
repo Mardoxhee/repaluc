@@ -305,7 +305,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                             onClick={() => {
                               setEditFileIdx(idx);
                               setEditFileLabel(file.label);
-                              setEditFileName(file.name);
+                              setEditFileName(file.name || '');
                             }}
                           >
                             <Edit size={14} />
