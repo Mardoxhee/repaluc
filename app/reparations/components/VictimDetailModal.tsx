@@ -532,7 +532,6 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
 
               </div>
 
-              <Evaluation />
               <Evaluation victim={currentVictim} />
             </div>
           )}
