@@ -117,7 +117,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
       try {
         const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
         const res = await fetch(`${baseUrl}/victime/document/${currentVictim.id}`);
-        if (!res.ok) throw new Error('Erreur récupération des documents');
+        if (!res.ok) console.log('Erreur récupération des documents');
         const data = await res.json();
 
         // Extraire les documents de la réponse
