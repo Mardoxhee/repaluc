@@ -18,7 +18,6 @@ import { GiReceiveMoney } from "react-icons/gi";
 import { Modal } from 'flowbite-react';
 import InfosVictim from './infosVictim';
 import Swal from 'sweetalert2';
-import Evaluation from './evaluation';
 
 // Fonction pour obtenir le lien réel du fichier
 const getFileLink = async (lien: string): Promise<string> => {
@@ -529,10 +528,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                     </div>
                   )}
                 </div>
-
               </div>
-
-              <Evaluation victim={currentVictim} />
             </div>
           )}
         </div>

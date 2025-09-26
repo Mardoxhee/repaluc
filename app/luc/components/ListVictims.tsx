@@ -3,7 +3,8 @@ import React, { useState, useEffect, useContext, useCallback } from "react";
 import { FetchContext } from "../../context/FetchContext";
 import Swal from 'sweetalert2';
 import VictimDetailModal from "./VictimDetailModal"
-import { Search, Filter, Eye, Users, ChevronLeft, ChevronRight, X, Plus, Check } from 'lucide-react';
+import { Search, Filter, Eye, Users, ChevronLeft, ChevronRight, X, Plus, Check, Stethoscope } from 'lucide-react';
+import EvaluationModal from "./EvaluationModal";
 
 interface ReglagesProps {
     mockPrejudices: { id: number; nom: string }[];
@@ -73,6 +74,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
     });
     const [showVictimModal, setShowVictimModal] = useState(false);
     const [selectedVictim, setSelectedVictim] = useState<any | null>(null);
+    const [showEvaluationModal, setShowEvaluationModal] = useState(false);
+    const [selectedVictimForEvaluation, setSelectedVictimForEvaluation] = useState<any | null>(null);
 
     const fetchCtx = useContext(FetchContext);
 
@@ -507,17 +510,30 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4 text-center">
-                                                <button
-                                                    onClick={() => {
-                                                        setSelectedVictim(victim);
-                                                        setShowVictimModal(true);
-                                                    }}
-                                                    className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
-                                                    title="Voir les détails"
-                                                >
-                                                    <Eye size={14} />
-                                                    Détails
-                                                </button>
+                                                <div className="flex items-center gap-2 justify-center">
+                                                    <button
+                                                        onClick={() => {
+                                                            setSelectedVictim(victim);
+                                                            setShowVictimModal(true);
+                                                        }}
+                                                        className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+                                                        title="Voir les détails"
+                                                    >
+                                                        <Eye size={14} />
+                                                        Détails
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            setSelectedVictimForEvaluation(victim);
+                                                            setShowEvaluationModal(true);
+                                                        }}
+                                                        className="inline-flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-sm font-medium hover:bg-green-700 transition-colors"
+                                                        title="Évaluation médicale"
+                                                    >
+                                                        <Stethoscope size={14} />
+                                                        Évaluation
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
@@ -567,6 +583,17 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                     onClose={() => setShowVictimModal(false)}
                     onVictimUpdate={(updatedVictim) => {
                         setVictims((prevVictims) => prevVictims.map(v => v.id === updatedVictim.id ? updatedVictim : v));
+                    }}
+                />
+            )}
+
+            {/* Modal évaluation médicale */}
+            {showEvaluationModal && selectedVictimForEvaluation && (
+                <EvaluationModal
+                    victim={selectedVictimForEvaluation}
+                    onClose={() => {
+                        setShowEvaluationModal(false);
+                        setSelectedVictimForEvaluation(null);
                     }}
                 />
             )}
