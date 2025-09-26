@@ -22,7 +22,7 @@ const provincesRDC = [
 ];
 
 const statusOptions = [
-    "Confirmé", "Non confirmé", "En traitement", "Décédé", "En attente"
+    "Confirmé", "Non confirmé", "En traitement", "Décédé", "En attente", "A evaluer"
 ];
 
 const sexeOptions = ["Homme", "Femme"];
@@ -192,6 +192,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                 return 'bg-blue-50 text-blue-700 border-blue-200';
             case 'décédé':
                 return 'bg-gray-50 text-gray-700 border-gray-200';
+            case 'a evaluer':
+                return 'bg-purple-50 text-purple-700 border-purple-200';
             default:
                 return 'bg-red-50 text-red-700 border-red-200';
         }
@@ -478,17 +480,19 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                                         <Eye size={14} />
                                                         Détails
                                                     </button>
-                                                    <button
-                                                        onClick={() => {
-                                                            setSelectedVictimForEvaluation(victim);
-                                                            setShowEvaluationModal(true);
-                                                        }}
-                                                        className="inline-flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-sm font-medium hover:bg-green-700 transition-colors"
-                                                        title="Évaluation médicale"
-                                                    >
-                                                        <Stethoscope size={14} />
-                                                        Évaluation
-                                                    </button>
+                                                    {victim.status === 'A evaluer' && (
+                                                        <button
+                                                            onClick={() => {
+                                                                setSelectedVictimForEvaluation(victim);
+                                                                setShowEvaluationModal(true);
+                                                            }}
+                                                            className="inline-flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-sm font-medium hover:bg-green-700 transition-colors"
+                                                            title="Évaluation médicale"
+                                                        >
+                                                            <Stethoscope size={14} />
+                                                            Évaluation
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
