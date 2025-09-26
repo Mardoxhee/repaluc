@@ -1,5 +1,5 @@
 import React from 'react';
-import { DollarSign, FileText, User, MapPin, Calendar, Shield, Check } from 'lucide-react';
+import { DollarSign, FileText, User, MapPin, Calendar, Shield, Check, UserCircle } from 'lucide-react';
 
 interface InfosVictimProps {
     victim: {
@@ -38,6 +38,7 @@ interface InfosVictimProps {
         commentaire?: string;
         avatar?: string;
         isDirect?: boolean;
+        programme?: string;
     }
 }
 
@@ -68,7 +69,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
         lieuIncident,
         dateIncident,
         typeViolation,
-        prejudicesSubis,
+        programme,
         status,
         dossier,
         prejudiceFinal,
@@ -76,29 +77,11 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
         reparations,
         comment,
         commentaire,
-        avatar = "https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=500",
+        avatar,
     } = victim;
     const { isDirect } = victim;
 
 
-
-    // Export PDF handler
-    const handleExportPDF = async () => {
-        const jsPDF = (await import('jspdf')).default;
-        const html2canvas = (await import('html2canvas')).default;
-        const element = document.getElementById('victim-pdf-content');
-        if (!element) return;
-        const canvas = await html2canvas(element, { scale: 2 });
-        const imgData = canvas.toDataURL('image/png');
-        const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
-        const pageWidth = pdf.internal.pageSize.getWidth();
-        const pageHeight = pdf.internal.pageSize.getHeight();
-        const imgProps = pdf.getImageProperties(imgData);
-        const pdfWidth = pageWidth;
-        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-        pdf.save(`victime_${nom || 'fiche'}.pdf`);
-    };
     return (
         <div className="bg-white text-gray-900 max-w-5xl mx-auto print:max-w-none relative">
             {/* Export PDF Button */}
@@ -124,26 +107,37 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                 {/* Left Column - Photo & Key Info */}
                 <div className="col-span-12 md:col-span-4">
                     <div className="border border-gray-300 p-4 mb-4">
-                        <img
-                            src={avatar}
-                            alt="Photo d'identité"
-                            className="w-32 h-32 object-cover border border-gray-400 mx-auto block"
-                        />
+                        {avatar ? (
+                            <img
+                                src={avatar}
+                                alt="Photo d'identité"
+                                className="w-32 h-32 object-cover border border-gray-400 mx-auto block rounded-lg"
+                            />
+                        ) : (
+                            <div className="w-32 h-32 mx-auto flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 border border-gray-400 rounded-lg">
+                                <UserCircle className="w-20 h-20 text-gray-400" />
+                            </div>
+                        )}
                         <p className="text-xs text-gray-500 text-center mt-2">Photo d'identité</p>
                     </div>
 
                     {/* Status Badges */}
                     <div className="space-y-3 mb-6">
                         {/* Flag Victime Directe/Indirecte (badge discret) */}
-                        {isDirect === true ? (
+                        <div className="border border-gray-300 p-3">
+                            <div className="flex items-center gap-2 mb-2">
+                                <Shield className="text-gray-600" size={14} />
+                                <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Type de victime</span>
+                            </div>
+                            <div className="bg-gray-100 border border-gray-300 px-3 py-2">
+                                <span className="text-sm font-medium text-gray-800">{isDirect || "Non spécifié"}</span>
+                            </div>
+                        </div>
+                        {/* {isDirect ?
                             <span className="inline-block px-2 py-1 text-xs font-semibold rounded bg-green-100 text-green-700 border border-green-300 mb-2">
-                                Victime directe
+                                {isDirect}
                             </span>
-                        ) : isDirect === false ? (
-                            <span className="inline-block px-2 py-1 text-xs font-semibold rounded bg-gray-100 text-gray-700 border border-gray-300 mb-2">
-                                Victime indirecte
-                            </span>
-                        ) : null}
+                            : null} */}
                         <div className="border border-gray-300 p-3">
                             <div className="flex items-center gap-2 mb-2">
                                 <User className="text-gray-600" size={14} />
@@ -167,10 +161,10 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                         <div className="border border-gray-300 p-3">
                             <div className="flex items-center gap-2 mb-2">
                                 <FileText className="text-gray-600" size={14} />
-                                <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Préjudices</span>
+                                <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Programme</span>
                             </div>
                             <div className="bg-gray-100 border border-gray-300 px-3 py-2">
-                                <span className="text-sm font-medium text-gray-800">{prejudicesSubis || "Non spécifiés"}</span>
+                                <span className="text-sm font-medium text-gray-800">{programme || "Non spécifiés"}</span>
                             </div>
                         </div>
 
