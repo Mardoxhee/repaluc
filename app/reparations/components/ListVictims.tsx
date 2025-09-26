@@ -480,7 +480,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                                         <Eye size={14} />
                                                         Détails
                                                     </button>
-                                                    {victim.status === 'A evaluer' && (
+                                                    {victim.status == 'A Evaluer' && (
                                                         <button
                                                             onClick={() => {
                                                                 setSelectedVictimForEvaluation(victim);
@@ -490,7 +490,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                                             title="Évaluation médicale"
                                                         >
                                                             <Stethoscope size={14} />
-                                                            Évaluation
+                                                            Évaluer
                                                         </button>
                                                     )}
                                                 </div>
