@@ -22,7 +22,7 @@ const provincesRDC = [
 ];
 
 const statusOptions = [
-    "Confirmé", "Non confirmé", "En traitement", "Décédé", "En attente", "A evaluer"
+    "Confirmé", "Non confirmé", "En traitement", "Décédé", "En attente", "A evaluer", "Evalué", "Contrôlé"
 ];
 
 const sexeOptions = ["Homme", "Femme"];
@@ -194,6 +194,12 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                 return 'bg-gray-50 text-gray-700 border-gray-200';
             case 'a evaluer':
                 return 'bg-purple-50 text-purple-700 border-purple-200';
+            case 'evalué':
+            case 'évalué':
+                return 'bg-teal-50 text-teal-700 border-teal-200';
+            case 'contrôlé':
+            case 'controle':
+                return 'bg-indigo-50 text-indigo-700 border-indigo-200';
             default:
                 return 'bg-red-50 text-red-700 border-red-200';
         }
@@ -480,7 +486,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                                         <Eye size={14} />
                                                         Détails
                                                     </button>
-                                                    {victim.status == 'A Evaluer' && (
+                                                    {(victim.status == 'A Evaluer' || victim.status?.toLowerCase() === 'evalué' || victim.status?.toLowerCase() === 'évalué' || victim.status?.toLowerCase() === 'contrôlé' || victim.status?.toLowerCase() === 'controle') && (
                                                         <button
                                                             onClick={() => {
                                                                 setSelectedVictimForEvaluation(victim);
