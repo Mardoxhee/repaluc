@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { useFetch } from '@/app/context/FetchContext';
+import Swal from 'sweetalert2';
 import { 
   User, 
   Calendar, 
@@ -19,6 +21,14 @@ import {
   Save
 } from 'lucide-react';
 
+interface Partenaire {
+  id: number;
+  structure: string;
+  domaine: string;
+  contact: string;
+  adresse: string;
+}
+
 interface EvaluationProps {
   victim?: {
     id?: number;
@@ -30,11 +40,15 @@ interface EvaluationProps {
     province?: string;
     territoire?: string;
     commune?: string;
+    codeUnique?: string;
   };
 }
 
 const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
+  const { fetcher } = useFetch();
   const [currentStep, setCurrentStep] = useState(1);
+  const [partenaires, setPartenaires] = useState<Partenaire[]>([]);
+  const [loadingPartenaires, setLoadingPartenaires] = useState(false);
   const [formData, setFormData] = useState({
     // Étape 1 - Informations générales
     victime_CodeUnique: victim?.id?.toString() || '',
@@ -46,6 +60,7 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
     date_Evaluation: new Date().toISOString().split('T')[0],
 
     // Étape 2 - Informations sur l'évaluateur partenaire
+    partenaireId: '',
     structure_Partenaire: '',
     medecin_Evaluateur_Nom: '',
     medecin_Evaluateur_Specialite: '',
@@ -99,15 +114,15 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
     },
     {
       id: 4,
-      title: "Validation Pool Médical",
-      icon: <Shield className="w-5 h-5" />,
-      description: "Validation par l'équipe médicale FONAREV"
-    },
-    {
-      id: 5,
       title: "Orientations & Recommandations",
       icon: <Target className="w-5 h-5" />,
       description: "Mesures de prise en charge recommandées"
+    },
+    {
+      id: 5,
+      title: "Validation Pool Médical",
+      icon: <Shield className="w-5 h-5" />,
+      description: "Validation par l'équipe médicale FONAREV"
     }
   ];
 
@@ -130,10 +145,82 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
     }
   };
 
-  const handleSubmit = () => {
-    console.log('Données d\'évaluation:', formData);
-    // Ici vous pouvez ajouter la logique de sauvegarde
-    alert('Évaluation médicale enregistrée avec succès !');
+  useEffect(() => {
+    const fetchPartenaires = async () => {
+      try {
+        setLoadingPartenaires(true);
+        const data = await fetcher('/partenaires');
+        setPartenaires(data || []);
+      } catch (error) {
+        console.error('Erreur lors du chargement des partenaires:', error);
+        Swal.fire({
+          icon: 'error',
+          title: 'Erreur',
+          text: 'Impossible de charger la liste des partenaires'
+        });
+      } finally {
+        setLoadingPartenaires(false);
+      }
+    };
+
+    fetchPartenaires();
+  }, [fetcher]);
+
+  const handleSubmit = async () => {
+    const payload = {
+      victimeCodeUnique: victim?.codeUnique || formData.victime_CodeUnique,
+      lieuEvaluation: formData.lieu_Evaluation,
+      dateEvaluation: formData.date_Evaluation,
+      medecinEvaluateurNom: formData.medecin_Evaluateur_Nom,
+      medecinEvaluateurSpecialite: formData.medecin_Evaluateur_Specialite,
+      violationAtteinte: formData.violation_Atteinte,
+      physiqueTypeAtteinte: formData.physique_TypeAtteinte,
+      physiqueDescription: formData.physique_Description,
+      physiqueDegreAtteinte: parseFloat(formData.physique_DegreAtteinte.toString()) || 0,
+      fonctionnelleType: formData.fonctionnelle_Type,
+      fonctionnelleDescription: formData.fonctionnelle_Description,
+      fonctionnelleDegreAtteinte: parseFloat(formData.fonctionnelle_DegreAtteinte.toString()) || 0,
+      psyType: formData.psy_Type,
+      psyDescription: formData.psy_Description,
+      incapaciteGlobal: parseFloat(formData.incapacite_Global.toString()) || 0,
+      incapaciteMethodologie: formData.incapacite_Methodologie,
+      validationAppreciation: formData.validation_Appreciation,
+      validationCategorisation: formData.validation_Categorisation,
+      poolMedecinNom: formData.poolMedecin_Nom,
+      poolMedecinSignatureDate: formData.poolMedecin_SignatureDate,
+      poolMedecinVisaQualite: formData.poolMedecin_VisaQualite,
+      orientationSoinsMedicaux: formData.orientation_SoinsMedicaux === '1',
+      orientationReeducationAppareillage: formData.orientation_Reeducation_Appareillage === '1',
+      orientationPriseChargePsychiatrique: formData.orientation_PriseChargePsychiatrique === '1',
+      orientationAutresMesures: formData.orientation_AutresMesures,
+      orientationPriorisation: formData.orientation_Priorisation,
+      victimeId: victim?.id || 0,
+      partenaireId: parseInt(formData.partenaireId) || 0
+    };
+
+    try {
+      await fetcher('/evaluations-medicales', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Succès',
+        text: 'Évaluation médicale enregistrée avec succès !',
+        confirmButtonColor: '#10b981'
+      });
+    } catch (error) {
+      console.error('Erreur lors de l\'enregistrement:', error);
+      Swal.fire({
+        icon: 'error',
+        title: 'Erreur',
+        text: 'Impossible d\'enregistrer l\'évaluation médicale'
+      });
+    }
   };
 
   const renderStepContent = () => {
@@ -271,14 +358,27 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Structure Partenaire
                 </label>
-                <input
-                  type="text"
-                  value={formData.structure_Partenaire}
-                  onChange={(e) => handleInputChange('structure_Partenaire', e.target.value)}
+                <select
+                  value={formData.partenaireId}
+                  onChange={(e) => {
+                    const selectedId = e.target.value;
+                    handleInputChange('partenaireId', selectedId);
+                    const selected = partenaires.find(p => p.id.toString() === selectedId);
+                    if (selected) {
+                      handleInputChange('structure_Partenaire', selected.structure);
+                    }
+                  }}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  placeholder="Hôpital ou ONG partenaire"
                   required
-                />
+                  disabled={loadingPartenaires}
+                >
+                  <option value="">{loadingPartenaires ? 'Chargement...' : 'Sélectionner une structure partenaire'}</option>
+                  {partenaires.map((partenaire) => (
+                    <option key={partenaire.id} value={partenaire.id}>
+                      {partenaire.structure} - {partenaire.domaine}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -522,98 +622,6 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
       case 4:
         return (
           <div className="space-y-6">
-            <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 mb-6">
-              <div className="flex items-center gap-3">
-                <Shield className="text-purple-600" size={20} />
-                <div>
-                  <h3 className="font-semibold text-purple-900">Validation par le Pool Médical</h3>
-                  <p className="text-sm text-purple-700">Validation et contrôle qualité par l'équipe médicale FONAREV</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Appréciation de Validation
-                </label>
-                <select
-                  value={formData.validation_Appreciation}
-                  onChange={(e) => handleInputChange('validation_Appreciation', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  required
-                >
-                  <option value="">Sélectionner l'appréciation</option>
-                  <option value="0">0 = Conforme</option>
-                  <option value="1">1 = Non conforme</option>
-                  <option value="2">2 = À refaire</option>
-                  <option value="3">3 = Examens complémentaires requis</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Catégorisation de Validation
-                </label>
-                <select
-                  value={formData.validation_Categorisation}
-                  onChange={(e) => handleInputChange('validation_Categorisation', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  required
-                >
-                  <option value="">Sélectionner la catégorisation</option>
-                  <option value="1">1 = Moyenne</option>
-                  <option value="2">2 = Grave</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Nom du Médecin du Pool
-                </label>
-                <input
-                  type="text"
-                  value={formData.poolMedecin_Nom}
-                  onChange={(e) => handleInputChange('poolMedecin_Nom', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  placeholder="Nom du médecin validateur FONAREV"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Date et Signature
-                </label>
-                <input
-                  type="date"
-                  value={formData.poolMedecin_SignatureDate}
-                  onChange={(e) => handleInputChange('poolMedecin_SignatureDate', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  required
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Visa de Contrôle Qualité
-                </label>
-                <input
-                  type="text"
-                  value={formData.poolMedecin_VisaQualite}
-                  onChange={(e) => handleInputChange('poolMedecin_VisaQualite', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  placeholder="Visa de contrôle qualité"
-                  required
-                />
-              </div>
-            </div>
-          </div>
-        );
-
-      case 5:
-        return (
-          <div className="space-y-6">
             <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-6">
               <div className="flex items-center gap-3">
                 <Target className="text-green-600" size={20} />
@@ -734,6 +742,98 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
                      formData.orientation_Priorisation === '3' ? 'À planifier' : 'Non définie'}
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 5:
+        return (
+          <div className="space-y-6">
+            <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 mb-6">
+              <div className="flex items-center gap-3">
+                <Shield className="text-purple-600" size={20} />
+                <div>
+                  <h3 className="font-semibold text-purple-900">Validation par le Pool Médical</h3>
+                  <p className="text-sm text-purple-700">Validation et contrôle qualité par l'équipe médicale FONAREV</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Appréciation de Validation
+                </label>
+                <select
+                  value={formData.validation_Appreciation}
+                  onChange={(e) => handleInputChange('validation_Appreciation', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  required
+                >
+                  <option value="">Sélectionner l'appréciation</option>
+                  <option value="0">0 = Conforme</option>
+                  <option value="1">1 = Non conforme</option>
+                  <option value="2">2 = À refaire</option>
+                  <option value="3">3 = Examens complémentaires requis</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Catégorisation de Validation
+                </label>
+                <select
+                  value={formData.validation_Categorisation}
+                  onChange={(e) => handleInputChange('validation_Categorisation', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  required
+                >
+                  <option value="">Sélectionner la catégorisation</option>
+                  <option value="1">1 = Moyenne</option>
+                  <option value="2">2 = Grave</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Nom du Médecin du Pool
+                </label>
+                <input
+                  type="text"
+                  value={formData.poolMedecin_Nom}
+                  onChange={(e) => handleInputChange('poolMedecin_Nom', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  placeholder="Nom du médecin validateur FONAREV"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Date et Signature
+                </label>
+                <input
+                  type="date"
+                  value={formData.poolMedecin_SignatureDate}
+                  onChange={(e) => handleInputChange('poolMedecin_SignatureDate', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  required
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Visa de Contrôle Qualité
+                </label>
+                <input
+                  type="text"
+                  value={formData.poolMedecin_VisaQualite}
+                  onChange={(e) => handleInputChange('poolMedecin_VisaQualite', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  placeholder="Visa de contrôle qualité"
+                  required
+                />
               </div>
             </div>
           </div>
