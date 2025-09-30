@@ -186,60 +186,70 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
   // Load existing evaluation if exists
   useEffect(() => {
     const fetchExistingEvaluation = async () => {
-      if (!victim?.id) return;
+      if (!victim?.id) {
+        console.log('Pas d\'ID de victime');
+        return;
+      }
 
       try {
+        console.log('Chargement de l\'évaluation pour victimeId:', victim.id);
         const existingEvaluation = await fetcher(`/evaluations-medicales?victimeId=${victim.id}`);
+        console.log('Évaluation récupérée:', existingEvaluation);
 
         if (existingEvaluation && existingEvaluation.length > 0) {
           const evaluation = existingEvaluation[0];
+          console.log('Première évaluation trouvée:', evaluation);
 
           // Populate form with existing data
           setFormData(prev => ({
             ...prev,
             lieu_Evaluation: evaluation.lieuEvaluation || prev.lieu_Evaluation,
             date_Evaluation: evaluation.dateEvaluation || prev.date_Evaluation,
-            partenaireId: evaluation.partenaireId?.toString() || '',
-            medecin_Evaluateur_Nom: evaluation.medecinEvaluateurNom || '',
-            medecin_Evaluateur_Specialite: evaluation.medecinEvaluateurSpecialite || '',
-            violation_Atteinte: evaluation.violationAtteinte || '',
-            physique_TypeAtteinte: evaluation.physiqueTypeAtteinte || '',
-            physique_Description: evaluation.physiqueDescription || '',
-            physique_DegreAtteinte: evaluation.physiqueDegreAtteinte?.toString() || '',
-            fonctionnelle_Type: evaluation.fonctionnelleType || '',
-            fonctionnelle_Description: evaluation.fonctionnelleDescription || '',
-            fonctionnelle_DegreAtteinte: evaluation.fonctionnelleDegreAtteinte?.toString() || '',
-            psy_Type: evaluation.psyType || '',
-            psy_Description: evaluation.psyDescription || '',
-            incapacite_Global: evaluation.incapaciteGlobal?.toString() || '',
-            incapacite_Methodologie: evaluation.incapaciteMethodologie || '',
-            validation_Appreciation: evaluation.validationAppreciation || '',
-            validation_Categorisation: evaluation.validationCategorisation || '',
-            poolMedecin_Nom: evaluation.poolMedecinNom || '',
-            poolMedecin_SignatureDate: evaluation.poolMedecinSignatureDate || '',
-            poolMedecin_VisaQualite: evaluation.poolMedecinVisaQualite || '',
-            orientation_SoinsMedicaux: evaluation.orientationSoinsMedicaux ? '1' : '',
-            orientation_Reeducation_Appareillage: evaluation.orientationReeducationAppareillage ? '1' : '',
-            orientation_PriseChargePsychiatrique: evaluation.orientationPriseChargePsychiatrique ? '1' : '',
-            orientation_AutresMesures: evaluation.orientationAutresMesures || '',
-            orientation_Priorisation: evaluation.orientationPriorisation || ''
+            partenaireId: evaluation.partenaireId?.toString() || prev.partenaireId,
+            medecin_Evaluateur_Nom: evaluation.medecinEvaluateurNom || prev.medecin_Evaluateur_Nom,
+            medecin_Evaluateur_Specialite: evaluation.medecinEvaluateurSpecialite || prev.medecin_Evaluateur_Specialite,
+            violation_Atteinte: evaluation.violationAtteinte || prev.violation_Atteinte,
+            physique_TypeAtteinte: evaluation.physiqueTypeAtteinte || prev.physique_TypeAtteinte,
+            physique_Description: evaluation.physiqueDescription || prev.physique_Description,
+            physique_DegreAtteinte: evaluation.physiqueDegreAtteinte?.toString() || prev.physique_DegreAtteinte,
+            fonctionnelle_Type: evaluation.fonctionnelleType || prev.fonctionnelle_Type,
+            fonctionnelle_Description: evaluation.fonctionnelleDescription || prev.fonctionnelle_Description,
+            fonctionnelle_DegreAtteinte: evaluation.fonctionnelleDegreAtteinte?.toString() || prev.fonctionnelle_DegreAtteinte,
+            psy_Type: evaluation.psyType || prev.psy_Type,
+            psy_Description: evaluation.psyDescription || prev.psy_Description,
+            incapacite_Global: evaluation.incapaciteGlobal?.toString() || prev.incapacite_Global,
+            incapacite_Methodologie: evaluation.incapaciteMethodologie || prev.incapacite_Methodologie,
+            validation_Appreciation: evaluation.validationAppreciation || prev.validation_Appreciation,
+            validation_Categorisation: evaluation.validationCategorisation || prev.validation_Categorisation,
+            poolMedecin_Nom: evaluation.poolMedecinNom || prev.poolMedecin_Nom,
+            poolMedecin_SignatureDate: evaluation.poolMedecinSignatureDate || prev.poolMedecin_SignatureDate,
+            poolMedecin_VisaQualite: evaluation.poolMedecinVisaQualite || prev.poolMedecin_VisaQualite,
+            orientation_SoinsMedicaux: evaluation.orientationSoinsMedicaux ? '1' : prev.orientation_SoinsMedicaux,
+            orientation_Reeducation_Appareillage: evaluation.orientationReeducationAppareillage ? '1' : prev.orientation_Reeducation_Appareillage,
+            orientation_PriseChargePsychiatrique: evaluation.orientationPriseChargePsychiatrique ? '1' : prev.orientation_PriseChargePsychiatrique,
+            orientation_AutresMesures: evaluation.orientationAutresMesures || prev.orientation_AutresMesures,
+            orientation_Priorisation: evaluation.orientationPriorisation || prev.orientation_Priorisation
           }));
 
           // Determine which step to start at based on scoop
           const scoop = evaluation.scoop;
+          console.log('Scoop actuel:', scoop);
+
           if (scoop === 'responsable pool medical') {
-            // If at final step, stay at step 6
+            console.log('Navigation vers étape 6 (responsable)');
             setCurrentStep(6);
           } else if (scoop === 'pool medical') {
-            // If pool medical validated, go to step 6
+            console.log('Navigation vers étape 6 (pool medical)');
             setCurrentStep(6);
           } else if (scoop === 'partenaire') {
-            // If partenaire filled, go to step 5 (pool medical validation)
+            console.log('Navigation vers étape 5 (partenaire validé)');
             setCurrentStep(5);
           } else {
-            // Start from beginning
+            console.log('Début depuis étape 1');
             setCurrentStep(1);
           }
+        } else {
+          console.log('Aucune évaluation existante trouvée');
         }
       } catch (error) {
         console.error('Erreur lors du chargement de l\'évaluation:', error);
@@ -247,7 +257,7 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
     };
 
     fetchExistingEvaluation();
-  }, [victim?.id, fetcher]);
+  }, [victim?.id]);
 
   const getScoopValue = (step: number): string => {
     if (step === 3 || step === 4) return 'partenaire';
