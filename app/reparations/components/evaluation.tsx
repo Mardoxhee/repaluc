@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useFetch } from '@/app/context/FetchContext';
 import Swal from 'sweetalert2';
-import {
-  User,
-  Calendar,
-  MapPin,
-  Stethoscope,
-  Shield,
-  CheckCircle,
-  ArrowRight,
+import { 
+  User, 
+  Calendar, 
+  MapPin, 
+  Stethoscope, 
+  Shield, 
+  CheckCircle, 
+  ArrowRight, 
   ArrowLeft,
   FileText,
   AlertTriangle,
@@ -149,9 +149,7 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
     const fetchPartenaires = async () => {
       try {
         setLoadingPartenaires(true);
-        const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "";
-        const url = baseUrl + '/partenaires';
-        const data = await fetcher(url);
+        const data = await fetcher('/partenaires');
         setPartenaires(data || []);
       } catch (error) {
         console.error('Erreur lors du chargement des partenaires:', error);
@@ -168,7 +166,26 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
     fetchPartenaires();
   }, [fetcher]);
 
-  const handleSubmit = async () => {
+  const getScoopValue = (step: number): string => {
+    if (step === 3) return 'partenaire';
+    if (step === 4) return 'pool medical';
+    if (step === 5) return 'responsable pool medical';
+    return '';
+  };
+
+  const handleSubmit = async (saveAtStep?: number) => {
+    const stepToSave = saveAtStep || currentStep;
+    const scoop = getScoopValue(stepToSave);
+
+    if (!scoop) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Attention',
+        text: 'Vous ne pouvez sauvegarder qu\'à partir de l\'étape 3'
+      });
+      return;
+    }
+
     const payload = {
       victimeCodeUnique: victim?.codeUnique || formData.victime_CodeUnique,
       lieuEvaluation: formData.lieu_Evaluation,
@@ -197,13 +214,12 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
       orientationAutresMesures: formData.orientation_AutresMesures,
       orientationPriorisation: formData.orientation_Priorisation,
       victimeId: victim?.id || 0,
-      partenaireId: parseInt(formData.partenaireId) || 0
+      partenaireId: parseInt(formData.partenaireId) || 0,
+      scoop: scoop
     };
 
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "";
-      const url = baseUrl + '/evaluations-medicales';
-      await fetcher(url, {
+      await fetcher('/evaluations-medicales', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -265,7 +281,7 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
                   type="text"
                   value={formData.victime_NomComplet}
                   onChange={(e) => handleInputChange('victime_NomComplet', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50 border"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50"
                   readOnly
                 />
               </div>
@@ -734,16 +750,16 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
                 <div className="bg-white rounded-lg p-4 border border-gray-200">
                   <div className="font-semibold text-gray-700">Catégorisation</div>
                   <div className="text-lg font-bold text-purple-600">
-                    {formData.validation_Categorisation === '1' ? 'Moyenne' :
-                      formData.validation_Categorisation === '2' ? 'Grave' : 'Non définie'}
+                    {formData.validation_Categorisation === '1' ? 'Moyenne' : 
+                     formData.validation_Categorisation === '2' ? 'Grave' : 'Non définie'}
                   </div>
                 </div>
                 <div className="bg-white rounded-lg p-4 border border-gray-200">
                   <div className="font-semibold text-gray-700">Priorité</div>
                   <div className="text-lg font-bold text-orange-600">
-                    {formData.orientation_Priorisation === '1' ? 'Très urgent' :
-                      formData.orientation_Priorisation === '2' ? 'Urgent' :
-                        formData.orientation_Priorisation === '3' ? 'À planifier' : 'Non définie'}
+                    {formData.orientation_Priorisation === '1' ? 'Très urgent' : 
+                     formData.orientation_Priorisation === '2' ? 'Urgent' : 
+                     formData.orientation_Priorisation === '3' ? 'À planifier' : 'Non définie'}
                   </div>
                 </div>
               </div>
@@ -863,8 +879,8 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
             <div key={step.id} className="flex items-center">
               <div className={`
                 flex items-center justify-center w-12 h-12 rounded-full border-2 transition-all duration-300
-                ${currentStep >= step.id
-                  ? 'bg-blue-600 border-blue-600 text-white shadow-lg'
+                ${currentStep >= step.id 
+                  ? 'bg-blue-600 border-blue-600 text-white shadow-lg' 
                   : 'bg-white border-gray-300 text-gray-400'
                 }
               `}>
@@ -883,7 +899,7 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
             </div>
           ))}
         </div>
-
+        
         <div className="text-center">
           <h2 className="text-xl font-bold text-gray-900 mb-1">
             {steps[currentStep - 1]?.title}
@@ -916,8 +932,20 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
           Précédent
         </button>
 
-        <div className="text-sm text-gray-500">
-          Étape {currentStep} sur {steps.length}
+        <div className="flex items-center gap-4">
+          {currentStep >= 3 && (
+            <button
+              onClick={() => handleSubmit(currentStep)}
+              className="flex items-center gap-2 px-6 py-3 bg-yellow-500 text-white rounded-lg font-semibold hover:bg-yellow-600 hover:shadow-lg transition-all duration-200"
+            >
+              <Save className="w-5 h-5" />
+              Sauvegarder
+            </button>
+          )}
+
+          <div className="text-sm text-gray-500">
+            Étape {currentStep} sur {steps.length}
+          </div>
         </div>
 
         {currentStep < steps.length ? (
@@ -930,7 +958,7 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
           </button>
         ) : (
           <button
-            onClick={handleSubmit}
+            onClick={() => handleSubmit(currentStep)}
             className="flex items-center gap-2 px-8 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 hover:shadow-lg transition-all duration-200"
           >
             <Save className="w-5 h-5" />
@@ -942,7 +970,7 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
       {/* Indicateur de progression */}
       <div className="mt-6">
         <div className="bg-gray-200 rounded-full h-2">
-          <div
+          <div 
             className="bg-gradient-to-r from-blue-500 to-green-500 h-2 rounded-full transition-all duration-500"
             style={{ width: `${(currentStep / steps.length) * 100}%` }}
           />
