@@ -137,6 +137,17 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
       ...prev,
       [field]: value
     }));
+
+    // Auto-fill structure from partenaire selection
+    if (field === 'partenaireId' && value) {
+      const selectedPartenaire = partenaires.find(p => p.id === parseInt(value.toString()));
+      if (selectedPartenaire) {
+        setFormData(prev => ({
+          ...prev,
+          structure_Partenaire: selectedPartenaire.structure
+        }));
+      }
+    }
   };
 
   const nextStep = () => {
@@ -171,6 +182,72 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
 
     fetchPartenaires();
   }, [fetcher]);
+
+  // Load existing evaluation if exists
+  useEffect(() => {
+    const fetchExistingEvaluation = async () => {
+      if (!victim?.id) return;
+
+      try {
+        const existingEvaluation = await fetcher(`/evaluations-medicales?victimeId=${victim.id}`);
+
+        if (existingEvaluation && existingEvaluation.length > 0) {
+          const evaluation = existingEvaluation[0];
+
+          // Populate form with existing data
+          setFormData(prev => ({
+            ...prev,
+            lieu_Evaluation: evaluation.lieuEvaluation || prev.lieu_Evaluation,
+            date_Evaluation: evaluation.dateEvaluation || prev.date_Evaluation,
+            partenaireId: evaluation.partenaireId?.toString() || '',
+            medecin_Evaluateur_Nom: evaluation.medecinEvaluateurNom || '',
+            medecin_Evaluateur_Specialite: evaluation.medecinEvaluateurSpecialite || '',
+            violation_Atteinte: evaluation.violationAtteinte || '',
+            physique_TypeAtteinte: evaluation.physiqueTypeAtteinte || '',
+            physique_Description: evaluation.physiqueDescription || '',
+            physique_DegreAtteinte: evaluation.physiqueDegreAtteinte?.toString() || '',
+            fonctionnelle_Type: evaluation.fonctionnelleType || '',
+            fonctionnelle_Description: evaluation.fonctionnelleDescription || '',
+            fonctionnelle_DegreAtteinte: evaluation.fonctionnelleDegreAtteinte?.toString() || '',
+            psy_Type: evaluation.psyType || '',
+            psy_Description: evaluation.psyDescription || '',
+            incapacite_Global: evaluation.incapaciteGlobal?.toString() || '',
+            incapacite_Methodologie: evaluation.incapaciteMethodologie || '',
+            validation_Appreciation: evaluation.validationAppreciation || '',
+            validation_Categorisation: evaluation.validationCategorisation || '',
+            poolMedecin_Nom: evaluation.poolMedecinNom || '',
+            poolMedecin_SignatureDate: evaluation.poolMedecinSignatureDate || '',
+            poolMedecin_VisaQualite: evaluation.poolMedecinVisaQualite || '',
+            orientation_SoinsMedicaux: evaluation.orientationSoinsMedicaux ? '1' : '',
+            orientation_Reeducation_Appareillage: evaluation.orientationReeducationAppareillage ? '1' : '',
+            orientation_PriseChargePsychiatrique: evaluation.orientationPriseChargePsychiatrique ? '1' : '',
+            orientation_AutresMesures: evaluation.orientationAutresMesures || '',
+            orientation_Priorisation: evaluation.orientationPriorisation || ''
+          }));
+
+          // Determine which step to start at based on scoop
+          const scoop = evaluation.scoop;
+          if (scoop === 'responsable pool medical') {
+            // If at final step, stay at step 6
+            setCurrentStep(6);
+          } else if (scoop === 'pool medical') {
+            // If pool medical validated, go to step 6
+            setCurrentStep(6);
+          } else if (scoop === 'partenaire') {
+            // If partenaire filled, go to step 5 (pool medical validation)
+            setCurrentStep(5);
+          } else {
+            // Start from beginning
+            setCurrentStep(1);
+          }
+        }
+      } catch (error) {
+        console.error('Erreur lors du chargement de l\'évaluation:', error);
+      }
+    };
+
+    fetchExistingEvaluation();
+  }, [victim?.id, fetcher]);
 
   const getScoopValue = (step: number): string => {
     if (step === 3 || step === 4) return 'partenaire';
