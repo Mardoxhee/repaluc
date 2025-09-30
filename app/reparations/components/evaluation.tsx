@@ -1,3 +1,5 @@
+
+"use client"
 import React, { useState, useEffect } from 'react';
 import { useFetch } from '@/app/context/FetchContext';
 import Swal from 'sweetalert2';
