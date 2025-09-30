@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useFetch } from '@/app/context/FetchContext';
 import Swal from 'sweetalert2';
-import { 
-  User, 
-  Calendar, 
-  MapPin, 
-  Stethoscope, 
-  Shield, 
-  CheckCircle, 
-  ArrowRight, 
+import {
+  User,
+  Calendar,
+  MapPin,
+  Stethoscope,
+  Shield,
+  CheckCircle,
+  ArrowRight,
   ArrowLeft,
   FileText,
   AlertTriangle,
@@ -149,7 +149,9 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
     const fetchPartenaires = async () => {
       try {
         setLoadingPartenaires(true);
-        const data = await fetcher('/partenaires');
+        const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+        const url = baseUrl + '/partenaires';
+        const data = await fetcher(url);
         setPartenaires(data || []);
       } catch (error) {
         console.error('Erreur lors du chargement des partenaires:', error);
@@ -199,7 +201,9 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
     };
 
     try {
-      await fetcher('/evaluations-medicales', {
+      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+      const url = baseUrl + '/evaluations-medicales';
+      await fetcher(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -730,16 +734,16 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
                 <div className="bg-white rounded-lg p-4 border border-gray-200">
                   <div className="font-semibold text-gray-700">Catégorisation</div>
                   <div className="text-lg font-bold text-purple-600">
-                    {formData.validation_Categorisation === '1' ? 'Moyenne' : 
-                     formData.validation_Categorisation === '2' ? 'Grave' : 'Non définie'}
+                    {formData.validation_Categorisation === '1' ? 'Moyenne' :
+                      formData.validation_Categorisation === '2' ? 'Grave' : 'Non définie'}
                   </div>
                 </div>
                 <div className="bg-white rounded-lg p-4 border border-gray-200">
                   <div className="font-semibold text-gray-700">Priorité</div>
                   <div className="text-lg font-bold text-orange-600">
-                    {formData.orientation_Priorisation === '1' ? 'Très urgent' : 
-                     formData.orientation_Priorisation === '2' ? 'Urgent' : 
-                     formData.orientation_Priorisation === '3' ? 'À planifier' : 'Non définie'}
+                    {formData.orientation_Priorisation === '1' ? 'Très urgent' :
+                      formData.orientation_Priorisation === '2' ? 'Urgent' :
+                        formData.orientation_Priorisation === '3' ? 'À planifier' : 'Non définie'}
                   </div>
                 </div>
               </div>
@@ -859,8 +863,8 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
             <div key={step.id} className="flex items-center">
               <div className={`
                 flex items-center justify-center w-12 h-12 rounded-full border-2 transition-all duration-300
-                ${currentStep >= step.id 
-                  ? 'bg-blue-600 border-blue-600 text-white shadow-lg' 
+                ${currentStep >= step.id
+                  ? 'bg-blue-600 border-blue-600 text-white shadow-lg'
                   : 'bg-white border-gray-300 text-gray-400'
                 }
               `}>
@@ -879,7 +883,7 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
             </div>
           ))}
         </div>
-        
+
         <div className="text-center">
           <h2 className="text-xl font-bold text-gray-900 mb-1">
             {steps[currentStep - 1]?.title}
@@ -902,8 +906,8 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
           disabled={currentStep === 1}
           className={`
             flex items-center gap-2 px-6 py-3 rounded-lg font-semibold transition-all duration-200
-            ${currentStep === 1 
-              ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+            ${currentStep === 1
+              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
               : 'bg-gray-200 text-gray-700 hover:bg-gray-300 hover:shadow-md'
             }
           `}
@@ -938,7 +942,7 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
       {/* Indicateur de progression */}
       <div className="mt-6">
         <div className="bg-gray-200 rounded-full h-2">
-          <div 
+          <div
             className="bg-gradient-to-r from-blue-500 to-green-500 h-2 rounded-full transition-all duration-500"
             style={{ width: `${(currentStep / steps.length) * 100}%` }}
           />
