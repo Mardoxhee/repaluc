@@ -179,6 +179,13 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
     return '';
   };
 
+  const getVictimStatus = (scoop: string, visaQualite: string): string => {
+    if (scoop === 'partenaire') return 'evalué';
+    if (scoop === 'pool medical') return 'controlé';
+    if (scoop === 'responsable pool medical' && visaQualite === 'Confirmé') return 'confirmé';
+    return '';
+  };
+
   const handleSubmit = async (saveAtStep?: number) => {
     const stepToSave = saveAtStep || currentStep;
     const scoop = getScoopValue(stepToSave);
@@ -225,13 +232,47 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
     };
 
     try {
-      await fetcher('/evaluations-medicales', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      });
+      const victimeId = victim?.id;
+      if (!victimeId) {
+        throw new Error('ID de la victime manquant');
+      }
+
+      // Vérifier si une évaluation existe déjà
+      const existingEvaluation = await fetcher(`/evaluations-medicales?victimeId=${victimeId}`);
+
+      let evaluationResponse;
+      if (existingEvaluation && existingEvaluation.length > 0) {
+        // Update existing evaluation
+        const evaluationId = existingEvaluation[0].id;
+        evaluationResponse = await fetcher(`/evaluations-medicales/${evaluationId}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+      } else {
+        // Create new evaluation
+        evaluationResponse = await fetcher('/evaluations-medicales', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+      }
+
+      // Update victim status
+      const newStatus = getVictimStatus(scoop, formData.poolMedecin_VisaQualite);
+      if (newStatus) {
+        await fetcher(`/victimes/${victimeId}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ statut: newStatus })
+        });
+      }
 
       Swal.fire({
         icon: 'success',
@@ -869,14 +910,17 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Visa de Contrôle Qualité
                 </label>
-                <input
-                  type="text"
+                <select
                   value={formData.poolMedecin_VisaQualite}
                   onChange={(e) => handleInputChange('poolMedecin_VisaQualite', e.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  placeholder="Visa de contrôle qualité"
                   required
-                />
+                >
+                  <option value="">Sélectionner le visa</option>
+                  <option value="Confirmé">Confirmé</option>
+                  <option value="En attente">En attente</option>
+                  <option value="Refusé">Refusé</option>
+                </select>
               </div>
 
               <div className="bg-gradient-to-r from-blue-50 to-emerald-50 border border-emerald-200 rounded-xl p-6">
