@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useFetch } from '@/app/context/FetchContext';
 import Swal from 'sweetalert2';
+import EvaluationInput from './EvaluationInput';
 import {
   User,
   Calendar,
@@ -51,6 +52,7 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [partenaires, setPartenaires] = useState<Partenaire[]>([]);
   const [loadingPartenaires, setLoadingPartenaires] = useState(false);
+  const [existingEvaluation, setExistingEvaluation] = useState<any>(null);
   const [formData, setFormData] = useState({
     // Étape 1 - Informations générales
     victime_CodeUnique: victim?.id?.toString() || '',
@@ -94,6 +96,54 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
     orientation_AutresMesures: '',
     orientation_Priorisation: ''
   });
+
+  // Helper function to check if a field should be disabled
+  const isFieldDisabled = (fieldName: keyof typeof formData): boolean => {
+    if (!existingEvaluation) return false;
+
+    const fieldMapping: Record<string, string> = {
+      lieu_Evaluation: 'lieuEvaluation',
+      date_Evaluation: 'dateEvaluation',
+      partenaireId: 'partenaireId',
+      structure_Partenaire: 'structurePartenaire',
+      medecin_Evaluateur_Nom: 'medecinEvaluateurNom',
+      medecin_Evaluateur_Specialite: 'medecinEvaluateurSpecialite',
+      violation_Atteinte: 'violationAtteinte',
+      physique_TypeAtteinte: 'physiqueTypeAtteinte',
+      physique_Description: 'physiqueDescription',
+      physique_DegreAtteinte: 'physiqueDegreAtteinte',
+      fonctionnelle_Type: 'fonctionnelleType',
+      fonctionnelle_Description: 'fonctionnelleDescription',
+      fonctionnelle_DegreAtteinte: 'fonctionnelleDegreAtteinte',
+      psy_Type: 'psyType',
+      psy_Description: 'psyDescription',
+      incapacite_Global: 'incapaciteGlobal',
+      incapacite_Methodologie: 'incapaciteMethodologie',
+      validation_Appreciation: 'validationAppreciation',
+      validation_Categorisation: 'validationCategorisation',
+      poolMedecin_Nom: 'poolMedecinNom',
+      poolMedecin_SignatureDate: 'poolMedecinSignatureDate',
+      poolMedecin_VisaQualite: 'poolMedecinVisaQualite',
+      orientation_SoinsMedicaux: 'orientationSoinsMedicaux',
+      orientation_Reeducation_Appareillage: 'orientationReeducationAppareillage',
+      orientation_PriseChargePsychiatrique: 'orientationPriseChargePsychiatrique',
+      orientation_AutresMesures: 'orientationAutresMesures',
+      orientation_Priorisation: 'orientationPriorisation'
+    };
+
+    const mappedField = fieldMapping[fieldName];
+    if (!mappedField) return false;
+
+    const value = existingEvaluation[mappedField];
+    return value !== null && value !== undefined && value !== '';
+  };
+
+  // Helper function to get input class names
+  const getInputClassName = (fieldName: keyof typeof formData): string => {
+    const baseClass = "w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent";
+    const disabledClass = isFieldDisabled(fieldName) ? "bg-gray-100 text-gray-600 cursor-not-allowed" : "bg-white";
+    return `${baseClass} ${disabledClass}`;
+  };
 
   const steps = [
     {
@@ -201,6 +251,9 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
         if (existingEvaluation && existingEvaluation.length > 0) {
           const evaluation = existingEvaluation[0];
           console.log('Première évaluation trouvée:', evaluation);
+
+          // Store the existing evaluation for field locking
+          setExistingEvaluation(evaluation);
 
           // Populate form with existing data
           setFormData(prev => ({
@@ -384,6 +437,17 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
       case 1:
         return (
           <div className="space-y-6">
+            {existingEvaluation && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle className="text-amber-600" size={20} />
+                  <div>
+                    <h3 className="font-semibold text-amber-900">Évaluation existante détectée</h3>
+                    <p className="text-sm text-amber-700">Les champs déjà remplis sont grisés et ne peuvent pas être modifiés. Seuls les champs vides peuvent être complétés.</p>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
               <div className="flex items-center gap-3">
                 <User className="text-blue-600" size={20} />
@@ -469,12 +533,12 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
                   <MapPin className="inline w-4 h-4 mr-1" />
                   Lieu d'Évaluation
                 </label>
-                <input
+                <EvaluationInput
                   type="text"
                   value={formData.lieu_Evaluation}
-                  onChange={(e) => handleInputChange('lieu_Evaluation', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  onChange={(value) => handleInputChange('lieu_Evaluation', value)}
                   placeholder="Ville/Province de l'évaluation"
+                  isLocked={isFieldDisabled('lieu_Evaluation')}
                   required
                 />
               </div>
@@ -484,11 +548,11 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
                   <Calendar className="inline w-4 h-4 mr-1" />
                   Date d'Évaluation
                 </label>
-                <input
+                <EvaluationInput
                   type="date"
                   value={formData.date_Evaluation}
-                  onChange={(e) => handleInputChange('date_Evaluation', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  onChange={(value) => handleInputChange('date_Evaluation', value)}
+                  isLocked={isFieldDisabled('date_Evaluation')}
                   required
                 />
               </div>
@@ -514,19 +578,19 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Structure Partenaire
                 </label>
-                <select
+                <EvaluationInput
+                  as="select"
                   value={formData.partenaireId}
-                  onChange={(e) => {
-                    const selectedId = e.target.value;
-                    handleInputChange('partenaireId', selectedId);
-                    const selected = partenaires.find(p => p.id.toString() === selectedId);
+                  onChange={(value) => {
+                    handleInputChange('partenaireId', value);
+                    const selected = partenaires.find(p => p.id.toString() === value);
                     if (selected) {
                       handleInputChange('structure_Partenaire', selected.structure);
                     }
                   }}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  required
+                  isLocked={isFieldDisabled('partenaireId')}
                   disabled={loadingPartenaires}
+                  required
                 >
                   <option value="">{loadingPartenaires ? 'Chargement...' : 'Sélectionner une structure partenaire'}</option>
                   {partenaires.map((partenaire) => (
@@ -534,19 +598,19 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
                       {partenaire.structure} - {partenaire.domaine}
                     </option>
                   ))}
-                </select>
+                </EvaluationInput>
               </div>
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Nom du Médecin Évaluateur
                 </label>
-                <input
+                <EvaluationInput
                   type="text"
                   value={formData.medecin_Evaluateur_Nom}
-                  onChange={(e) => handleInputChange('medecin_Evaluateur_Nom', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  onChange={(value) => handleInputChange('medecin_Evaluateur_Nom', value)}
                   placeholder="Nom complet du médecin évaluateur"
+                  isLocked={isFieldDisabled('medecin_Evaluateur_Nom')}
                   required
                 />
               </div>
@@ -555,12 +619,12 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Spécialité du Médecin
                 </label>
-                <input
+                <EvaluationInput
                   type="text"
                   value={formData.medecin_Evaluateur_Specialite}
-                  onChange={(e) => handleInputChange('medecin_Evaluateur_Specialite', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  onChange={(value) => handleInputChange('medecin_Evaluateur_Specialite', value)}
                   placeholder="Spécialité médicale"
+                  isLocked={isFieldDisabled('medecin_Evaluateur_Specialite')}
                   required
                 />
               </div>
