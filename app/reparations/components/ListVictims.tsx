@@ -3,8 +3,9 @@ import React, { useState, useEffect, useContext, useCallback } from "react";
 import { FetchContext } from "../../context/FetchContext";
 import Swal from 'sweetalert2';
 import VictimDetailModal from "./VictimDetailModal"
-import { Search, Filter, Eye, Users, ChevronLeft, ChevronRight, X, Plus, Check, Stethoscope } from 'lucide-react';
+import { Search, Filter, Eye, Users, ChevronLeft, ChevronRight, X, Plus, Check, Stethoscope, FileText } from 'lucide-react';
 import EvaluationModal from "./EvaluationModal";
+import ViewEvaluationModal from "./ViewEvaluationModal";
 
 interface ReglagesProps {
     mockPrejudices: { id: number; nom: string }[];
@@ -76,6 +77,9 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
     const [selectedVictim, setSelectedVictim] = useState<any | null>(null);
     const [showEvaluationModal, setShowEvaluationModal] = useState(false);
     const [selectedVictimForEvaluation, setSelectedVictimForEvaluation] = useState<any | null>(null);
+    const [showViewEvaluationModal, setShowViewEvaluationModal] = useState(false);
+    const [selectedVictimForView, setSelectedVictimForView] = useState<any | null>(null);
+    const [victimsWithEvaluations, setVictimsWithEvaluations] = useState<Set<number>>(new Set());
 
     const fetchCtx = useContext(FetchContext);
 
@@ -112,6 +116,21 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
             if (response?.data) {
                 setVictims(response.data);
                 setMeta(response.meta);
+
+                // Check which victims have evaluations
+                const victimIds = response.data.map((v: any) => v.id);
+                const evaluationsPromises = victimIds.map(async (id: number) => {
+                    try {
+                        const evalData = await fetchCtx?.fetcher(`/evaluations-medicales?victimeId=${id}`);
+                        return evalData && evalData.length > 0 ? id : null;
+                    } catch {
+                        return null;
+                    }
+                });
+
+                const evaluationResults = await Promise.all(evaluationsPromises);
+                const victimsWithEval = new Set(evaluationResults.filter((id): id is number => id !== null));
+                setVictimsWithEvaluations(victimsWithEval);
             } else {
                 setVictims([]);
                 setMeta({
@@ -129,7 +148,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
         } finally {
             setLoading(false);
         }
-    }, [buildQueryParams]);
+    }, [buildQueryParams, fetchCtx]);
 
     useEffect(() => {
         const debounceTimeout = setTimeout(() => {
@@ -486,6 +505,19 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                                         <Eye size={14} />
                                                         Détails
                                                     </button>
+                                                    {victimsWithEvaluations.has(victim.id) && (
+                                                        <button
+                                                            onClick={() => {
+                                                                setSelectedVictimForView(victim);
+                                                                setShowViewEvaluationModal(true);
+                                                            }}
+                                                            className="inline-flex items-center gap-1 px-3 py-1 bg-purple-600 text-white text-sm font-medium hover:bg-purple-700 transition-colors"
+                                                            title="Voir l'évaluation"
+                                                        >
+                                                            <FileText size={14} />
+                                                            Évaluation
+                                                        </button>
+                                                    )}
                                                     {(victim.status == 'A Evaluer' || victim.status?.toLowerCase() === 'evalué' || victim.status?.toLowerCase() === 'évalué' || victim.status?.toLowerCase() === 'contrôlé' || victim.status?.toLowerCase() === 'controle') && (
                                                         <button
                                                             onClick={() => {
@@ -560,6 +592,18 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                     onClose={() => {
                         setShowEvaluationModal(false);
                         setSelectedVictimForEvaluation(null);
+                        fetchVictims();
+                    }}
+                />
+            )}
+
+            {/* Modal visualisation évaluation */}
+            {showViewEvaluationModal && selectedVictimForView && (
+                <ViewEvaluationModal
+                    victim={selectedVictimForView}
+                    onClose={() => {
+                        setShowViewEvaluationModal(false);
+                        setSelectedVictimForView(null);
                     }}
                 />
             )}
