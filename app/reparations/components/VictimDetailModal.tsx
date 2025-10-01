@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
 import {
   Info,
   FileText,
@@ -12,8 +12,10 @@ import {
   BarChart2,
   Settings,
   UserCheck,
-  Loader2
+  Loader2,
+  Stethoscope
 } from 'lucide-react';
+import { FetchContext } from '../../context/FetchContext';
 import { GiReceiveMoney } from "react-icons/gi";
 import { Modal } from 'flowbite-react';
 import InfosVictim from './infosVictim';
@@ -89,9 +91,11 @@ interface VictimDetailModalProps {
   victim: Victim;
   onClose: () => void;
   onVictimUpdate?: (updatedVictim: Victim) => void;
+  onViewEvaluation?: (victim: Victim) => void;
 }
 
-const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, onVictimUpdate }) => {
+const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, onVictimUpdate, onViewEvaluation }) => {
+  const fetchCtx = useContext(FetchContext);
   const [tab, setTab] = useState<'info' | 'dossier' | 'progression' | 'reglages'>('info');
   const [currentVictim, setCurrentVictim] = useState<Victim>(victim);
   const [isConfirming, setIsConfirming] = useState(false);
@@ -244,7 +248,29 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
           </div>
 
           {tab === 'info' && (
-            <InfosVictim victim={currentVictim} />
+            <div>
+              <InfosVictim victim={currentVictim} />
+
+              {/* Bouton pour voir l'évaluation médicale */}
+              {(currentVictim.status?.toLowerCase() === 'evalué' || currentVictim.status?.toLowerCase() === 'évalué' || currentVictim.status?.toLowerCase() === 'contrôlé' || currentVictim.status?.toLowerCase() === 'controle') && (
+                <div className="mt-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
+                  <h4 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                    <Stethoscope className="text-purple-600" size={18} />
+                    Évaluation Médicale
+                  </h4>
+                  <p className="text-sm text-gray-600 mb-3">
+                    Cette victime a une évaluation médicale enregistrée.
+                  </p>
+                  <button
+                    onClick={() => onViewEvaluation?.(currentVictim)}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded hover:bg-purple-700 transition-colors"
+                  >
+                    <FileText size={16} />
+                    Voir le rapport d'évaluation
+                  </button>
+                </div>
+              )}
+            </div>
           )}
 
           {tab === 'dossier' && (

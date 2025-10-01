@@ -106,38 +106,34 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
         return new URLSearchParams(params).toString();
     }, [meta.page, meta.limit, search, filterRules]);
 
-    // Function to check which victims have evaluations
-    const checkVictimEvaluations = async (victimIds: number[]) => {
+    // Function to check if a specific victim has an evaluation and view it
+    const handleViewEvaluation = async (victim: any) => {
         if (!fetchCtx?.fetcher) return;
 
-        console.log('🔍 Vérification des évaluations pour les victimes:', victimIds);
+        try {
+            const evalData = await fetchCtx.fetcher(`/evaluations-medicales?victimeId=${victim.id}`);
+            const hasEvaluation = Array.isArray(evalData)
+                ? evalData.length > 0
+                : evalData && Object.keys(evalData).length > 0;
 
-        const evaluationsPromises = victimIds.map(async (id: number) => {
-            try {
-                const evalData = await fetchCtx.fetcher(`/evaluations-medicales?victimeId=${id}`);
-                console.log(`📋 Évaluation pour victime ${id}:`, evalData);
-
-                // Check if evalData is an array or an object
-                const hasEvaluation = Array.isArray(evalData)
-                    ? evalData.length > 0
-                    : evalData && Object.keys(evalData).length > 0;
-
-                if (hasEvaluation) {
-                    console.log(`✅ Victime ${id} a une évaluation`);
-                    return id;
-                }
-                console.log(`❌ Victime ${id} n'a pas d'évaluation`);
-                return null;
-            } catch (error) {
-                console.error(`❌ Erreur pour victime ${id}:`, error);
-                return null;
+            if (hasEvaluation) {
+                setSelectedVictimForView(victim);
+                setShowViewEvaluationModal(true);
+            } else {
+                Swal.fire({
+                    icon: 'info',
+                    title: 'Aucune évaluation',
+                    text: 'Aucune évaluation médicale trouvée pour cette victime.',
+                });
             }
-        });
-
-        const evaluationResults = await Promise.all(evaluationsPromises);
-        const victimsWithEval = new Set(evaluationResults.filter((id): id is number => id !== null));
-        console.log('✅ Victimes avec évaluations:', Array.from(victimsWithEval));
-        setVictimsWithEvaluations(victimsWithEval);
+        } catch (error) {
+            console.error('Erreur lors de la vérification de l\'évaluation:', error);
+            Swal.fire({
+                icon: 'error',
+                title: 'Erreur',
+                text: 'Impossible de vérifier l\'évaluation de cette victime.',
+            });
+        }
     };
 
     const fetchVictims = useCallback(async () => {
@@ -152,10 +148,6 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
             if (response?.data) {
                 setVictims(response.data);
                 setMeta(response.meta);
-
-                // Check which victims have evaluations
-                const victimIds = response.data.map((v: any) => v.id);
-                await checkVictimEvaluations(victimIds);
             } else {
                 setVictims([]);
                 setMeta({
@@ -530,23 +522,6 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                                         <Eye size={14} />
                                                         Détails
                                                     </button>
-                                                    {(() => {
-                                                        const hasEval = victimsWithEvaluations.has(victim.id);
-                                                        console.log(`🎯 Victime ${victim.id} (${victim.nom}) - hasEval: ${hasEval}, Set:`, Array.from(victimsWithEvaluations));
-                                                        return hasEval;
-                                                    })() && (
-                                                        <button
-                                                            onClick={() => {
-                                                                setSelectedVictimForView(victim);
-                                                                setShowViewEvaluationModal(true);
-                                                            }}
-                                                            className="inline-flex items-center gap-1 px-3 py-1 bg-purple-600 text-white text-sm font-medium hover:bg-purple-700 transition-colors"
-                                                            title="Voir l'évaluation"
-                                                        >
-                                                            <FileText size={14} />
-                                                            Évaluation
-                                                        </button>
-                                                    )}
                                                     {(victim.status == 'A Evaluer' || victim.status?.toLowerCase() === 'evalué' || victim.status?.toLowerCase() === 'évalué' || victim.status?.toLowerCase() === 'contrôlé' || victim.status?.toLowerCase() === 'controle') && (
                                                         <button
                                                             onClick={() => {
@@ -611,6 +586,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                     onVictimUpdate={(updatedVictim) => {
                         setVictims((prevVictims) => prevVictims.map(v => v.id === updatedVictim.id ? updatedVictim : v));
                     }}
+                    onViewEvaluation={handleViewEvaluation}
                 />
             )}
 
@@ -621,10 +597,6 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                     onClose={() => {
                         setShowEvaluationModal(false);
                         setSelectedVictimForEvaluation(null);
-                        // Refresh only evaluations status for current victims
-                        if (victims.length > 0) {
-                            checkVictimEvaluations(victims.map(v => v.id));
-                        }
                     }}
                 />
             )}
