@@ -106,31 +106,40 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
         return new URLSearchParams(params).toString();
     }, [meta.page, meta.limit, search, filterRules]);
 
+    // Function to check which victims have evaluations
+    const checkVictimEvaluations = async (victimIds: number[]) => {
+        if (!fetchCtx?.fetcher) return;
+
+        const evaluationsPromises = victimIds.map(async (id: number) => {
+            try {
+                const evalData = await fetchCtx.fetcher(`/evaluations-medicales?victimeId=${id}`);
+                return evalData && evalData.length > 0 ? id : null;
+            } catch {
+                return null;
+            }
+        });
+
+        const evaluationResults = await Promise.all(evaluationsPromises);
+        const victimsWithEval = new Set(evaluationResults.filter((id): id is number => id !== null));
+        setVictimsWithEvaluations(victimsWithEval);
+    };
+
     const fetchVictims = useCallback(async () => {
+        if (!fetchCtx?.fetcher) return;
+
         setLoading(true);
         setError("");
         try {
             const queryParams = buildQueryParams();
             const url = queryParams ? `/victime/paginate/filtered?${queryParams}` : `/victime/paginate/filtered`;
-            const response = await fetchCtx?.fetcher(url);
+            const response = await fetchCtx.fetcher(url);
             if (response?.data) {
                 setVictims(response.data);
                 setMeta(response.meta);
 
                 // Check which victims have evaluations
                 const victimIds = response.data.map((v: any) => v.id);
-                const evaluationsPromises = victimIds.map(async (id: number) => {
-                    try {
-                        const evalData = await fetchCtx?.fetcher(`/evaluations-medicales?victimeId=${id}`);
-                        return evalData && evalData.length > 0 ? id : null;
-                    } catch {
-                        return null;
-                    }
-                });
-
-                const evaluationResults = await Promise.all(evaluationsPromises);
-                const victimsWithEval = new Set(evaluationResults.filter((id): id is number => id !== null));
-                setVictimsWithEvaluations(victimsWithEval);
+                await checkVictimEvaluations(victimIds);
             } else {
                 setVictims([]);
                 setMeta({
@@ -148,7 +157,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
         } finally {
             setLoading(false);
         }
-    }, [buildQueryParams, fetchCtx]);
+    }, [buildQueryParams]);
 
     useEffect(() => {
         const debounceTimeout = setTimeout(() => {
@@ -592,7 +601,10 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                     onClose={() => {
                         setShowEvaluationModal(false);
                         setSelectedVictimForEvaluation(null);
-                        fetchVictims();
+                        // Refresh only evaluations status for current victims
+                        if (victims.length > 0) {
+                            checkVictimEvaluations(victims.map(v => v.id));
+                        }
                     }}
                 />
             )}
