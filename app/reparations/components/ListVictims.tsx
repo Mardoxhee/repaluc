@@ -110,17 +110,33 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
     const checkVictimEvaluations = async (victimIds: number[]) => {
         if (!fetchCtx?.fetcher) return;
 
+        console.log('🔍 Vérification des évaluations pour les victimes:', victimIds);
+
         const evaluationsPromises = victimIds.map(async (id: number) => {
             try {
                 const evalData = await fetchCtx.fetcher(`/evaluations-medicales?victimeId=${id}`);
-                return evalData && evalData.length > 0 ? id : null;
-            } catch {
+                console.log(`📋 Évaluation pour victime ${id}:`, evalData);
+
+                // Check if evalData is an array or an object
+                const hasEvaluation = Array.isArray(evalData)
+                    ? evalData.length > 0
+                    : evalData && Object.keys(evalData).length > 0;
+
+                if (hasEvaluation) {
+                    console.log(`✅ Victime ${id} a une évaluation`);
+                    return id;
+                }
+                console.log(`❌ Victime ${id} n'a pas d'évaluation`);
+                return null;
+            } catch (error) {
+                console.error(`❌ Erreur pour victime ${id}:`, error);
                 return null;
             }
         });
 
         const evaluationResults = await Promise.all(evaluationsPromises);
         const victimsWithEval = new Set(evaluationResults.filter((id): id is number => id !== null));
+        console.log('✅ Victimes avec évaluations:', Array.from(victimsWithEval));
         setVictimsWithEvaluations(victimsWithEval);
     };
 
@@ -514,7 +530,11 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                                         <Eye size={14} />
                                                         Détails
                                                     </button>
-                                                    {victimsWithEvaluations.has(victim.id) && (
+                                                    {(() => {
+                                                        const hasEval = victimsWithEvaluations.has(victim.id);
+                                                        console.log(`🎯 Victime ${victim.id} (${victim.nom}) - hasEval: ${hasEval}, Set:`, Array.from(victimsWithEvaluations));
+                                                        return hasEval;
+                                                    })() && (
                                                         <button
                                                             onClick={() => {
                                                                 setSelectedVictimForView(victim);
