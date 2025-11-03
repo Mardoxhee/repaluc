@@ -13,12 +13,15 @@ import {
   Settings,
   UserCheck,
   Loader2,
-  Stethoscope
+  Stethoscope,
+  ClipboardList,
+  ChevronRight
 } from 'lucide-react';
 import { FetchContext } from '../../context/FetchContext';
 import { GiReceiveMoney } from "react-icons/gi";
 import { Modal } from 'flowbite-react';
 import InfosVictim from './infosVictim';
+import Formulaireplandevie from './formulaireplandevie';
 import Swal from 'sweetalert2';
 
 // Fonction pour obtenir le lien réel du fichier
@@ -96,8 +99,9 @@ interface VictimDetailModalProps {
 
 const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, onVictimUpdate, onViewEvaluation }) => {
   const fetchCtx = useContext(FetchContext);
-  const [tab, setTab] = useState<'info' | 'dossier' | 'progression' | 'reglages'>('info');
+  const [tab, setTab] = useState<'info' | 'dossier' | 'progression' | 'reglages' | 'formulaires'>('info');
   const [currentVictim, setCurrentVictim] = useState<Victim>(victim);
+  const [selectedForm, setSelectedForm] = useState<string | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
   const [files, setFiles] = useState<Array<{ id: number; label: string; name?: string; lien?: string }>>([]);
   const [loadingFiles, setLoadingFiles] = useState(true);
@@ -110,6 +114,14 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
   const [addFileMode, setAddFileMode] = useState(false);
   const [newFileLabel, setNewFileLabel] = useState('');
   const [newFileName, setNewFileName] = useState('');
+
+  // Désactiver le scroll du body quand le modal est ouvert
+  React.useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, []);
 
   // Charger la liste des documents réels
   React.useEffect(() => {
@@ -209,7 +221,12 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
     { id: 'info', label: 'Informations', icon: Info },
     { id: 'dossier', label: 'Dossier', icon: Folder },
     { id: 'progression', label: 'Progression', icon: BarChart2 },
+    { id: 'formulaires', label: 'Formulaires', icon: ClipboardList },
     { id: 'reglages', label: 'Réglages', icon: Settings }
+  ];
+
+  const formulaires = [
+    { id: 'plan-de-vie', label: 'Plan de vie', description: 'Formulaire de plan de vie pour la victime' }
   ];
 
   return (
@@ -500,6 +517,49 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
             <div className="text-center py-8 !bg-white !text-gray-900">
               <BarChart2 className="mx-auto !text-gray-400 mb-4" size={48} />
               <div className="!text-gray-500">Progression du dossier (à implémenter)</div>
+            </div>
+          )}
+
+          {tab === 'formulaires' && (
+            <div className="!bg-white !text-gray-900">
+              {!selectedForm ? (
+                <div>
+                  <h3 className="text-lg font-semibold !text-blue-600 mb-4">Liste des formulaires</h3>
+                  <div className="space-y-3">
+                    {formulaires.map((form) => (
+                      <div
+                        key={form.id}
+                        onClick={() => setSelectedForm(form.id)}
+                        className="flex items-center justify-between p-4 !bg-gray-50 rounded-lg !border !border-gray-200 hover:!bg-blue-50 hover:!border-blue-300 cursor-pointer transition-all"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 !bg-blue-100 rounded-lg">
+                            <FileText className="!text-blue-600" size={20} />
+                          </div>
+                          <div>
+                            <div className="font-medium !text-gray-800">{form.label}</div>
+                            <div className="text-sm !text-gray-500">{form.description}</div>
+                          </div>
+                        </div>
+                        <ChevronRight className="!text-gray-400" size={20} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <button
+                    onClick={() => setSelectedForm(null)}
+                    className="mb-4 flex items-center gap-2 px-3 py-2 !text-gray-600 hover:!text-blue-600 transition-colors"
+                  >
+                    <X size={16} />
+                    Retour à la liste
+                  </button>
+                  {selectedForm === 'plan-de-vie' && (
+                    <Formulaireplandevie />
+                  )}
+                </div>
+              )}
             </div>
           )}
 

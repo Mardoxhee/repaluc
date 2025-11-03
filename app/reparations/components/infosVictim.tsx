@@ -175,7 +175,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                             </div>
                             <div className={`border px-3 py-2 ${!status || status === 'non confirmé'
                                 ? 'bg-gray-200 border-gray-400 text-gray-700'
-                                : 'bg-gray-800 border-gray-800 text-white'
+                                : 'bg-blue-600 border-blue-600 text-white'
                                 }`}>
                                 <span className="text-sm font-medium">{status && status !== '' ? status : 'Non confirmé'}</span>
                             </div>
@@ -187,7 +187,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                 <div className="col-span-12 md:col-span-8">
                     {/* Personal Information */}
                     <div className="mb-6">
-                        <div className="bg-gray-800 text-white px-4 py-2 border-b">
+                        <div className="bg-blue-600 text-white px-4 py-2 border-b">
                             <h2 className="font-bold text-sm uppercase tracking-wide">1. Informations Personnelles</h2>
                         </div>
                         <div className="border border-gray-300 border-t-0">
@@ -234,7 +234,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
 
                     {/* Address Information */}
                     <div className="mb-6">
-                        <div className="bg-gray-800 text-white px-4 py-2 border-b">
+                        <div className="bg-blue-600 text-white px-4 py-2 border-b">
                             <h2 className="font-bold text-sm uppercase tracking-wide">2. Adresse de Résidence</h2>
                         </div>
                         <div className="border border-gray-300 border-t-0">
@@ -273,7 +273,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
 
                     {/* Origin Information */}
                     <div className="mb-6">
-                        <div className="bg-gray-800 text-white px-4 py-2 border-b">
+                        <div className="bg-blue-600 text-white px-4 py-2 border-b">
                             <h2 className="font-bold text-sm uppercase tracking-wide">3. Lieu d'Origine</h2>
                         </div>
                         <div className="border border-gray-300 border-t-0">
@@ -304,7 +304,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
 
                     {/* Incident Information */}
                     <div className="mb-6">
-                        <div className="bg-gray-800 text-white px-4 py-2 border-b">
+                        <div className="bg-blue-600 text-white px-4 py-2 border-b">
                             <h2 className="font-bold text-sm uppercase tracking-wide">4. Détails de l'Incident</h2>
                         </div>
                         <div className="border border-gray-300 border-t-0">
@@ -339,7 +339,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
 
                     {/* Compensation & Final Damage */}
                     <div className="mb-6">
-                        <div className="bg-gray-800 text-white px-4 py-2 border-b">
+                        <div className="bg-blue-600 text-white px-4 py-2 border-b">
                             <h2 className="font-bold text-sm uppercase tracking-wide">5. Préjudice et Mésure de réparation</h2>
                         </div>
                         <div className="border border-gray-300 border-t-0 p-4">
@@ -384,7 +384,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
 
                     {/* Comments */}
                     <div className="mb-6">
-                        <div className="bg-gray-800 text-white px-4 py-2 border-b">
+                        <div className="bg-blue-600 text-white px-4 py-2 border-b">
                             <h2 className="font-bold text-sm uppercase tracking-wide">6. Observations</h2>
                         </div>
                         <div className="border border-gray-300 border-t-0 p-4">
@@ -399,7 +399,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
             </div>
 
             {/* Footer */}
-            <div className="border-t-2 border-gray-800 pt-4 mt-8 text-center">
+            <div className="border-t-2 border-blue-600 pt-4 mt-8 text-center">
                 <p className="text-xs text-gray-600">
                     Document généré le {new Date().toLocaleDateString('fr-FR')} - Référence: {dossier || 'N/A'}
                 </p>
