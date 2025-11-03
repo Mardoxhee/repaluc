@@ -25,7 +25,6 @@ export const FetchProvider = ({ children }: { children: ReactNode }) => {
             if (!response.ok) {
                 console.log('Aucune donnée retournée ou erreur pour', fullUrl, 'Status:', response.status);
                 console.log('throw new Error sur status', response.status, 'pour', fullUrl);
-                throw new Error(`Erreur ${response.status}`);
             }
             let data = null;
             const contentType = response.headers.get('content-type');
