@@ -164,3 +164,30 @@ html, body {
 .institutional-gradient {
   background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
 }
+
+/* Animation pour l'indicateur offline */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Styles pour l'impression */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  body {
+    background: white !important;
+  }
+  
+  button {
+    display: none !important;
+  }
+}

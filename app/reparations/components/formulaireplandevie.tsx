@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, CheckCircle2, AlertCircle, Save, FileText } from 'lucide-react';
+import { Loader2, CheckCircle2, AlertCircle, Save, FileText, Printer, Edit } from 'lucide-react';
 import Swal from 'sweetalert2';
 
 interface Assertion {
@@ -44,10 +44,44 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
   const [formData, setFormData] = useState<FormData>({});
   const [saving, setSaving] = useState(false);
   const [currentCategory, setCurrentCategory] = useState<string>('');
+  const [existingForm, setExistingForm] = useState<any>(null);
+  const [hasExistingForm, setHasExistingForm] = useState(false);
+  const [checkingExisting, setCheckingExisting] = useState(true);
 
   useEffect(() => {
     fetchQuestions();
-  }, []);
+    if (victim?.id) {
+      checkExistingForm();
+    }
+  }, [victim]);
+
+  const checkExistingForm = async () => {
+    if (!victim?.id) return;
+    
+    try {
+      setCheckingExisting(true);
+      const response = await fetch(`http://10.140.0.104:8007/plan-vie-enquette/victime/${victim.id}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        // Vérifier si on a des données avec la nouvelle structure
+        if (data && data.planVieQuestion && data.planVieQuestion.length > 0) {
+          setExistingForm(data);
+          setHasExistingForm(true);
+        } else {
+          setHasExistingForm(false);
+        }
+      } else {
+        // Si 404 ou autre erreur, pas de formulaire existant
+        setHasExistingForm(false);
+      }
+    } catch (err) {
+      console.error('Erreur lors de la vérification du formulaire existant:', err);
+      setHasExistingForm(false);
+    } finally {
+      setCheckingExisting(false);
+    }
+  };
 
   const fetchQuestions = async () => {
     try {
@@ -325,11 +359,131 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
     }
   };
 
-  if (loading) {
+  // Fonction pour afficher le formulaire existant
+  const renderExistingForm = () => {
+    if (!existingForm) return null;
+
+    // Nouvelle structure : planVieQuestion au lieu de questionResponse
+    const responses = existingForm.planVieQuestion || [];
+    
+    return (
+      <div className="bg-white text-gray-900 max-w-5xl mx-auto">
+        {/* Header */}
+        <div className="border-b-2 pb-4 mb-6" style={{ borderColor: '#901c67' }}>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold tracking-wide uppercase" style={{ color: '#901c67' }}>
+                Plan de Vie - Formulaire Rempli
+              </h1>
+              <p className="text-gray-600 text-sm mt-1">
+                Statut: <span className="font-semibold">{existingForm.status || 'Draft'}</span>
+                {existingForm.isSign && <span className="ml-2 text-green-600">✓ Signé</span>}
+              </p>
+              <p className="text-gray-500 text-xs mt-1">
+                Créé le: {new Date(existingForm.createdAt).toLocaleDateString('fr-FR')}
+                {existingForm.updatedAt !== existingForm.createdAt && 
+                  ` • Modifié le: ${new Date(existingForm.updatedAt).toLocaleDateString('fr-FR')}`
+                }
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => window.print()}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg transition-colors hover:bg-blue-700 flex items-center gap-2"
+              >
+                <Printer size={16} />
+                Imprimer
+              </button>
+              <button
+                onClick={() => {
+                  // Pré-remplir le formulaire avec les données existantes
+                  const prefilledData: FormData = {};
+                  
+                  responses.forEach((item: any) => {
+                    const reponse = item.reponse;
+                    // Si la réponse contient des virgules, c'est probablement un checkbox
+                    if (reponse && reponse.includes(',')) {
+                      prefilledData[item.questionId] = reponse.split(',').map((s: string) => s.trim());
+                    } else {
+                      prefilledData[item.questionId] = reponse;
+                    }
+                  });
+                  
+                  setFormData(prefilledData);
+                  setHasExistingForm(false);
+                }}
+                className="px-4 py-2 text-white rounded-lg transition-colors hover:opacity-90 flex items-center gap-2"
+                style={{ backgroundColor: '#901c67' }}
+              >
+                <Edit size={16} />
+                Modifier
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Réponses groupées par catégorie */}
+        <div className="space-y-6">
+          {Object.entries(questions).map(([category, categoryQuestions]) => {
+            const categoryResponses = responses.filter((item: any) => 
+              categoryQuestions.some(q => q.id === item.questionId)
+            );
+
+            if (categoryResponses.length === 0) return null;
+
+            return (
+              <div key={category} className="mb-6">
+                <div className="text-white px-4 py-3 border-b" style={{ backgroundColor: '#901c67' }}>
+                  <h2 className="font-bold text-sm uppercase tracking-wide">{category}</h2>
+                </div>
+                <div className="border border-gray-300 border-t-0 bg-gray-50 p-6">
+                  <div className="space-y-4">
+                    {categoryResponses.map((item: any) => {
+                      const question = categoryQuestions.find(q => q.id === item.questionId);
+                      if (!question) return null;
+
+                      return (
+                        <div key={item.questionId} className="bg-white p-4 border-l-4 border-blue-600 shadow-sm">
+                          <div className="flex items-start gap-3 mb-2">
+                            <span className="inline-flex items-center justify-center px-3 py-2 text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: '#901c67' }}>
+                              {question.numero}
+                            </span>
+                            <span className="text-gray-800 font-semibold text-sm uppercase pt-1.5">
+                              {question.question}
+                            </span>
+                          </div>
+                          <div className="ml-12 mt-3">
+                            <div className="bg-blue-50 border border-blue-200 p-3 rounded">
+                              <p className="text-gray-800 text-sm">{item.reponse}</p>
+                              {item.obs && (
+                                <div className="mt-2 pt-2 border-t border-blue-300">
+                                  <p className="text-xs text-gray-600">
+                                    <span className="font-semibold">Observation:</span> {item.obs}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  if (loading || checkingExisting) {
     return (
       <div className="flex flex-col items-center justify-center py-16">
         <Loader2 className="animate-spin text-pink-600 mb-4" size={48} />
-        <p className="text-gray-600">Chargement du formulaire...</p>
+        <p className="text-gray-600">
+          {checkingExisting ? 'Vérification du formulaire...' : 'Chargement du formulaire...'}
+        </p>
       </div>
     );
   }
@@ -348,6 +502,11 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
         </button>
       </div>
     );
+  }
+
+  // Si un formulaire existe déjà, l'afficher
+  if (hasExistingForm && existingForm) {
+    return renderExistingForm();
   }
 
   const categories = Object.keys(questions);

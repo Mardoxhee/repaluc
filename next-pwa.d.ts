@@ -6,6 +6,17 @@ declare module 'next-pwa' {
     register?: boolean;
     skipWaiting?: boolean;
     disable?: boolean;
+    fallbacks?: {
+      document?: string;
+      image?: string;
+      audio?: string;
+      video?: string;
+      font?: string;
+    };
+    workboxOptions?: {
+      disableDevLogs?: boolean;
+      [key: string]: any;
+    };
     runtimeCaching?: Array<{
       urlPattern: RegExp;
       handler: string;
@@ -19,6 +30,7 @@ declare module 'next-pwa' {
         cacheableResponse?: {
           statuses?: number[];
         };
+        [key: string]: any;
       };
     }>;
   }

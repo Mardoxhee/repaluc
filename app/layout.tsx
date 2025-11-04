@@ -3,6 +3,9 @@ import type { Metadata } from "next";
 import { Rubik } from "next/font/google";
 import "./globals.css";
 import { FetchProvider } from "./context/FetchContext";
+import OfflineIndicator from "./components/OfflineIndicator";
+import PWAInstaller from "./components/PWAInstaller";
+import DBStatus from "./components/DBStatus";
 
 // Configuration de la police Rubik avec les sous-ensembles et styles nécessaires
 const rubik = Rubik({
@@ -53,6 +56,9 @@ export default function RootLayout({
       </head>
       <body className={`${rubik.variable} font-sans antialiased overflow-x-hidden w-screen max-w-full`}>
         <FetchProvider>
+          <PWAInstaller />
+          <OfflineIndicator />
+          <DBStatus />
           {children}
         </FetchProvider>
       </body>
