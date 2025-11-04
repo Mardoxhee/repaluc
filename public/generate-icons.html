@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Générateur d'icônes PWA</title>
+</head>
+<body>
+    <h1>Générateur d'icônes PWA</h1>
+    <p>Ouvrez ce fichier dans un navigateur et utilisez la console pour générer les icônes</p>
+    <canvas id="canvas192" width="192" height="192" style="border:1px solid black; margin: 10px;"></canvas>
+    <canvas id="canvas512" width="512" height="512" style="border:1px solid black; margin: 10px;"></canvas>
+    
+    <script>
+        // Générer icône 192x192
+        const canvas192 = document.getElementById('canvas192');
+        const ctx192 = canvas192.getContext('2d');
+        
+        // Fond bleu
+        ctx192.fillStyle = '#2563eb';
+        ctx192.fillRect(0, 0, 192, 192);
+        
+        // Icône utilisateur blanc
+        ctx192.fillStyle = 'white';
+        // Tête
+        ctx192.beginPath();
+        ctx192.arc(96, 70, 25, 0, Math.PI * 2);
+        ctx192.fill();
+        // Corps
+        ctx192.beginPath();
+        ctx192.ellipse(96, 130, 40, 50, 0, 0, Math.PI * 2);
+        ctx192.fill();
+        
+        // Télécharger
+        const link192 = document.createElement('a');
+        link192.download = 'icon-192x192.png';
+        link192.href = canvas192.toDataURL();
+        link192.click();
+        
+        // Générer icône 512x512
+        const canvas512 = document.getElementById('canvas512');
+        const ctx512 = canvas512.getContext('2d');
+        
+        // Fond bleu
+        ctx512.fillStyle = '#2563eb';
+        ctx512.fillRect(0, 0, 512, 512);
+        
+        // Icône utilisateur blanc
+        ctx512.fillStyle = 'white';
+        // Tête
+        ctx512.beginPath();
+        ctx512.arc(256, 185, 67, 0, Math.PI * 2);
+        ctx512.fill();
+        // Corps
+        ctx512.beginPath();
+        ctx512.ellipse(256, 350, 107, 133, 0, 0, Math.PI * 2);
+        ctx512.fill();
+        
+        // Télécharger
+        const link512 = document.createElement('a');
+        link512.download = 'icon-512x512.png';
+        link512.href = canvas512.toDataURL();
+        link512.click();
+        
+        console.log('Icônes générées et téléchargées!');
+    </script>
+</body>
+</html>

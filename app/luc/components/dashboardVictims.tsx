@@ -492,7 +492,7 @@ const DashboardVictims = () => {
           </div>
           <div className="bg-white/10 rounded-lg p-4">
             <div className="text-2xl font-bold">{loading ? "..." : `${stats.totalIndemnisation.toLocaleString()} USD`}</div>
-            <div className="text-blue-100 text-sm">Indemnisations versées</div>
+            <div className="text-blue-100 text-sm">d'indemnisations estimées</div>
           </div>
           <div className="bg-white/10 rounded-lg p-4">
             <div className="text-2xl font-bold">{loading ? "..." : `${totalProvinces} provinces`}</div>

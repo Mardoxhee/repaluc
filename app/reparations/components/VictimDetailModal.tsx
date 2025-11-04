@@ -556,7 +556,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                     Retour à la liste
                   </button>
                   {selectedForm === 'plan-de-vie' && (
-                    <Formulaireplandevie />
+                    <Formulaireplandevie victim={currentVictim} userId={1} />
                   )}
                 </div>
               )}

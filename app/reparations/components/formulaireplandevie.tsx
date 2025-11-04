@@ -2,6 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Loader2, CheckCircle2, AlertCircle, Save, FileText } from 'lucide-react';
 import Swal from 'sweetalert2';
 
+interface Assertion {
+  id: number;
+  text: string;
+}
+
 interface Question {
   id: number;
   question: string;
@@ -11,7 +16,7 @@ interface Question {
   numero: string;
   visible: boolean;
   ordre: number;
-  assertions: any[];
+  assertions: Assertion[];
 }
 
 interface QuestionsByCategory {
@@ -22,7 +27,17 @@ interface FormData {
   [questionId: number]: any;
 }
 
-const Formulaireplandevie = () => {
+interface Victim {
+  id: number;
+  [key: string]: any;
+}
+
+interface FormProps {
+  victim?: Victim;
+  userId?: number;
+}
+
+const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
   const [questions, setQuestions] = useState<QuestionsByCategory>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -91,11 +106,66 @@ const Formulaireplandevie = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validation : vérifier qu'on a bien une victime
+    if (!victim || !victim.id) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'Erreur',
+        text: 'Aucune victime sélectionnée'
+      });
+      return;
+    }
+
     setSaving(true);
 
     try {
-      // Simulate API call - replace with your actual endpoint
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Construire le payload selon le format requis
+      const questionResponse = Object.entries(formData).map(([questionId, reponse]) => {
+        // Convertir les tableaux (checkbox) en string
+        const reponseFormatted = Array.isArray(reponse) ? reponse.join(', ') : String(reponse);
+        
+        return {
+          questionId: parseInt(questionId),
+          reponse: reponseFormatted
+        };
+      }).filter(item => item.reponse && item.reponse.trim() !== ''); // Filtrer les réponses vides
+
+      // Vérifier qu'il y a au moins une réponse
+      if (questionResponse.length === 0) {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Formulaire vide',
+          text: 'Veuillez répondre à au moins une question avant de soumettre'
+        });
+        setSaving(false);
+        return;
+      }
+
+      const payload = {
+        userId: userId || 1, // Utiliser l'userId passé en props ou 1 par défaut
+        victimeId: victim.id,
+        status: "Draft",
+        isSign: false,
+        questionResponse
+      };
+
+      console.log('Payload à envoyer:', payload);
+
+      // Envoyer au serveur
+      const response = await fetch('http://10.140.0.104:8007/plan-vie-enquette', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        throw new Error('Erreur lors de l\'enregistrement');
+      }
+
+      const result = await response.json();
       
       await Swal.fire({
         icon: 'success',
@@ -105,16 +175,52 @@ const Formulaireplandevie = () => {
         showConfirmButton: false
       });
       
-      console.log('Form data:', formData);
-    } catch (err) {
+      console.log('Réponse du serveur:', result);
+    } catch (err: any) {
+      console.error('Erreur:', err);
       await Swal.fire({
         icon: 'error',
         title: 'Erreur',
-        text: 'Erreur lors de l\'enregistrement du formulaire'
+        text: err.message || 'Erreur lors de l\'enregistrement du formulaire'
       });
     } finally {
       setSaving(false);
     }
+  };
+
+  // Fonction pour vérifier si une question doit être visible
+  const shouldShowQuestion = (question: Question, allQuestions: Question[]): boolean => {
+    // Trouver la question précédente (ordre - 1)
+    const previousQuestion = allQuestions.find(q => q.ordre === question.ordre - 1);
+    
+    // Si pas de question précédente, afficher
+    if (!previousQuestion) return true;
+    
+    // Si la question précédente n'a pas d'assertions, afficher
+    if (!previousQuestion.assertions || previousQuestion.assertions.length === 0) return true;
+    
+    // Vérifier si la question précédente a une option "Autre" (insensible à la casse)
+    const hasAutreOption = previousQuestion.assertions.some(
+      assertion => assertion.text.toLowerCase().includes('autre')
+    );
+    
+    // Si pas d'option "Autre", afficher la question
+    if (!hasAutreOption) return true;
+    
+    // Vérifier si "Autre" a été sélectionné dans la question précédente
+    const previousAnswer = formData[previousQuestion.id];
+    
+    if (previousQuestion.type === 'radio') {
+      // Pour radio, vérifier si la réponse contient "autre"
+      return previousAnswer && previousAnswer.toLowerCase().includes('autre');
+    } else if (previousQuestion.type === 'checkbox') {
+      // Pour checkbox, vérifier si au moins une réponse contient "autre"
+      return Array.isArray(previousAnswer) && previousAnswer.some(
+        (answer: string) => answer.toLowerCase().includes('autre')
+      );
+    }
+    
+    return true;
   };
 
   const renderInput = (question: Question) => {
@@ -155,37 +261,52 @@ const Formulaireplandevie = () => {
         );
       
       case 'radio':
+        // Si pas d'assertions, utiliser Oui/Non par défaut
+        const radioOptions = question.assertions && question.assertions.length > 0 
+          ? [...question.assertions].reverse()
+          : [{ id: 1, text: 'Oui' }, { id: 2, text: 'Non' }];
+        
         return (
           <div className="space-y-2">
-            {['Oui', 'Non'].map((option) => (
-              <label key={option} className="flex items-center gap-3 p-3 bg-white border-2 border-gray-300 hover:bg-blue-50 hover:border-blue-400 cursor-pointer transition-all">
+            {radioOptions.map((assertion) => (
+              <label key={assertion.id} className="flex items-center gap-3 p-3 bg-white border-2 border-gray-300 hover:bg-blue-50 hover:border-blue-400 cursor-pointer transition-all">
                 <input
                   type="radio"
                   name={`question-${question.id}`}
-                  value={option}
-                  checked={formData[question.id] === option}
+                  value={assertion.text}
+                  checked={formData[question.id] === assertion.text}
                   onChange={(e) => handleInputChange(question.id, e.target.value)}
                   className="w-4 h-4 text-blue-600 focus:ring-blue-600"
                 />
-                <span className="text-gray-800 text-sm font-medium">{option}</span>
+                <span className="text-gray-800 text-sm font-medium">{assertion.text}</span>
               </label>
             ))}
           </div>
         );
       
       case 'checkbox':
-        const options = ['Soins médicaux généraux', 'Soins psychologiques', 'Chirurgie', 'Médicaments', 'Rééducation'];
+        // Si pas d'assertions, utiliser des options par défaut
+        const checkboxOptions = question.assertions && question.assertions.length > 0 
+          ? [...question.assertions].reverse()
+          : [
+              { id: 1, text: 'Soins médicaux généraux' },
+              { id: 2, text: 'Soins psychologiques' },
+              { id: 3, text: 'Chirurgie' },
+              { id: 4, text: 'Médicaments' },
+              { id: 5, text: 'Rééducation' }
+            ];
+        
         return (
           <div className="space-y-2">
-            {options.map((option) => (
-              <label key={option} className="flex items-center gap-3 p-3 bg-white border-2 border-gray-300 hover:bg-blue-50 hover:border-blue-400 cursor-pointer transition-all">
+            {checkboxOptions.map((assertion) => (
+              <label key={assertion.id} className="flex items-center gap-3 p-3 bg-white border-2 border-gray-300 hover:bg-blue-50 hover:border-blue-400 cursor-pointer transition-all">
                 <input
                   type="checkbox"
-                  checked={(formData[question.id] || []).includes(option)}
-                  onChange={(e) => handleCheckboxChange(question.id, option, e.target.checked)}
+                  checked={(formData[question.id] || []).includes(assertion.text)}
+                  onChange={(e) => handleCheckboxChange(question.id, assertion.text, e.target.checked)}
                   className="w-4 h-4 text-blue-600 focus:ring-blue-600"
                 />
-                <span className="text-gray-800 text-sm font-medium">{option}</span>
+                <span className="text-gray-800 text-sm font-medium">{assertion.text}</span>
               </label>
             ))}
           </div>
@@ -287,6 +408,7 @@ const Formulaireplandevie = () => {
                 <div className="p-6 space-y-5">
                   {questions[category]
                     .sort((a, b) => a.ordre - b.ordre)
+                    .filter((question) => shouldShowQuestion(question, questions[category]))
                     .map((question) => (
                       <div
                         key={question.id}
