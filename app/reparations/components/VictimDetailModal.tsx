@@ -22,6 +22,7 @@ import { GiReceiveMoney } from "react-icons/gi";
 import { Modal } from 'flowbite-react';
 import InfosVictim from './infosVictim';
 import Formulaireplandevie from './formulaireplandevie';
+import ContratVictim from './contratVictim';
 import Swal from 'sweetalert2';
 
 // Fonction pour obtenir le lien réel du fichier
@@ -99,7 +100,7 @@ interface VictimDetailModalProps {
 
 const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, onVictimUpdate, onViewEvaluation }) => {
   const fetchCtx = useContext(FetchContext);
-  const [tab, setTab] = useState<'info' | 'dossier' | 'progression' | 'reglages' | 'formulaires'>('info');
+  const [tab, setTab] = useState<'info' | 'dossier' | 'progression' | 'reglages' | 'formulaires' | 'contrat'>('info');
   const [currentVictim, setCurrentVictim] = useState<Victim>(victim);
   const [selectedForm, setSelectedForm] = useState<string | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
@@ -223,6 +224,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
     { id: 'dossier', label: 'Dossier', icon: Folder },
     { id: 'progression', label: 'Progression', icon: BarChart2 },
     { id: 'formulaires', label: 'Formulaires', icon: ClipboardList },
+    { id: 'contrat', label: 'Contrat', icon: FileText },
     { id: 'reglages', label: 'Réglages', icon: Settings }
   ];
 
@@ -561,6 +563,12 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {tab === 'contrat' && (
+            <div className="!bg-white !text-gray-900">
+              <ContratVictim victim={currentVictim} />
             </div>
           )}
 
