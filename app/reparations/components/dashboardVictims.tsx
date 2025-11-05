@@ -1,11 +1,11 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, LineChart, Line, CartesianGrid, AreaChart, Area } from 'recharts';
-import { FiUsers, FiShield, FiMapPin, FiAward, FiDollarSign, FiTrendingUp, FiAlertTriangle, FiCheckCircle } from 'react-icons/fi';
+import { FiUsers, FiShield, FiMapPin, FiAward, FiDollarSign, FiTrendingUp, FiAlertTriangle, FiCheckCircle, FiWifi, FiWifiOff } from 'react-icons/fi';
 import { FaHospitalSymbol, FaUserCheck, FaBalanceScale } from "react-icons/fa";
-import { GiInjustice } from "react-icons/gi";
 import { BsFillHousesFill } from "react-icons/bs";
 import { useFetch } from '../../context/FetchContext';
+import { saveToCache, getFromCache, isOnline } from '../../utils/dashboardCache';
 
 const COLORS = ["#007fba", "#7f2360", "#0066cc", "#cc3366", "#0080ff", "#ff6b9d", "#4da6ff", "#ff8fab", "#80bfff", "#ffb3d1"];
 
@@ -50,6 +50,9 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color, subtitle
 const DashboardVictims = () => {
   const { fetcher } = useFetch();
   const [loading, setLoading] = useState(true);
+  const [isOffline, setIsOffline] = useState(false);
+  const [usingCache, setUsingCache] = useState(false);
+  const [showOfflineIndicator, setShowOfflineIndicator] = useState(true);
   type SexeStat = { sexe: string; total: number };
   const [stats, setStats] = useState<{
     sexe: SexeStat[];
@@ -76,48 +79,107 @@ const DashboardVictims = () => {
   useEffect(() => {
     const fetchAllStats = async () => {
       setLoading(true);
-      try {
-        const [
-          sexeData,
-          trancheAgeData,
-          provinceData,
-          programmeData,
-          territoireData,
-          prejudiceFinalData,
-          totalIndemnisationData,
-          categorieData,
-          prejudiceData
-        ] = await Promise.all([
-          fetcher('/victime/stats/sexe'),
-          fetcher('/victime/stats/tranche-age'),
-          fetcher('/victime/stats/province'),
-          fetcher('/victime/stats/programme'),
-          fetcher('/victime/stats/territoire'),
-          fetcher('/victime/stats/prejudice-final'),
-          fetcher('/victime/stats/total-indemnisation'),
-          fetcher('/victime/stats/categorie'),
-          fetcher('/victime/stats/prejudice')
-        ]);
+      setIsOffline(!isOnline());
+      setUsingCache(false);
 
-        setStats({
-          sexe: sexeData || [],
-          trancheAge: trancheAgeData || [],
-          province: provinceData || [],
-          programme: programmeData || [],
-          territoire: territoireData || [],
-          prejudiceFinal: prejudiceFinalData || [],
-          totalIndemnisation: totalIndemnisationData?.totalIndemnisation || 0,
-          categorie: categorieData || [],
-          prejudice: prejudiceData || []
-        });
-      } catch (error) {
-        console.error('Erreur lors du chargement des statistiques:', error);
-      } finally {
+      // Essayer de charger depuis le cache d'abord
+      const cacheKey = 'dashboard-stats';
+      const cachedData = await getFromCache(cacheKey);
+
+      if (cachedData && !isOnline()) {
+        // Utiliser le cache si offline
+        console.log('[Dashboard] Mode offline - Utilisation du cache');
+        setStats(cachedData);
+        setUsingCache(true);
         setLoading(false);
+        return;
+      }
+
+      if (cachedData && isOnline()) {
+        // Afficher le cache immédiatement puis rafraîchir en arrière-plan
+        console.log('[Dashboard] Affichage du cache puis rafraîchissement');
+        setStats(cachedData);
+        setUsingCache(true);
+        setLoading(false);
+      }
+
+      // Essayer de charger depuis le serveur
+      if (isOnline()) {
+        try {
+          const [
+            sexeData,
+            trancheAgeData,
+            provinceData,
+            programmeData,
+            territoireData,
+            prejudiceFinalData,
+            totalIndemnisationData,
+            categorieData,
+            prejudiceData
+          ] = await Promise.all([
+            fetcher('/victime/stats/sexe'),
+            fetcher('/victime/stats/tranche-age'),
+            fetcher('/victime/stats/province'),
+            fetcher('/victime/stats/programme'),
+            fetcher('/victime/stats/territoire'),
+            fetcher('/victime/stats/prejudice-final'),
+            fetcher('/victime/stats/total-indemnisation'),
+            fetcher('/victime/stats/categorie'),
+            fetcher('/victime/stats/prejudice')
+          ]);
+
+          const newStats = {
+            sexe: sexeData || [],
+            trancheAge: trancheAgeData || [],
+            province: provinceData || [],
+            programme: programmeData || [],
+            territoire: territoireData || [],
+            prejudiceFinal: prejudiceFinalData || [],
+            totalIndemnisation: totalIndemnisationData?.totalIndemnisation || 0,
+            categorie: categorieData || [],
+            prejudice: prejudiceData || []
+          };
+
+          setStats(newStats);
+          setUsingCache(false);
+
+          // Sauvegarder dans le cache
+          await saveToCache(cacheKey, newStats);
+          console.log('[Dashboard] Données sauvegardées dans le cache');
+        } catch (error) {
+          console.error('[Dashboard] Erreur chargement serveur:', error);
+
+          // Si erreur et pas de cache, essayer de charger le cache expiré
+          if (!cachedData) {
+            const expiredCache = await getFromCache(cacheKey);
+            if (expiredCache) {
+              console.log('[Dashboard] Utilisation du cache expiré');
+              setStats(expiredCache);
+              setUsingCache(true);
+            }
+          }
+        } finally {
+          setLoading(false);
+        }
       }
     };
 
     fetchAllStats();
+
+    // Écouter les changements de connexion
+    const handleOnline = () => {
+      setIsOffline(false);
+      fetchAllStats();
+    };
+    const handleOffline = () => setIsOffline(true);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, [fetcher]);
 
   // Calculs des totaux
@@ -173,9 +235,58 @@ const DashboardVictims = () => {
     <div className="w-full px-6 py-8 bg-gray-50 min-h-screen">
       {/* En-tête */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Tableau de Bord des Victimes</h1>
-        <p className="text-gray-600">Vue d'ensemble des données et statistiques du système FONAREV</p>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Tableau de Bord des Victimes</h1>
+            <p className="text-gray-600">Vue d'ensemble des données et statistiques du système FONAREV</p>
+          </div>
+
+          {/* Indicateur de statut */}
+          {(isOffline || usingCache) && showOfflineIndicator && (
+            <div className={`flex items-center gap-3 px-4 py-2 rounded-lg border ${isOffline
+                ? 'bg-orange-50 text-orange-800 border-orange-200'
+                : 'bg-blue-50 text-blue-800 border-blue-200'
+              }`}>
+              {isOffline ? (
+                <>
+                  <FiWifiOff size={18} />
+                  <span className="text-sm font-medium">Mode Hors Ligne</span>
+                </>
+              ) : (
+                <>
+                  <FiWifi size={18} />
+                  <span className="text-sm font-medium">Données en cache</span>
+                </>
+              )}
+              <button
+                onClick={() => setShowOfflineIndicator(false)}
+                className="ml-2 p-1 hover:bg-white/50 rounded transition-colors"
+                title="Fermer"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Notification discrète si l'indicateur est fermé */}
+      {(isOffline || usingCache) && !showOfflineIndicator && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <button
+            onClick={() => setShowOfflineIndicator(true)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-full shadow-lg border ${isOffline
+                ? 'bg-orange-100 text-orange-800 border-orange-300'
+                : 'bg-blue-100 text-blue-800 border-blue-300'
+              } hover:scale-105 transition-transform`}
+            title={isOffline ? "Mode Hors Ligne" : "Données en cache"}
+          >
+            {isOffline ? <FiWifiOff size={16} /> : <FiWifi size={16} />}
+          </button>
+        </div>
+      )}
 
       {/* Cartes de statistiques principales */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -193,7 +304,7 @@ const DashboardVictims = () => {
           value={loading ? "..." : `${stats.totalIndemnisation.toLocaleString()} USD`}
           icon={<FiDollarSign className="text-white text-xl" />}
           color="bg-gradient-to-br from-green-500 to-green-600"
-          subtitle="Montant total versé"
+          subtitle="Montant total d'indemnisations estimées"
           loading={loading}
         />
 

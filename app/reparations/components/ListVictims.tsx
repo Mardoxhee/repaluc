@@ -1,11 +1,12 @@
 "use client"
-import React, { useState, useEffect, useContext, useCallback } from "react";
+import React, { useState, useEffect, useContext, useCallback, useMemo } from "react";
 import { FetchContext } from "../../context/FetchContext";
 import Swal from 'sweetalert2';
 import VictimDetailModal from "./VictimDetailModal"
-import { Search, Filter, Eye, Users, ChevronLeft, ChevronRight, X, Plus, Check, Stethoscope, FileText } from 'lucide-react';
+import { Search, Filter, Eye, Users, ChevronLeft, ChevronRight, X, Plus, Check, Stethoscope, FileText, Wifi, WifiOff } from 'lucide-react';
 import EvaluationModal from "./EvaluationModal";
 import ViewEvaluationModal from "./ViewEvaluationModal";
+import { saveVictimsToCache, getVictimsFromCache, isOnline } from '../../utils/victimsCache';
 
 interface ReglagesProps {
     mockPrejudices: { id: number; nom: string }[];
@@ -65,6 +66,9 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
     const [victims, setVictims] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string>("");
+    const [isOffline, setIsOffline] = useState(false);
+    const [usingCache, setUsingCache] = useState(false);
+    const [showOfflineIndicator, setShowOfflineIndicator] = useState(true);
     const [meta, setMeta] = useState({
         total: 0,
         page: 1,
@@ -83,11 +87,13 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
 
     const fetchCtx = useContext(FetchContext);
 
-    // Update filter fields with categories
-    const updatedFilterFields = filterFields.map(field =>
-        field.key === 'categorie'
-            ? { ...field, options: mockCategories.map(cat => cat.nom) }
-            : field
+    // Update filter fields with categories - useMemo pour éviter recalcul
+    const updatedFilterFields = useMemo(() => 
+        filterFields.map(field =>
+            field.key === 'categorie'
+                ? { ...field, options: mockCategories.map(cat => cat.nom) }
+                : field
+        ), [mockCategories]
     );
 
     const buildQueryParams = useCallback(() => {
@@ -141,31 +147,81 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
 
         setLoading(true);
         setError("");
-        try {
-            const queryParams = buildQueryParams();
-            const url = queryParams ? `/victime/paginate/filtered?${queryParams}` : `/victime/paginate/filtered`;
-            const response = await fetchCtx.fetcher(url);
-            if (response?.data) {
-                setVictims(response.data);
-                setMeta(response.meta);
-            } else {
-                setVictims([]);
-                setMeta({
-                    total: 0,
-                    page: 1,
-                    limit: 20,
-                    totalPages: 0,
-                    hasNextPage: false,
-                    hasPreviousPage: false,
-                });
-            }
-        } catch (err: any) {
-            setError(err.message || "Erreur lors du chargement des victimes");
-            setVictims([]);
-        } finally {
+        setIsOffline(!isOnline());
+        setUsingCache(false);
+
+        // Créer une clé de cache basée sur les paramètres de recherche
+        const queryParams = buildQueryParams();
+        const cacheKey = `victims-${queryParams || 'all'}`;
+
+        // Essayer de charger depuis le cache d'abord
+        const cachedData = await getVictimsFromCache(cacheKey);
+
+        if (cachedData && !isOnline()) {
+            // Utiliser le cache si offline
+            console.log('[ListVictims] Mode offline - Utilisation du cache');
+            setVictims(cachedData.data);
+            setMeta(cachedData.meta);
+            setUsingCache(true);
+            setLoading(false);
+            return;
+        }
+
+        if (cachedData && isOnline()) {
+            // Afficher le cache immédiatement puis rafraîchir en arrière-plan
+            console.log('[ListVictims] Affichage du cache puis rafraîchissement');
+            setVictims(cachedData.data);
+            setMeta(cachedData.meta);
+            setUsingCache(true);
             setLoading(false);
         }
-    }, [buildQueryParams]);
+
+        // Essayer de charger depuis le serveur
+        if (isOnline()) {
+            try {
+                const url = queryParams ? `/victime/paginate/filtered?${queryParams}` : `/victime/paginate/filtered`;
+                const response = await fetchCtx.fetcher(url);
+                
+                if (response?.data) {
+                    setVictims(response.data);
+                    setMeta(response.meta);
+                    setUsingCache(false);
+
+                    // Sauvegarder dans le cache
+                    await saveVictimsToCache(cacheKey, response.data, response.meta);
+                    console.log('[ListVictims] Données sauvegardées dans le cache');
+                } else {
+                    setVictims([]);
+                    setMeta({
+                        total: 0,
+                        page: 1,
+                        limit: 20,
+                        totalPages: 0,
+                        hasNextPage: false,
+                        hasPreviousPage: false,
+                    });
+                }
+            } catch (err: any) {
+                console.error('[ListVictims] Erreur chargement serveur:', err);
+                setError(err.message || "Erreur lors du chargement des victimes");
+                
+                // Si erreur et pas de cache, essayer de charger le cache expiré
+                if (!cachedData) {
+                    const expiredCache = await getVictimsFromCache(cacheKey);
+                    if (expiredCache) {
+                        console.log('[ListVictims] Utilisation du cache expiré');
+                        setVictims(expiredCache.data);
+                        setMeta(expiredCache.meta);
+                        setUsingCache(true);
+                    } else {
+                        setVictims([]);
+                    }
+                }
+            } finally {
+                setLoading(false);
+            }
+        }
+    }, [buildQueryParams, fetchCtx?.fetcher]);
 
     useEffect(() => {
         const debounceTimeout = setTimeout(() => {
@@ -175,7 +231,25 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
         return () => clearTimeout(debounceTimeout);
     }, [fetchVictims]);
 
-    const addFilterRule = () => {
+    // Écouter les changements de connexion
+    useEffect(() => {
+        const handleOnline = () => {
+            setIsOffline(false);
+            fetchVictims();
+        };
+        const handleOffline = () => setIsOffline(true);
+
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const addFilterRule = useCallback(() => {
         const newRule: FilterRule = {
             id: Date.now().toString(),
             field: 'nom',
@@ -183,42 +257,42 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
             value: '',
             label: ''
         };
-        setFilterRules([...filterRules, newRule]);
-    };
+        setFilterRules(prev => [...prev, newRule]);
+    }, []);
 
-    const updateFilterRule = (id: string, updates: Partial<FilterRule>) => {
+    const updateFilterRule = useCallback((id: string, updates: Partial<FilterRule>) => {
         setFilterRules(rules => rules.map(rule =>
             rule.id === id ? { ...rule, ...updates } : rule
         ));
         setMeta(prev => ({ ...prev, page: 1 }));
-    };
+    }, []);
 
-    const removeFilterRule = (id: string) => {
+    const removeFilterRule = useCallback((id: string) => {
         setFilterRules(rules => rules.filter(rule => rule.id !== id));
         setMeta(prev => ({ ...prev, page: 1 }));
-    };
+    }, []);
 
-    const clearAllFilters = () => {
+    const clearAllFilters = useCallback(() => {
         setFilterRules([]);
         setSearch("");
         setMeta(prev => ({ ...prev, page: 1 }));
-    };
+    }, []);
 
-    const handleNextPage = () => {
+    const handleNextPage = useCallback(() => {
         if (meta.hasNextPage) {
             setMeta((prev) => ({ ...prev, page: prev.page + 1 }));
         }
-    };
+    }, [meta.hasNextPage]);
 
-    const handlePreviousPage = () => {
+    const handlePreviousPage = useCallback(() => {
         if (meta.hasPreviousPage) {
             setMeta((prev) => ({ ...prev, page: prev.page - 1 }));
         }
-    };
+    }, [meta.hasPreviousPage]);
 
 
 
-    const getStatusBadgeStyle = (status: string) => {
+    const getStatusBadgeStyle = useCallback((status: string) => {
         switch (status?.toLowerCase()) {
             case 'confirmé':
                 return 'bg-green-50 text-green-700 border-green-200';
@@ -239,7 +313,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
             default:
                 return 'bg-red-50 text-red-700 border-red-200';
         }
-    };
+    }, []);
 
     return (
         <>
@@ -247,8 +321,59 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                 <div className="w-full mx-auto p-6">
                     {/* Header */}
                     <div className="mb-8">
-                        <h1 className="text-2xl font-bold text-gray-900 mb-2">Liste des Victimes</h1>
-                        <p className="text-gray-600">Gérez et consultez les informations des victimes enregistrées</p>
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h1 className="text-2xl font-bold text-gray-900 mb-2">Liste des Victimes</h1>
+                                <p className="text-gray-600">Gérez et consultez les informations des victimes enregistrées</p>
+                            </div>
+                            
+                            {/* Indicateur de statut */}
+                            {(isOffline || usingCache) && showOfflineIndicator && (
+                                <div className={`flex items-center gap-3 px-4 py-2 rounded-lg border ${
+                                    isOffline 
+                                        ? 'bg-orange-50 text-orange-800 border-orange-200' 
+                                        : 'bg-blue-50 text-blue-800 border-blue-200'
+                                }`}>
+                                    {isOffline ? (
+                                        <>
+                                            <WifiOff size={18} />
+                                            <span className="text-sm font-medium">Mode Hors Ligne</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Wifi size={18} />
+                                            <span className="text-sm font-medium">Données en cache</span>
+                                        </>
+                                    )}
+                                    <button
+                                        onClick={() => setShowOfflineIndicator(false)}
+                                        className="ml-2 p-1 hover:bg-white/50 rounded transition-colors"
+                                        title="Fermer"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Notification discrète si l'indicateur est fermé */}
+                            {(isOffline || usingCache) && !showOfflineIndicator && (
+                                <div className="fixed bottom-4 right-4 z-50">
+                                    <button
+                                        onClick={() => setShowOfflineIndicator(true)}
+                                        className={`flex items-center gap-2 px-3 py-2 rounded-full shadow-lg border ${
+                                            isOffline 
+                                                ? 'bg-orange-100 text-orange-800 border-orange-300' 
+                                                : 'bg-blue-100 text-blue-800 border-blue-300'
+                                        } hover:scale-105 transition-transform`}
+                                        title={isOffline ? "Mode Hors Ligne" : "Données en cache"}
+                                    >
+                                        {isOffline ? <WifiOff size={16} /> : <Wifi size={16} />}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     {/* Search and Filter Controls */}

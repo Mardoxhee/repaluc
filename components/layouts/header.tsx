@@ -3,6 +3,8 @@ import React, { useState, useRef } from 'react';
 import { FiChevronDown, FiLogOut, FiMail, FiBell, FiSettings, FiUser, FiShield, FiClock } from 'react-icons/fi';
 import Image from 'next/image';
 
+const LOGOUT_URL = process.env.NEXT_PUBLIC_LOGOUT_URL || 'http://10.140.0.106:4201/login';
+
 const user = {
   name: 'Mardox',
   email: 'mardox@justice.gov.cd',
@@ -187,7 +189,7 @@ const Header = () => {
                 <button
                   className="flex items-center gap-3 w-full text-left px-6 py-3 text-red-600 hover:bg-red-50 font-medium transition-colors bg-red-100"
                   onClick={() => {
-                    window.location.href = 'http://10.140.0.106:4201/login';
+                    window.location.href = LOGOUT_URL;
                   }}
                 >
                   <FiLogOut size={18} />

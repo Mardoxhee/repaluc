@@ -8,7 +8,7 @@ import { usePathname } from 'next/navigation';
 const navItems = [
   { label: 'LUC', icon: <FiBox size={20} />, href: '/luc' },
   { label: 'Réparations', icon: <FiRepeat size={20} />, href: '/reparations' },
-  { label: 'Accès à la justice', icon: <FiUsers size={20} />, href: '/acces-justice' },
+  { label: 'Accès à la justice', icon: <FiUsers size={20} />, href: '/#' },
 ];
 
 const SideBar = () => {
@@ -78,7 +78,7 @@ const SideBar = () => {
 
         {/* Lien réglages */}
         <Link
-          href="/settings"
+          href="/#"
           className="flex items-center gap-3 px-3 py-2 rounded-lg font-medium text-gray-600 hover:bg-gray-50 hover:text-primary-600 transition-all duration-200 group"
         >
           <FiSettings size={18} className="text-gray-500 group-hover:text-primary-500 transition-colors" />

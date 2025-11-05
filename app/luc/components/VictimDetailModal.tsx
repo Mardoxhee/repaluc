@@ -171,7 +171,8 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
 
     setIsConfirming(true);
     try {
-      const response = await fetch(`http://10.140.0.106:8006/victime/${currentVictim.id}`, {
+      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
+      const response = await fetch(`${baseUrl}/victime/${currentVictim.id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

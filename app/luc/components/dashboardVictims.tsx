@@ -221,7 +221,7 @@ const DashboardVictims = () => {
           value={loading ? "..." : `${stats.totalIndemnisation.toLocaleString()} USD`}
           icon={<FiDollarSign className="text-white text-xl" />}
           color="bg-gradient-to-br from-green-500 to-green-600"
-          subtitle="Montant total versé"
+          subtitle="Montant total d'indemnisations estimées"
           loading={loading}
         />
 

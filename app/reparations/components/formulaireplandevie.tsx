@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Loader2, CheckCircle2, AlertCircle, Save, FileText, Printer, Edit } from 'lucide-react';
 import Swal from 'sweetalert2';
 
+const API_PLANVIE_URL = process.env.NEXT_PUBLIC_API_PLANVIE_URL ;
+
 interface Assertion {
   id: number;
   text: string;
@@ -60,23 +62,37 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
     
     try {
       setCheckingExisting(true);
-      const response = await fetch(`http://10.140.0.104:8007/plan-vie-enquette/victime/${victim.id}`);
+      const response = await fetch(`${API_PLANVIE_URL}/plan-vie-enquette/victime/${victim.id}`);
       
       if (response.ok) {
         const data = await response.json();
+        console.log('[Plan de Vie] Données reçues:', data);
+        
         // Vérifier si on a des données avec la nouvelle structure
-        if (data && data.planVieQuestion && data.planVieQuestion.length > 0) {
+        // La structure peut être planVieQuestion (ancienne) ou planVieEnquetteQuestion (nouvelle)
+        const hasNewStructure = data && data.planVieEnquetteQuestion && Object.keys(data.planVieEnquetteQuestion).length > 0;
+        const hasOldStructure = data && data.planVieQuestion && data.planVieQuestion.length > 0;
+        const hasData = hasNewStructure || hasOldStructure;
+        
+        console.log('[Plan de Vie] Nouvelle structure:', hasNewStructure);
+        console.log('[Plan de Vie] Ancienne structure:', hasOldStructure);
+        console.log('[Plan de Vie] A des données:', hasData);
+        
+        if (hasData) {
           setExistingForm(data);
           setHasExistingForm(true);
+          console.log('[Plan de Vie] Formulaire existant détecté');
         } else {
           setHasExistingForm(false);
+          console.log('[Plan de Vie] Pas de formulaire existant');
         }
       } else {
         // Si 404 ou autre erreur, pas de formulaire existant
+        console.log('[Plan de Vie] Réponse non-OK:', response.status);
         setHasExistingForm(false);
       }
     } catch (err) {
-      console.error('Erreur lors de la vérification du formulaire existant:', err);
+      console.error('[Plan de Vie] Erreur lors de la vérification:', err);
       setHasExistingForm(false);
     } finally {
       setCheckingExisting(false);
@@ -86,7 +102,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
   const fetchQuestions = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://10.140.0.104:8007/question/type/plandevie');
+      const response = await fetch(`${API_PLANVIE_URL}/question/type/plandevie`);
       
       if (!response.ok) {
         throw new Error('Erreur lors de la récupération des questions');
@@ -187,7 +203,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
       console.log('Payload à envoyer:', payload);
 
       // Envoyer au serveur
-      const response = await fetch('http://10.140.0.104:8007/plan-vie-enquette', {
+      const response = await fetch(`${API_PLANVIE_URL}/plan-vie-enquette`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -363,8 +379,8 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
   const renderExistingForm = () => {
     if (!existingForm) return null;
 
-    // Nouvelle structure : planVieQuestion au lieu de questionResponse
-    const responses = existingForm.planVieQuestion || [];
+    // Nouvelle structure : planVieEnquetteQuestion (groupé par catégorie)
+    const questionsByCategory = existingForm.planVieEnquetteQuestion || {};
     
     return (
       <div className="bg-white text-gray-900 max-w-5xl mx-auto">
@@ -385,6 +401,11 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
                   ` • Modifié le: ${new Date(existingForm.updatedAt).toLocaleDateString('fr-FR')}`
                 }
               </p>
+              {existingForm.user && (
+                <p className="text-gray-500 text-xs mt-1">
+                  Rempli par: <span className="font-semibold">{existingForm.user.nom} {existingForm.user.prenom}</span>
+                </p>
+              )}
             </div>
             <div className="flex gap-2">
               <button
@@ -399,13 +420,22 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
                   // Pré-remplir le formulaire avec les données existantes
                   const prefilledData: FormData = {};
                   
-                  responses.forEach((item: any) => {
-                    const reponse = item.reponse;
-                    // Si la réponse contient des virgules, c'est probablement un checkbox
-                    if (reponse && reponse.includes(',')) {
-                      prefilledData[item.questionId] = reponse.split(',').map((s: string) => s.trim());
-                    } else {
-                      prefilledData[item.questionId] = reponse;
+                  // Parcourir toutes les catégories
+                  Object.values(questionsByCategory).forEach((categoryItems: any) => {
+                    if (Array.isArray(categoryItems)) {
+                      categoryItems.forEach((item: any) => {
+                        const questionId = item.question?.id;
+                        const reponse = item.reponse;
+                        
+                        if (questionId && reponse) {
+                          // Si la réponse contient des virgules, c'est probablement un checkbox
+                          if (reponse.includes(',')) {
+                            prefilledData[questionId] = reponse.split(',').map((s: string) => s.trim());
+                          } else {
+                            prefilledData[questionId] = reponse;
+                          }
+                        }
+                      });
                     }
                   });
                   
@@ -424,32 +454,28 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
 
         {/* Réponses groupées par catégorie */}
         <div className="space-y-6">
-          {Object.entries(questions).map(([category, categoryQuestions]) => {
-            const categoryResponses = responses.filter((item: any) => 
-              categoryQuestions.some(q => q.id === item.questionId)
-            );
-
-            if (categoryResponses.length === 0) return null;
+          {Object.entries(questionsByCategory).map(([categoryName, categoryItems]: [string, any]) => {
+            if (!Array.isArray(categoryItems) || categoryItems.length === 0) return null;
 
             return (
-              <div key={category} className="mb-6">
+              <div key={categoryName} className="mb-6">
                 <div className="text-white px-4 py-3 border-b" style={{ backgroundColor: '#901c67' }}>
-                  <h2 className="font-bold text-sm uppercase tracking-wide">{category}</h2>
+                  <h2 className="font-bold text-sm uppercase tracking-wide">{categoryName}</h2>
                 </div>
                 <div className="border border-gray-300 border-t-0 bg-gray-50 p-6">
                   <div className="space-y-4">
-                    {categoryResponses.map((item: any) => {
-                      const question = categoryQuestions.find(q => q.id === item.questionId);
+                    {categoryItems.map((item: any) => {
+                      const question = item.question;
                       if (!question) return null;
 
                       return (
-                        <div key={item.questionId} className="bg-white p-4 border-l-4 border-blue-600 shadow-sm">
+                        <div key={item.id} className="bg-white p-4 border-l-4 border-blue-600 shadow-sm">
                           <div className="flex items-start gap-3 mb-2">
                             <span className="inline-flex items-center justify-center px-3 py-2 text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: '#901c67' }}>
-                              {question.numero}
+                              Q.{question.ordre}
                             </span>
                             <span className="text-gray-800 font-semibold text-sm uppercase pt-1.5">
-                              {question.question}
+                              {question.text}
                             </span>
                           </div>
                           <div className="ml-12 mt-3">
@@ -505,7 +531,11 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
   }
 
   // Si un formulaire existe déjà, l'afficher
+  console.log('[Plan de Vie] Render - hasExistingForm:', hasExistingForm);
+  console.log('[Plan de Vie] Render - existingForm:', existingForm);
+  
   if (hasExistingForm && existingForm) {
+    console.log('[Plan de Vie] Affichage du formulaire existant');
     return renderExistingForm();
   }
 

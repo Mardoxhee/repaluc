@@ -350,7 +350,7 @@ const ViewEvaluationModal: React.FC<ViewEvaluationModalProps> = ({ victim, onClo
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="text-sm font-medium text-gray-600">Taux global</label>
-                    <p className="text-gray-900 text-xl font-bold text-blue-600">{evaluation.incapaciteGlobal || 'N/A'}%</p>
+                    <p className=" text-xl font-bold text-blue-600">{evaluation.incapaciteGlobal || 'N/A'}%</p>
                   </div>
                   <div>
                     <label className="text-sm font-medium text-gray-600">Méthodologie</label>
