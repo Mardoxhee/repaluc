@@ -147,7 +147,7 @@ const DashboardVictims = () => {
           await saveToCache(cacheKey, newStats);
           console.log('[Dashboard] Données sauvegardées dans le cache');
         } catch (error) {
-          console.error('[Dashboard] Erreur chargement serveur:', error);
+          console.log('[Dashboard] Erreur chargement serveur:', error);
 
           // Si erreur et pas de cache, essayer de charger le cache expiré
           if (!cachedData) {
@@ -244,8 +244,8 @@ const DashboardVictims = () => {
           {/* Indicateur de statut */}
           {(isOffline || usingCache) && showOfflineIndicator && (
             <div className={`flex items-center gap-3 px-4 py-2 rounded-lg border ${isOffline
-                ? 'bg-orange-50 text-orange-800 border-orange-200'
-                : 'bg-blue-50 text-blue-800 border-blue-200'
+              ? 'bg-orange-50 text-orange-800 border-orange-200'
+              : 'bg-blue-50 text-blue-800 border-blue-200'
               }`}>
               {isOffline ? (
                 <>
@@ -278,8 +278,8 @@ const DashboardVictims = () => {
           <button
             onClick={() => setShowOfflineIndicator(true)}
             className={`flex items-center gap-2 px-3 py-2 rounded-full shadow-lg border ${isOffline
-                ? 'bg-orange-100 text-orange-800 border-orange-300'
-                : 'bg-blue-100 text-blue-800 border-blue-300'
+              ? 'bg-orange-100 text-orange-800 border-orange-300'
+              : 'bg-blue-100 text-blue-800 border-blue-300'
               } hover:scale-105 transition-transform`}
             title={isOffline ? "Mode Hors Ligne" : "Données en cache"}
           >

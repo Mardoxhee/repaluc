@@ -50,7 +50,7 @@ export const saveToCache = async (key: string, data: any): Promise<void> => {
       transaction.onerror = () => reject(transaction.error);
     });
   } catch (error) {
-    console.error('[Cache] Erreur sauvegarde:', error);
+    console.log('[Cache] Erreur sauvegarde:', error);
     throw error;
   }
 };
@@ -66,7 +66,7 @@ export const getFromCache = async (key: string): Promise<any | null> => {
     return new Promise((resolve, reject) => {
       request.onsuccess = () => {
         const entry = request.result as CacheEntry | undefined;
-        
+
         if (!entry) {
           console.log(`[Cache] Aucune donnée pour: ${key}`);
           resolve(null);
@@ -87,7 +87,7 @@ export const getFromCache = async (key: string): Promise<any | null> => {
       request.onerror = () => reject(request.error);
     });
   } catch (error) {
-    console.error('[Cache] Erreur récupération:', error);
+    console.log('[Cache] Erreur récupération:', error);
     return null;
   }
 };
@@ -108,7 +108,7 @@ export const clearCache = async (): Promise<void> => {
       transaction.onerror = () => reject(transaction.error);
     });
   } catch (error) {
-    console.error('[Cache] Erreur vidage:', error);
+    console.log('[Cache] Erreur vidage:', error);
     throw error;
   }
 };

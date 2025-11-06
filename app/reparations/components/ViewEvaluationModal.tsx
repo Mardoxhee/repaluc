@@ -34,7 +34,7 @@ const ViewEvaluationModal: React.FC<ViewEvaluationModalProps> = ({ victim, onClo
           }
         }
       } catch (error) {
-        console.error('Erreur lors du chargement de l\'évaluation:', error);
+        console.log('Erreur lors du chargement de l\'évaluation:', error);
       } finally {
         setLoading(false);
       }

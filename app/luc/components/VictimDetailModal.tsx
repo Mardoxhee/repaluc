@@ -36,7 +36,7 @@ const getFileLink = async (lien: string): Promise<string> => {
     }
     throw new Error('Lien du fichier non trouvé dans la réponse');
   } catch (error) {
-    console.error('Erreur getFileLink:', error);
+    console.log('Erreur getFileLink:', error);
     throw error;
   }
 };
@@ -130,7 +130,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
 
         setFiles(mappedFiles);
       } catch (e) {
-        console.error('Erreur lors du chargement des documents:', e);
+        console.log('Erreur lors du chargement des documents:', e);
         setFiles([]);
       } finally {
         setLoadingFiles(false);
@@ -191,7 +191,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
         throw new Error('Erreur lors de la confirmation');
       }
     } catch (error) {
-      console.error('Erreur:', error);
+      console.log('Erreur:', error);
       alert('Erreur lors de la confirmation de la victime');
     } finally {
       setIsConfirming(false);
@@ -401,7 +401,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                           setFiles(mappedFiles);
                         }
                       } catch (e) {
-                        console.error('Erreur lors du rechargement des documents:', e);
+                        console.log('Erreur lors du rechargement des documents:', e);
                       } finally {
                         setLoadingFiles(false);
                       }

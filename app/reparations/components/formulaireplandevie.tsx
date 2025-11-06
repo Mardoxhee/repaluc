@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Loader2, CheckCircle2, AlertCircle, Save, FileText, Printer, Edit } from 'lucide-react';
 import Swal from 'sweetalert2';
 
-const API_PLANVIE_URL = process.env.NEXT_PUBLIC_API_PLANVIE_URL ;
+const API_PLANVIE_URL = process.env.NEXT_PUBLIC_API_PLANVIE_URL;
 
 interface Assertion {
   id: number;
@@ -59,25 +59,25 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
 
   const checkExistingForm = async () => {
     if (!victim?.id) return;
-    
+
     try {
       setCheckingExisting(true);
       const response = await fetch(`${API_PLANVIE_URL}/plan-vie-enquette/victime/${victim.id}`);
-      
+
       if (response.ok) {
         const data = await response.json();
         console.log('[Plan de Vie] Données reçues:', data);
-        
+
         // Vérifier si on a des données avec la nouvelle structure
         // La structure peut être planVieQuestion (ancienne) ou planVieEnquetteQuestion (nouvelle)
         const hasNewStructure = data && data.planVieEnquetteQuestion && Object.keys(data.planVieEnquetteQuestion).length > 0;
         const hasOldStructure = data && data.planVieQuestion && data.planVieQuestion.length > 0;
         const hasData = hasNewStructure || hasOldStructure;
-        
+
         console.log('[Plan de Vie] Nouvelle structure:', hasNewStructure);
         console.log('[Plan de Vie] Ancienne structure:', hasOldStructure);
         console.log('[Plan de Vie] A des données:', hasData);
-        
+
         if (hasData) {
           setExistingForm(data);
           setHasExistingForm(true);
@@ -92,7 +92,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
         setHasExistingForm(false);
       }
     } catch (err) {
-      console.error('[Plan de Vie] Erreur lors de la vérification:', err);
+      console.log('[Plan de Vie] Erreur lors de la vérification:', err);
       setHasExistingForm(false);
     } finally {
       setCheckingExisting(false);
@@ -103,20 +103,20 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
     try {
       setLoading(true);
       const response = await fetch(`${API_PLANVIE_URL}/question/type/plandevie`);
-      
+
       if (!response.ok) {
         throw new Error('Erreur lors de la récupération des questions');
       }
 
       const data: QuestionsByCategory = await response.json();
       setQuestions(data);
-      
+
       // Set first category as current
       const categories = Object.keys(data);
       if (categories.length > 0) {
         setCurrentCategory(categories[0]);
       }
-      
+
       setError(null);
     } catch (err: any) {
       setError(err.message || 'Une erreur est survenue');
@@ -156,7 +156,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Validation : vérifier qu'on a bien une victime
     if (!victim || !victim.id) {
       await Swal.fire({
@@ -174,7 +174,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
       const questionResponse = Object.entries(formData).map(([questionId, reponse]) => {
         // Convertir les tableaux (checkbox) en string
         const reponseFormatted = Array.isArray(reponse) ? reponse.join(', ') : String(reponse);
-        
+
         return {
           questionId: parseInt(questionId),
           reponse: reponseFormatted
@@ -216,7 +216,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
       }
 
       const result = await response.json();
-      
+
       await Swal.fire({
         icon: 'success',
         title: 'Formulaire enregistré',
@@ -224,10 +224,10 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
         timer: 2000,
         showConfirmButton: false
       });
-      
+
       console.log('Réponse du serveur:', result);
     } catch (err: any) {
-      console.error('Erreur:', err);
+      console.log('Erreur:', err);
       await Swal.fire({
         icon: 'error',
         title: 'Erreur',
@@ -242,24 +242,24 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
   const shouldShowQuestion = (question: Question, allQuestions: Question[]): boolean => {
     // Trouver la question précédente (ordre - 1)
     const previousQuestion = allQuestions.find(q => q.ordre === question.ordre - 1);
-    
+
     // Si pas de question précédente, afficher
     if (!previousQuestion) return true;
-    
+
     // Si la question précédente n'a pas d'assertions, afficher
     if (!previousQuestion.assertions || previousQuestion.assertions.length === 0) return true;
-    
+
     // Vérifier si la question précédente a une option "Autre" (insensible à la casse)
     const hasAutreOption = previousQuestion.assertions.some(
       assertion => assertion.text.toLowerCase().includes('autre')
     );
-    
+
     // Si pas d'option "Autre", afficher la question
     if (!hasAutreOption) return true;
-    
+
     // Vérifier si "Autre" a été sélectionné dans la question précédente
     const previousAnswer = formData[previousQuestion.id];
-    
+
     if (previousQuestion.type === 'radio') {
       // Pour radio, vérifier si la réponse contient "autre"
       return previousAnswer && previousAnswer.toLowerCase().includes('autre');
@@ -269,13 +269,13 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
         (answer: string) => answer.toLowerCase().includes('autre')
       );
     }
-    
+
     return true;
   };
 
   const renderInput = (question: Question) => {
     const baseInputClass = "w-full px-3 py-2.5 border-2 border-gray-300 bg-white text-gray-900 text-sm focus:outline-none focus:border-blue-600 transition-all shadow-sm";
-    
+
     switch (question.type) {
       case 'text':
         return (
@@ -287,7 +287,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
             placeholder="Votre réponse"
           />
         );
-      
+
       case 'number':
         return (
           <input
@@ -298,7 +298,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
             placeholder="Entrez un nombre"
           />
         );
-      
+
       case 'textarea':
         return (
           <textarea
@@ -309,13 +309,13 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
             rows={4}
           />
         );
-      
+
       case 'radio':
         // Si pas d'assertions, utiliser Oui/Non par défaut
-        const radioOptions = question.assertions && question.assertions.length > 0 
+        const radioOptions = question.assertions && question.assertions.length > 0
           ? [...question.assertions].reverse()
           : [{ id: 1, text: 'Oui' }, { id: 2, text: 'Non' }];
-        
+
         return (
           <div className="space-y-2">
             {radioOptions.map((assertion) => (
@@ -333,19 +333,19 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
             ))}
           </div>
         );
-      
+
       case 'checkbox':
         // Si pas d'assertions, utiliser des options par défaut
-        const checkboxOptions = question.assertions && question.assertions.length > 0 
+        const checkboxOptions = question.assertions && question.assertions.length > 0
           ? [...question.assertions].reverse()
           : [
-              { id: 1, text: 'Soins médicaux généraux' },
-              { id: 2, text: 'Soins psychologiques' },
-              { id: 3, text: 'Chirurgie' },
-              { id: 4, text: 'Médicaments' },
-              { id: 5, text: 'Rééducation' }
-            ];
-        
+            { id: 1, text: 'Soins médicaux généraux' },
+            { id: 2, text: 'Soins psychologiques' },
+            { id: 3, text: 'Chirurgie' },
+            { id: 4, text: 'Médicaments' },
+            { id: 5, text: 'Rééducation' }
+          ];
+
         return (
           <div className="space-y-2">
             {checkboxOptions.map((assertion) => (
@@ -361,7 +361,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
             ))}
           </div>
         );
-      
+
       default:
         return (
           <input
@@ -381,7 +381,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
 
     // Nouvelle structure : planVieEnquetteQuestion (groupé par catégorie)
     const questionsByCategory = existingForm.planVieEnquetteQuestion || {};
-    
+
     return (
       <div className="bg-white text-gray-900 max-w-5xl mx-auto">
         {/* Header */}
@@ -397,7 +397,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
               </p>
               <p className="text-gray-500 text-xs mt-1">
                 Créé le: {new Date(existingForm.createdAt).toLocaleDateString('fr-FR')}
-                {existingForm.updatedAt !== existingForm.createdAt && 
+                {existingForm.updatedAt !== existingForm.createdAt &&
                   ` • Modifié le: ${new Date(existingForm.updatedAt).toLocaleDateString('fr-FR')}`
                 }
               </p>
@@ -419,14 +419,14 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
                 onClick={() => {
                   // Pré-remplir le formulaire avec les données existantes
                   const prefilledData: FormData = {};
-                  
+
                   // Parcourir toutes les catégories
                   Object.values(questionsByCategory).forEach((categoryItems: any) => {
                     if (Array.isArray(categoryItems)) {
                       categoryItems.forEach((item: any) => {
                         const questionId = item.question?.id;
                         const reponse = item.reponse;
-                        
+
                         if (questionId && reponse) {
                           // Si la réponse contient des virgules, c'est probablement un checkbox
                           if (reponse.includes(',')) {
@@ -438,7 +438,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
                       });
                     }
                   });
-                  
+
                   setFormData(prefilledData);
                   setHasExistingForm(false);
                 }}
@@ -533,7 +533,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
   // Si un formulaire existe déjà, l'afficher
   console.log('[Plan de Vie] Render - hasExistingForm:', hasExistingForm);
   console.log('[Plan de Vie] Render - existingForm:', existingForm);
-  
+
   if (hasExistingForm && existingForm) {
     console.log('[Plan de Vie] Affichage du formulaire existant');
     return renderExistingForm();
@@ -564,11 +564,10 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
             <button
               key={category}
               onClick={() => setCurrentCategory(category)}
-              className={`px-3 py-2 text-sm font-medium transition-all border ${
-                currentCategory === category
+              className={`px-3 py-2 text-sm font-medium transition-all border ${currentCategory === category
                   ? 'text-white border-blue-600'
                   : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
-              }`}
+                }`}
               style={currentCategory === category ? { backgroundColor: '#901c67', borderColor: '#901c67' } : {}}
             >
               {idx + 1}. {category}
@@ -582,9 +581,8 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
         {categories.map((category, categoryIdx) => (
           <div
             key={category}
-            className={`transition-all duration-300 ${
-              currentCategory === category ? 'block' : 'hidden'
-            }`}
+            className={`transition-all duration-300 ${currentCategory === category ? 'block' : 'hidden'
+              }`}
           >
             {/* Category Section */}
             <div className="mb-6">
@@ -613,7 +611,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
                               {question.question}
                             </span>
                           </div>
-                          
+
                           {/* Input */}
                           <div className="mt-3">
                             {renderInput(question)}

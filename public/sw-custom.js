@@ -20,7 +20,7 @@ self.addEventListener('install', (event) => {
         '/luc',
         '/offline.html',
       ]).catch((err) => {
-        console.error('[SW] Erreur lors du pré-cache:', err);
+       console.log('[SW] Erreur lors du pré-cache:', err);
       });
     })
   );

@@ -13,7 +13,7 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open('precache-v1').then((cache) => {
       return cache.addAll(PRECACHE_URLS).catch((err) => {
-        console.error('[SW Precache] Erreur lors du pré-cache:', err);
+       console.log('[SW Precache] Erreur lors du pré-cache:', err);
       });
     })
   );

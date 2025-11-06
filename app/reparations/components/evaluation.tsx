@@ -221,7 +221,7 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
         const data = await fetcher('/partenaires');
         setPartenaires(data || []);
       } catch (error) {
-        console.error('Erreur lors du chargement des partenaires:', error);
+        console.log('Erreur lors du chargement des partenaires:', error);
         Swal.fire({
           icon: 'error',
           title: 'Erreur',
@@ -307,7 +307,7 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
           console.log('Aucune évaluation existante trouvée');
         }
       } catch (error) {
-        console.error('Erreur lors du chargement de l\'évaluation:', error);
+        console.log('Erreur lors du chargement de l\'évaluation:', error);
       }
     };
 
@@ -423,7 +423,7 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
         confirmButtonColor: '#10b981'
       });
     } catch (error) {
-      console.error('Erreur lors de l\'enregistrement:', error);
+      console.log('Erreur lors de l\'enregistrement:', error);
       Swal.fire({
         icon: 'error',
         title: 'Erreur',

@@ -88,7 +88,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
     const fetchCtx = useContext(FetchContext);
 
     // Update filter fields with categories - useMemo pour éviter recalcul
-    const updatedFilterFields = useMemo(() => 
+    const updatedFilterFields = useMemo(() =>
         filterFields.map(field =>
             field.key === 'categorie'
                 ? { ...field, options: mockCategories.map(cat => cat.nom) }
@@ -133,7 +133,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                 });
             }
         } catch (error) {
-            console.error('Erreur lors de la vérification de l\'évaluation:', error);
+            console.log('Erreur lors de la vérification de l\'évaluation:', error);
             Swal.fire({
                 icon: 'error',
                 title: 'Erreur',
@@ -181,7 +181,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
             try {
                 const url = queryParams ? `/victime/paginate/filtered?${queryParams}` : `/victime/paginate/filtered`;
                 const response = await fetchCtx.fetcher(url);
-                
+
                 if (response?.data) {
                     setVictims(response.data);
                     setMeta(response.meta);
@@ -202,9 +202,9 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                     });
                 }
             } catch (err: any) {
-                console.error('[ListVictims] Erreur chargement serveur:', err);
+                console.log('[ListVictims] Erreur chargement serveur:', err);
                 setError(err.message || "Erreur lors du chargement des victimes");
-                
+
                 // Si erreur et pas de cache, essayer de charger le cache expiré
                 if (!cachedData) {
                     const expiredCache = await getVictimsFromCache(cacheKey);
@@ -246,7 +246,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
         };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const addFilterRule = useCallback(() => {
@@ -326,14 +326,13 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                 <h1 className="text-2xl font-bold text-gray-900 mb-2">Liste des Victimes</h1>
                                 <p className="text-gray-600">Gérez et consultez les informations des victimes enregistrées</p>
                             </div>
-                            
+
                             {/* Indicateur de statut */}
                             {(isOffline || usingCache) && showOfflineIndicator && (
-                                <div className={`flex items-center gap-3 px-4 py-2 rounded-lg border ${
-                                    isOffline 
-                                        ? 'bg-orange-50 text-orange-800 border-orange-200' 
+                                <div className={`flex items-center gap-3 px-4 py-2 rounded-lg border ${isOffline
+                                        ? 'bg-orange-50 text-orange-800 border-orange-200'
                                         : 'bg-blue-50 text-blue-800 border-blue-200'
-                                }`}>
+                                    }`}>
                                     {isOffline ? (
                                         <>
                                             <WifiOff size={18} />
@@ -362,11 +361,10 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                 <div className="fixed bottom-4 right-4 z-50">
                                     <button
                                         onClick={() => setShowOfflineIndicator(true)}
-                                        className={`flex items-center gap-2 px-3 py-2 rounded-full shadow-lg border ${
-                                            isOffline 
-                                                ? 'bg-orange-100 text-orange-800 border-orange-300' 
+                                        className={`flex items-center gap-2 px-3 py-2 rounded-full shadow-lg border ${isOffline
+                                                ? 'bg-orange-100 text-orange-800 border-orange-300'
                                                 : 'bg-blue-100 text-blue-800 border-blue-300'
-                                        } hover:scale-105 transition-transform`}
+                                            } hover:scale-105 transition-transform`}
                                         title={isOffline ? "Mode Hors Ligne" : "Données en cache"}
                                     >
                                         {isOffline ? <WifiOff size={16} /> : <Wifi size={16} />}

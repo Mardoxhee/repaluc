@@ -137,7 +137,7 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
             alert(`Confirmation groupée réussie pour ${filteredVictims.length} victimes`);
 
         } catch (error: any) {
-            console.error("Erreur lors de la confirmation groupée:", error);
+            console.log("Erreur lors de la confirmation groupée:", error);
             alert(`Erreur lors de la confirmation groupée: ${error.message || 'Erreur inconnue'}`);
         } finally {
             setIsConfirming(false);

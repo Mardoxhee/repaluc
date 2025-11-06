@@ -52,7 +52,7 @@ export const saveVictimsToCache = async (key: string, data: any[], meta: any): P
       transaction.onerror = () => reject(transaction.error);
     });
   } catch (error) {
-    console.error('[VictimsCache] Erreur sauvegarde:', error);
+    console.log('[VictimsCache] Erreur sauvegarde:', error);
     throw error;
   }
 };
@@ -68,7 +68,7 @@ export const getVictimsFromCache = async (key: string): Promise<{ data: any[], m
     return new Promise((resolve, reject) => {
       request.onsuccess = () => {
         const entry = request.result as CacheEntry | undefined;
-        
+
         if (!entry) {
           console.log(`[VictimsCache] Aucune donnée pour: ${key}`);
           resolve(null);
@@ -89,7 +89,7 @@ export const getVictimsFromCache = async (key: string): Promise<{ data: any[], m
       request.onerror = () => reject(request.error);
     });
   } catch (error) {
-    console.error('[VictimsCache] Erreur récupération:', error);
+    console.log('[VictimsCache] Erreur récupération:', error);
     return null;
   }
 };
@@ -110,7 +110,7 @@ export const clearVictimsCache = async (): Promise<void> => {
       transaction.onerror = () => reject(transaction.error);
     });
   } catch (error) {
-    console.error('[VictimsCache] Erreur vidage:', error);
+    console.log('[VictimsCache] Erreur vidage:', error);
     throw error;
   }
 };

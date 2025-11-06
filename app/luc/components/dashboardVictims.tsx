@@ -139,7 +139,7 @@ const DashboardVictims = () => {
           prejudice: prejudiceData || []
         });
       } catch (error) {
-        console.error('Erreur lors du chargement des statistiques:', error);
+        console.log('Erreur lors du chargement des statistiques:', error);
       } finally {
         setLoading(false);
       }
