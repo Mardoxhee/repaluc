@@ -41,7 +41,7 @@ const prejudiceFinalOptions = [
     "Perte de vie",
     "Perte économique",
     "Atteinte à l'intégrité physique",
-    "Autre"
+    "Violence Sexuelle Liée au Conflit"
 ];
 
 const filterFields = [
