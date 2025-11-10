@@ -37,6 +37,13 @@ interface FilterRule {
     label: string;
 }
 
+const prejudiceFinalOptions = [
+    "Perte de vie",
+    "Perte économique",
+    "Atteinte à l'intégrité physique",
+    "Autre"
+];
+
 const filterFields = [
     { key: 'nom', label: 'Nom', type: 'text' },
     { key: 'categorie', label: 'Catégorie', type: 'select', options: [] },
@@ -45,6 +52,7 @@ const filterFields = [
     { key: 'commune', label: 'Commune', type: 'text' },
     { key: 'sexe', label: 'Sexe', type: 'select', options: sexeOptions },
     { key: 'status', label: 'Statut', type: 'select', options: statusOptions },
+    { key: 'prejudiceFinal', label: 'Préjudice Final', type: 'select', options: prejudiceFinalOptions },
     { key: 'age', label: 'Âge', type: 'number' },
     { key: 'typeViolation', label: 'Type de violation', type: 'text' },
     { key: 'dateIncident', label: 'Date incident', type: 'date' },
