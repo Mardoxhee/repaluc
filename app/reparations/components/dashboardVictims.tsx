@@ -210,9 +210,9 @@ const DashboardVictims = () => {
   }));
 
   const programmeChartData = stats.programme.map((item: any, index) => ({
-    name: item.programme.length > 40 ? item.programme.substring(0, 40) + '...' : item.programme,
-    fullName: item.programme,
-    value: parseInt(item.total),
+    name: item?.programme?.length > 40 ? item?.programme?.substring(0, 40) + '...' : item?.programme,
+    fullName: item?.programme,
+    value: parseInt(item?.total),
     color: COLORS[index % COLORS.length]
   }));
 
