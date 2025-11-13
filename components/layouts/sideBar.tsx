@@ -78,10 +78,21 @@ const SideBar = () => {
 
         {/* Lien réglages */}
         <Link
-          href="/#"
-          className="flex items-center gap-3 px-3 py-2 rounded-lg font-medium text-gray-600 hover:bg-gray-50 hover:text-primary-600 transition-all duration-200 group"
+          href="/reglages"
+          className={`
+            flex items-center gap-3 px-3 py-2 rounded-lg font-medium transition-all duration-200 group relative
+            ${pathname === '/reglages'
+              ? 'bg-primary-50 text-primary-700 shadow-sm'
+              : 'text-gray-600 hover:bg-gray-50 hover:text-primary-600'
+            }
+          `}
         >
-          <FiSettings size={18} className="text-gray-500 group-hover:text-primary-500 transition-colors" />
+          {pathname === '/reglages' && (
+            <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary-500 rounded-r"></div>
+          )}
+          <FiSettings size={18} className={`transition-colors ${
+            pathname === '/reglages' ? 'text-primary-600' : 'text-gray-500 group-hover:text-primary-500'
+          }`} />
           <span className="text-sm">Paramètres</span>
         </Link>
       </div>

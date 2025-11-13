@@ -33,6 +33,17 @@
 - ✅ **PWAInstaller** - Pré-cache automatique
 - **Fichiers** : `app/components/`
 
+### 6. **Formulaire Plan de Vie - Mode Offline** 🆕
+- ✅ **Sauvegarde automatique** - Brouillon sauvegardé toutes les secondes
+- ✅ **Validation obligatoire** - Tous les champs requis avant passage à la section suivante
+- ✅ **Mode hors ligne** - Formulaires stockés localement en attente de sync
+- ✅ **Synchronisation auto** - Envoi automatique au retour de connexion
+- ✅ **Indicateurs visuels** - Statut connexion, brouillon, formulaires en attente
+- ✅ **Validation visuelle** - Champs en erreur surlignés en rouge
+- **Fichiers** : 
+  - `app/utils/planVieCache.ts` - Gestion IndexedDB
+  - `app/reparations/components/formulaireplandevie.tsx` - Composant
+
 ---
 
 ## 🎯 Comment Ça Marche
@@ -124,6 +135,66 @@ PLAN_VIE: 12 [🗑️]
 **États** :
 - 🟠 Orange : "Mode Hors Ligne"
 - 🟢 Vert : "Connexion rétablie" (3s)
+
+---
+
+## 📝 Formulaire Plan de Vie - Détails
+
+### Fonctionnalités de Validation
+
+**Validation par étape** :
+- ❌ Impossible de passer à la section suivante sans remplir tous les champs
+- 🔴 Champs manquants surlignés en rouge avec bordure
+- ⚠️ Message d'erreur sous chaque champ non rempli
+- 📋 Liste des questions manquantes dans l'alerte
+
+**Validation finale** :
+- ✅ Vérification complète avant soumission
+- 📊 Compteur de questions non remplies
+- 🎯 Astérisque rouge (*) sur tous les champs obligatoires
+
+### Sauvegarde Hors Ligne
+
+**Brouillon automatique** :
+```
+1. Utilisateur remplit le formulaire
+   ↓
+2. Sauvegarde auto toutes les 1 seconde
+   ↓
+3. Badge "Brouillon sauvegardé" apparaît
+   ↓
+4. Si fermeture/actualisation
+   ↓
+5. Proposition de restauration au retour
+```
+
+**Mode hors ligne** :
+```
+1. Perte de connexion détectée
+   ↓
+2. Badge "Hors ligne" + bannière d'avertissement
+   ↓
+3. Soumission du formulaire
+   ↓
+4. Sauvegarde dans "formulaires en attente"
+   ↓
+5. Badge "X formulaire(s) en attente"
+   ↓
+6. Retour de connexion
+   ↓
+7. Synchronisation automatique
+   ↓
+8. Notification de succès
+```
+
+### Indicateurs Visuels
+
+| Indicateur | Couleur | Signification |
+|------------|---------|---------------|
+| 🟢 En ligne | Vert | Connexion active |
+| 🟠 Hors ligne | Orange | Pas de connexion |
+| 🔵 Brouillon sauvegardé | Bleu | Données locales disponibles |
+| 🟡 X en attente | Jaune | Formulaires à synchroniser |
 
 ---
 

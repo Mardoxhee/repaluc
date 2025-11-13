@@ -1,6 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, CheckCircle2, AlertCircle, Save, FileText, Printer, Edit } from 'lucide-react';
+import { Loader2, AlertCircle, Save, FileText, Printer, Edit, Wifi, WifiOff, CloudUpload } from 'lucide-react';
 import Swal from 'sweetalert2';
+import {
+  saveDraftToCache,
+  getDraftFromCache,
+  deleteDraft,
+  savePendingForm,
+  getPendingForms,
+  deletePendingForm,
+  isOnline
+} from '@/app/utils/planVieCache';
 
 const API_PLANVIE_URL = process.env.NEXT_PUBLIC_API_PLANVIE_URL;
 
@@ -49,13 +58,159 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
   const [existingForm, setExistingForm] = useState<any>(null);
   const [hasExistingForm, setHasExistingForm] = useState(false);
   const [checkingExisting, setCheckingExisting] = useState(true);
+  const [isOffline, setIsOffline] = useState(false);
+  const [hasDraft, setHasDraft] = useState(false);
+  const [pendingFormsCount, setPendingFormsCount] = useState(0);
+  const [validationErrors, setValidationErrors] = useState<number[]>([]);
 
   useEffect(() => {
     fetchQuestions();
     if (victim?.id) {
       checkExistingForm();
+      loadDraftFromCache();
     }
+    checkPendingForms();
+    
+    // Écouter les changements de connexion
+    const handleOnline = () => {
+      setIsOffline(false);
+      syncPendingForms();
+    };
+    const handleOffline = () => setIsOffline(true);
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    setIsOffline(!isOnline());
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, [victim]);
+
+  // Sauvegarder automatiquement le brouillon à chaque modification
+  useEffect(() => {
+    if (victim?.id && Object.keys(formData).length > 0) {
+      const timer = setTimeout(() => {
+        saveDraftToCache(victim.id, userId || 1, formData)
+          .then(() => setHasDraft(true))
+          .catch(err => console.error('Erreur sauvegarde auto:', err));
+      }, 1000); // Debounce de 1 seconde
+      
+      return () => clearTimeout(timer);
+    }
+  }, [formData, victim?.id, userId]);
+
+  // Charger le brouillon depuis le cache
+  const loadDraftFromCache = async () => {
+    if (!victim?.id) return;
+    
+    try {
+      const draft = await getDraftFromCache(victim.id);
+      if (draft && Object.keys(draft).length > 0) {
+        const result = await Swal.fire({
+          icon: 'question',
+          title: 'Brouillon trouvé',
+          text: 'Un brouillon non sauvegardé a été trouvé. Voulez-vous le restaurer ?',
+          showCancelButton: true,
+          confirmButtonText: 'Oui, restaurer',
+          cancelButtonText: 'Non, recommencer',
+          confirmButtonColor: '#901c67'
+        });
+        
+        if (result.isConfirmed) {
+          setFormData(draft);
+          setHasDraft(true);
+          await Swal.fire({
+            icon: 'success',
+            title: 'Brouillon restauré',
+            text: 'Vos données ont été restaurées',
+            timer: 2000,
+            showConfirmButton: false
+          });
+        } else {
+          await deleteDraft(victim.id);
+          setHasDraft(false);
+        }
+      }
+    } catch (error) {
+      console.error('Erreur chargement brouillon:', error);
+    }
+  };
+
+  // Vérifier les formulaires en attente de synchronisation
+  const checkPendingForms = async () => {
+    try {
+      const pending = await getPendingForms();
+      setPendingFormsCount(pending.length);
+    } catch (error) {
+      console.error('Erreur vérification formulaires en attente:', error);
+    }
+  };
+
+  // Synchroniser les formulaires en attente
+  const syncPendingForms = async () => {
+    if (!isOnline()) return;
+    
+    try {
+      const pending = await getPendingForms();
+      if (pending.length === 0) return;
+      
+      console.log(`[Sync] ${pending.length} formulaire(s) à synchroniser`);
+      
+      for (const form of pending) {
+        try {
+          const questionResponse = Object.entries(form.formData).map(([questionId, reponse]) => {
+            const reponseFormatted = Array.isArray(reponse) ? reponse.join(', ') : String(reponse);
+            return {
+              questionId: parseInt(questionId),
+              reponse: reponseFormatted
+            };
+          }).filter(item => item.reponse && item.reponse.trim() !== '');
+
+          const payload = {
+            userId: form.userId,
+            victimeId: form.victimeId,
+            status: "Draft",
+            isSign: false,
+            questionResponse
+          };
+
+          const response = await fetch(`${API_PLANVIE_URL}/plan-vie-enquette`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          if (response.ok) {
+            await deletePendingForm(form.key);
+            // Supprimer aussi le brouillon associé à cette victime
+            await deleteDraft(form.victimeId);
+            // Mettre à jour l'état si c'est la victime actuelle
+            if (victim?.id === form.victimeId) {
+              setHasDraft(false);
+            }
+            console.log(`[Sync] Formulaire synchronisé: ${form.key}`);
+            console.log(`[Sync] Brouillon supprimé pour victime ${form.victimeId}`);
+          }
+        } catch (error) {
+          console.error(`[Sync] Erreur sync formulaire ${form.key}:`, error);
+        }
+      }
+      
+      await checkPendingForms();
+      
+      await Swal.fire({
+        icon: 'success',
+        title: 'Synchronisation réussie',
+        text: 'Les formulaires hors ligne ont été synchronisés',
+        timer: 2000,
+        showConfirmButton: false
+      });
+    } catch (error) {
+      console.error('[Sync] Erreur synchronisation:', error);
+    }
+  };
 
   const checkExistingForm = async () => {
     if (!victim?.id) return;
@@ -135,22 +290,31 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
       ...prev,
       [questionId]: value
     }));
+    // Retirer l'erreur de validation si le champ est rempli
+    if (value && ((typeof value === 'string' && value.trim() !== '') || (Array.isArray(value) && value.length > 0))) {
+      setValidationErrors(prev => prev.filter(id => id !== questionId));
+    }
   };
 
   const handleCheckboxChange = (questionId: number, value: string, checked: boolean) => {
     setFormData(prev => {
       const currentValues = prev[questionId] || [];
+      let newValues;
       if (checked) {
-        return {
-          ...prev,
-          [questionId]: [...currentValues, value]
-        };
+        newValues = [...currentValues, value];
       } else {
-        return {
-          ...prev,
-          [questionId]: currentValues.filter((v: string) => v !== value)
-        };
+        newValues = currentValues.filter((v: string) => v !== value);
       }
+      
+      // Retirer l'erreur de validation si au moins une option est cochée
+      if (newValues.length > 0) {
+        setValidationErrors(prev => prev.filter(id => id !== questionId));
+      }
+      
+      return {
+        ...prev,
+        [questionId]: newValues
+      };
     });
   };
 
@@ -163,6 +327,41 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
         icon: 'error',
         title: 'Erreur',
         text: 'Aucune victime sélectionnée'
+      });
+      return;
+    }
+
+    // Valider toutes les catégories avant la soumission
+    let hasErrors = false;
+    const allErrorIds: number[] = [];
+    const categories = Object.keys(questions);
+    
+    for (const category of categories) {
+      const categoryQuestions = questions[category]
+        .filter((question) => shouldShowQuestion(question, questions[category]));
+      
+      for (const question of categoryQuestions) {
+        const answer = formData[question.id];
+        
+        if (!answer || 
+            (typeof answer === 'string' && answer.trim() === '') ||
+            (Array.isArray(answer) && answer.length === 0)) {
+          hasErrors = true;
+          allErrorIds.push(question.id);
+        }
+      }
+    }
+    
+    if (hasErrors) {
+      setValidationErrors(allErrorIds);
+      await Swal.fire({
+        icon: 'warning',
+        title: 'Formulaire incomplet',
+        html: `
+          <p>Veuillez répondre à toutes les questions obligatoires avant de soumettre le formulaire.</p>
+          <p class="text-sm text-gray-600 mt-2">${allErrorIds.length} question(s) non remplie(s)</p>
+        `,
+        confirmButtonColor: '#901c67'
       });
       return;
     }
@@ -202,6 +401,28 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
 
       console.log('Payload à envoyer:', payload);
 
+      // Vérifier la connexion
+      if (!isOnline()) {
+        // Sauvegarder hors ligne
+        await savePendingForm(victim.id, userId || 1, formData);
+        await deleteDraft(victim.id);
+        setHasDraft(false);
+        await checkPendingForms();
+        
+        await Swal.fire({
+          icon: 'info',
+          title: 'Sauvegardé hors ligne',
+          html: `
+            <p>Vous êtes hors ligne. Le formulaire a été sauvegardé localement.</p>
+            <p class="text-sm text-gray-600 mt-2">Il sera automatiquement synchronisé lors du retour de la connexion.</p>
+          `,
+          confirmButtonColor: '#901c67'
+        });
+        
+        setSaving(false);
+        return;
+      }
+
       // Envoyer au serveur
       const response = await fetch(`${API_PLANVIE_URL}/plan-vie-enquette`, {
         method: 'POST',
@@ -217,6 +438,10 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
 
       const result = await response.json();
 
+      // Supprimer le brouillon après succès
+      await deleteDraft(victim.id);
+      setHasDraft(false);
+
       await Swal.fire({
         icon: 'success',
         title: 'Formulaire enregistré',
@@ -228,14 +453,81 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
       console.log('Réponse du serveur:', result);
     } catch (err: any) {
       console.log('Erreur:', err);
-      await Swal.fire({
-        icon: 'error',
-        title: 'Erreur',
-        text: err.message || 'Erreur lors de l\'enregistrement du formulaire'
-      });
+      
+      // En cas d'erreur réseau, proposer de sauvegarder hors ligne
+      if (err.message.includes('fetch') || err.message.includes('network')) {
+        const result = await Swal.fire({
+          icon: 'warning',
+          title: 'Erreur de connexion',
+          text: 'Impossible de se connecter au serveur. Voulez-vous sauvegarder hors ligne ?',
+          showCancelButton: true,
+          confirmButtonText: 'Oui, sauvegarder',
+          cancelButtonText: 'Annuler',
+          confirmButtonColor: '#901c67'
+        });
+        
+        if (result.isConfirmed) {
+          await savePendingForm(victim.id, userId || 1, formData);
+          await deleteDraft(victim.id);
+          setHasDraft(false);
+          await checkPendingForms();
+          
+          await Swal.fire({
+            icon: 'success',
+            title: 'Sauvegardé hors ligne',
+            text: 'Le formulaire sera synchronisé automatiquement',
+            timer: 2000,
+            showConfirmButton: false
+          });
+        }
+      } else {
+        await Swal.fire({
+          icon: 'error',
+          title: 'Erreur',
+          text: err.message || 'Erreur lors de l\'enregistrement du formulaire'
+        });
+      }
     } finally {
       setSaving(false);
     }
+  };
+
+  // Valider la catégorie actuelle avant de passer à la suivante
+  const validateCurrentCategory = (): boolean => {
+    const currentQuestions = questions[currentCategory]
+      .filter((question) => shouldShowQuestion(question, questions[currentCategory]));
+    
+    const missingAnswers: string[] = [];
+    const errorIds: number[] = [];
+    
+    for (const question of currentQuestions) {
+      const answer = formData[question.id];
+      
+      // Vérifier si la réponse est vide
+      if (!answer || 
+          (typeof answer === 'string' && answer.trim() === '') ||
+          (Array.isArray(answer) && answer.length === 0)) {
+        missingAnswers.push(question.numero);
+        errorIds.push(question.id);
+      }
+    }
+    
+    if (missingAnswers.length > 0) {
+      setValidationErrors(errorIds);
+      Swal.fire({
+        icon: 'warning',
+        title: 'Champs obligatoires',
+        html: `
+          <p>Veuillez répondre à toutes les questions avant de continuer.</p>
+          <p class="text-sm text-gray-600 mt-2">Questions manquantes: ${missingAnswers.join(', ')}</p>
+        `,
+        confirmButtonColor: '#901c67'
+      });
+      return false;
+    }
+    
+    setValidationErrors([]);
+    return true;
   };
 
   // Fonction pour vérifier si une question doit être visible
@@ -553,6 +845,58 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
         </p>
       </div>
 
+      {/* Status Indicators */}
+      <div className="mb-4 flex flex-wrap gap-3">
+        {/* Connection Status */}
+        <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
+          isOffline 
+            ? 'bg-orange-100 text-orange-800 border border-orange-300' 
+            : 'bg-green-100 text-green-800 border border-green-300'
+        }`}>
+          {isOffline ? <WifiOff size={16} /> : <Wifi size={16} />}
+          <span className="font-medium">
+            {isOffline ? 'Hors ligne' : 'En ligne'}
+          </span>
+        </div>
+
+        {/* Draft Indicator */}
+        {hasDraft && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-blue-100 text-blue-800 border border-blue-300">
+            <Save size={16} />
+            <span className="font-medium">Brouillon sauvegardé</span>
+          </div>
+        )}
+
+        {/* Pending Forms Counter */}
+        {pendingFormsCount > 0 && (
+          <button
+            onClick={syncPendingForms}
+            disabled={isOffline}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-yellow-100 text-yellow-800 border border-yellow-300 hover:bg-yellow-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <CloudUpload size={16} />
+            <span className="font-medium">
+              {pendingFormsCount} formulaire{pendingFormsCount > 1 ? 's' : ''} en attente
+            </span>
+          </button>
+        )}
+      </div>
+
+      {/* Offline Warning */}
+      {isOffline && (
+        <div className="mb-4 p-4 bg-orange-50 border-l-4 border-orange-500 text-orange-800">
+          <div className="flex items-start gap-3">
+            <AlertCircle size={20} className="flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-sm">Mode hors ligne</p>
+              <p className="text-xs mt-1">
+                Vos modifications sont sauvegardées localement. Le formulaire sera automatiquement synchronisé lors du retour de la connexion.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Category Navigation */}
       <div className="mb-6 border border-gray-300 p-4 bg-gray-50">
         <div className="flex items-center gap-2 mb-3">
@@ -599,7 +943,11 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
                     .map((question) => (
                       <div
                         key={question.id}
-                        className="bg-gray-50 p-4 border-l-4 border-blue-600 shadow-sm"
+                        className={`bg-gray-50 p-4 border-l-4 shadow-sm transition-all ${
+                          validationErrors.includes(question.id) 
+                            ? 'border-red-500 bg-red-50' 
+                            : 'border-blue-600'
+                        }`}
                       >
                         {/* Question Label */}
                         <label className="block">
@@ -609,12 +957,19 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
                             </span>
                             <span className="text-gray-800 font-semibold text-sm uppercase pt-1.5">
                               {question.question}
+                              <span className="text-red-600 ml-1">*</span>
                             </span>
                           </div>
 
                           {/* Input */}
                           <div className="mt-3">
                             {renderInput(question)}
+                            {validationErrors.includes(question.id) && (
+                              <div className="mt-2 flex items-center gap-2 text-red-600 text-xs">
+                                <AlertCircle size={14} />
+                                <span>Ce champ est obligatoire</span>
+                              </div>
+                            )}
                           </div>
                         </label>
                       </div>
@@ -645,8 +1000,12 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
                 <button
                   type="button"
                   onClick={() => {
-                    const currentIndex = categories.indexOf(currentCategory);
-                    setCurrentCategory(categories[currentIndex + 1]);
+                    if (validateCurrentCategory()) {
+                      const currentIndex = categories.indexOf(currentCategory);
+                      setCurrentCategory(categories[currentIndex + 1]);
+                      // Scroll to top
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
                   }}
                   className="px-4 py-2 text-white text-sm font-semibold border-2 hover:opacity-90 transition-all uppercase"
                   style={{ backgroundColor: '#901c67', borderColor: '#901c67' }}
