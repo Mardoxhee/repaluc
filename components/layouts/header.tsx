@@ -1,9 +1,14 @@
 "use client"
-import React, { useState, useRef } from 'react';
-import { FiChevronDown, FiLogOut, FiMail, FiBell, FiSettings, FiUser, FiShield, FiClock } from 'react-icons/fi';
+import React, { useState, useRef, useEffect } from 'react';
+import { FiChevronDown, FiLogOut, FiMail, FiBell, FiSettings, FiUser, FiShield, FiClock, FiDownload } from 'react-icons/fi';
 import Image from 'next/image';
 
 const LOGOUT_URL = process.env.NEXT_PUBLIC_LOGOUT_URL || 'http://10.140.0.106:4201/login';
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
 
 const user = {
   name: 'Mardox',
@@ -16,6 +21,8 @@ const user = {
 const Header = () => {
   const [open, setOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [showInstallButton, setShowInstallButton] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
 
@@ -32,6 +39,47 @@ const Header = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Gérer le prompt d'installation PWA
+  useEffect(() => {
+    // Vérifier si l'app est déjà installée
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      setShowInstallButton(false);
+      return;
+    }
+
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      const promptEvent = e as BeforeInstallPromptEvent;
+      setDeferredPrompt(promptEvent);
+      setShowInstallButton(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    window.addEventListener('appinstalled', () => {
+      setShowInstallButton(false);
+      setDeferredPrompt(null);
+    });
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+
+    if (outcome === 'accepted') {
+      console.log('[PWA] Installation acceptée');
+    }
+
+    setDeferredPrompt(null);
+    setShowInstallButton(false);
+  };
 
   const notifications = [
     { id: 1, title: 'Nouvelle victime enregistrée', time: '5 min', type: 'info' },
@@ -120,6 +168,19 @@ const Header = () => {
             </div>
           )}
         </div>
+
+        {/* Bouton d'installation PWA */}
+        {showInstallButton && (
+          <button 
+            onClick={handleInstallClick}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-white font-medium transition-all hover:shadow-md"
+            style={{ backgroundColor: '#901c67' }}
+            title="Installer l'application"
+          >
+            <FiDownload size={18} />
+            <span className="hidden lg:inline text-sm">Installer</span>
+          </button>
+        )}
 
         {/* Paramètres rapides */}
         <button className="p-2 rounded-full hover:bg-gray-100 transition-colors group">

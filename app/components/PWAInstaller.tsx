@@ -1,26 +1,57 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { FiDownload, FiX } from 'react-icons/fi';
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
 
 const PWAInstaller: React.FC = () => {
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [showInstallButton, setShowInstallButton] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(false);
+
   useEffect(() => {
+    // Vérifier si l'app est déjà installée
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      setIsInstalled(true);
+      console.log('[PWA] Application déjà installée');
+      return;
+    }
+
+    // Capturer l'événement beforeinstallprompt
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      const promptEvent = e as BeforeInstallPromptEvent;
+      setDeferredPrompt(promptEvent);
+      setShowInstallButton(true);
+      console.log('[PWA] Prompt d\'installation disponible');
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    // Détecter si l'app a été installée
+    window.addEventListener('appinstalled', () => {
+      console.log('[PWA] Application installée avec succès');
+      setShowInstallButton(false);
+      setIsInstalled(true);
+      setDeferredPrompt(null);
+    });
+
+    // Service Worker et cache
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-      // Attendre que la page soit complètement chargée
       window.addEventListener('load', () => {
-        // Le service worker principal est déjà enregistré par next-pwa
-        // On va juste s'assurer que les pages sont bien en cache
-        
         navigator.serviceWorker.ready.then((registration) => {
           console.log('[PWA] Service Worker prêt');
           
-          // Pré-cacher les pages importantes
           const pagesToCache = [
             '/',
             '/reparations',
             '/luc',
           ];
           
-          // Ouvrir le cache et ajouter les pages
           caches.open('manual-precache-v1').then((cache) => {
             pagesToCache.forEach((url) => {
               fetch(url)
@@ -37,17 +68,92 @@ const PWAInstaller: React.FC = () => {
           });
         });
         
-        // Écouter les mises à jour du service worker
         navigator.serviceWorker.addEventListener('controllerchange', () => {
           console.log('[PWA] Service Worker mis à jour');
-          // Optionnel : recharger la page
-          // window.location.reload();
         });
       });
     }
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
   }, []);
 
-  return null; // Ce composant ne rend rien
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) {
+      console.log('[PWA] Pas de prompt disponible');
+      return;
+    }
+
+    // Afficher le prompt d'installation
+    deferredPrompt.prompt();
+
+    // Attendre la réponse de l'utilisateur
+    const { outcome } = await deferredPrompt.userChoice;
+    console.log(`[PWA] Choix de l'utilisateur: ${outcome}`);
+
+    if (outcome === 'accepted') {
+      console.log('[PWA] Installation acceptée');
+    } else {
+      console.log('[PWA] Installation refusée');
+    }
+
+    // Réinitialiser le prompt
+    setDeferredPrompt(null);
+    setShowInstallButton(false);
+  };
+
+  const handleDismiss = () => {
+    setShowInstallButton(false);
+    // Garder le prompt pour plus tard
+    console.log('[PWA] Bannière d\'installation masquée');
+  };
+
+  // Ne rien afficher si l'app est installée ou si le bouton ne doit pas être affiché
+  if (isInstalled || !showInstallButton) {
+    return null;
+  }
+
+  return (
+    <div className="fixed bottom-6 right-6 z-50 animate-fadeInUp">
+      <div className="bg-white rounded-xl shadow-2xl border border-gray-200 p-4 max-w-sm">
+        <div className="flex items-start gap-3">
+          <div className="p-2 bg-primary-50 rounded-lg">
+            <FiDownload className="text-primary-600" size={24} />
+          </div>
+          <div className="flex-1">
+            <h3 className="font-semibold text-gray-900 mb-1">
+              Installer l'application
+            </h3>
+            <p className="text-sm text-gray-600 mb-3">
+              Installez l'app pour un accès rapide et hors ligne
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={handleInstallClick}
+                className="px-4 py-2 text-white rounded-lg font-medium transition-all hover:shadow-md"
+                style={{ backgroundColor: '#901c67' }}
+              >
+                Installer
+              </button>
+              <button
+                onClick={handleDismiss}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+              >
+                Plus tard
+              </button>
+            </div>
+          </div>
+          <button
+            onClick={handleDismiss}
+            className="p-1 hover:bg-gray-100 rounded transition-colors"
+          >
+            <FiX className="text-gray-400" size={18} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 export default PWAInstaller;
