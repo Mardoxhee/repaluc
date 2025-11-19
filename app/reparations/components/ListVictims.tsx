@@ -77,6 +77,9 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
     const [isOffline, setIsOffline] = useState(false);
     const [usingCache, setUsingCache] = useState(false);
     const [showOfflineIndicator, setShowOfflineIndicator] = useState(true);
+    const [initialLoading, setInitialLoading] = useState(false);
+    const [loadingProgress, setLoadingProgress] = useState({ current: 0, total: 1 });
+    const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false);
     const [meta, setMeta] = useState({
         total: 0,
         page: 1,
@@ -103,6 +106,98 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                 : field
         ), [mockCategories]
     );
+
+    const loadAllPages = useCallback(async (): Promise<void> => {
+        if (!fetchCtx?.fetcher) return;
+        
+        setInitialLoading(true);
+        setLoadingProgress({ current: 0, total: 1 });
+        
+        try {
+            // Vérifier d'abord le cache
+            const cacheKey = 'all-victims-cache';
+            const cachedData = await getVictimsFromCache(cacheKey);
+            
+            // Vérifier si on a des données en cache de manière plus sûre
+            const hasCachedData = cachedData && 
+                                Array.isArray(cachedData.data) && 
+                                cachedData.data.length > 0;
+            
+            if (hasCachedData) {
+                console.log('Chargement des données depuis le cache...');
+                
+                // Calculer la pagination
+                const page = meta.page;
+                const limit = meta.limit;
+                const startIndex = (page - 1) * limit;
+                const endIndex = startIndex + limit;
+                const paginatedData = cachedData.data.slice(startIndex, endIndex);
+                
+                setVictims(paginatedData);
+                
+                // Mettre à jour les métadonnées avec la pagination
+                setMeta(prev => ({
+                    ...prev,
+                    page,
+                    limit,
+                    total: cachedData.data.length,
+                    totalPages: Math.ceil(cachedData.data.length / limit),
+                    hasNextPage: endIndex < cachedData.data.length,
+                    hasPreviousPage: page > 1
+                }));
+                
+                setUsingCache(true);
+                setInitialLoading(false);
+                setHasLoadedInitialData(true);
+                
+                // Si on est en ligne, on peut rafraîchir en arrière-plan
+                if (isOnline()) {
+                    fetchVictims();
+                }
+                
+                return;
+            }
+
+            // Charger la première page
+            const firstPage = await fetchCtx.fetcher(`/victime/paginate/filtered?page=1&limit=20`);
+            if (!firstPage?.data) return;
+
+            const allVictims = [...firstPage.data];
+            const totalPages = firstPage.meta?.totalPages || 1;
+            
+            setLoadingProgress({ current: 1, total: totalPages });
+
+            // Charger les pages restantes
+            for (let page = 2; page <= totalPages; page++) {
+                const response = await fetchCtx.fetcher(`/victime/paginate/filtered?page=${page}&limit=20`);
+                if (response?.data) {
+                    allVictims.push(...response.data);
+                    setLoadingProgress({ current: page, total: totalPages });
+                }
+            }
+
+            // Sauvegarder toutes les données dans IndexedDB
+            await saveVictimsToCache(cacheKey, allVictims, {
+                ...firstPage.meta,
+                timestamp: Date.now(),
+                total: allVictims.length,
+                // On garde la pagination d'origine
+                page: firstPage.meta?.page || 1,
+                limit: firstPage.meta?.limit || 20,
+                totalPages: firstPage.meta?.totalPages || Math.ceil(allVictims.length / 20)
+            });
+            
+            // Mettre à jour le state avec la première page
+            setVictims(firstPage.data);
+            setMeta(firstPage.meta);
+            setHasLoadedInitialData(true);
+
+        } catch (error) {
+            console.error('Erreur lors du chargement des données:', error);
+        } finally {
+            setInitialLoading(false);
+        }
+    }, [fetchCtx?.fetcher]);
 
     const buildQueryParams = useCallback(() => {
         const params: Record<string, string> = {
@@ -155,79 +250,116 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
 
         setLoading(true);
         setError("");
-        setIsOffline(!isOnline());
-        setUsingCache(false);
+        const offline = !isOnline();
+        setIsOffline(offline);
 
-        // Créer une clé de cache basée sur les paramètres de recherche
-        const queryParams = buildQueryParams();
-        const cacheKey = `victims-${queryParams || 'all'}`;
-
-        // Essayer de charger depuis le cache d'abord
+        // Toujours essayer de charger depuis le cache d'abord
+        const cacheKey = 'all-victims-cache';
         const cachedData = await getVictimsFromCache(cacheKey);
+        
+        // Calculer la pagination
+        const page = meta.page;
+        const limit = meta.limit;
+        const startIndex = (page - 1) * limit;
+        const endIndex = startIndex + limit;
 
-        if (cachedData && !isOnline()) {
-            // Utiliser le cache si offline
-            console.log('[ListVictims] Mode offline - Utilisation du cache');
-            setVictims(cachedData.data);
-            setMeta(cachedData.meta);
+        // Si on a des données en cache, les afficher immédiatement
+        if (cachedData?.data && Array.isArray(cachedData.data) && cachedData.data.length > 0) {
+            const totalItems = cachedData.data.length;
+            const totalPages = Math.ceil(totalItems / limit);
+            const hasNextPage = endIndex < totalItems;
+            const hasPreviousPage = page > 1;
+            
+            // S'assurer que la page demandée est valide
+            const currentPage = Math.min(page, totalPages);
+            const validStartIndex = (currentPage - 1) * limit;
+            const validEndIndex = Math.min(validStartIndex + limit, totalItems);
+            
+            const paginatedData = cachedData.data.slice(validStartIndex, validEndIndex);
+            
+            setVictims(paginatedData);
+            
+            // Mettre à jour les métadonnées avec la pagination
+            setMeta({
+                page: currentPage,
+                limit,
+                total: totalItems,
+                totalPages,
+                hasNextPage,
+                hasPreviousPage
+            });
+            
             setUsingCache(true);
-            setLoading(false);
-            return;
+            
+            // Si on est hors ligne, on s'arrête là
+            if (offline) {
+                setLoading(false);
+                return;
+            }
         }
 
-        if (cachedData && isOnline()) {
-            // Afficher le cache immédiatement puis rafraîchir en arrière-plan
-            console.log('[ListVictims] Affichage du cache puis rafraîchissement');
-            setVictims(cachedData.data);
-            setMeta(cachedData.meta);
-            setUsingCache(true);
-            setLoading(false);
-        }
-
-        // Essayer de charger depuis le serveur
-        if (isOnline()) {
+        // Si on est en ligne, on essaie de rafraîchir les données
+        if (!offline) {
             try {
-                const url = queryParams ? `/victime/paginate/filtered?${queryParams}` : `/victime/paginate/filtered`;
-                const response = await fetchCtx.fetcher(url);
+                const queryParams = buildQueryParams();
+                const response = await fetchCtx.fetcher(`/victime/paginate/filtered?${queryParams}`);
 
                 if (response?.data) {
-                    setVictims(response.data);
-                    setMeta(response.meta);
+                    // Si on a déjà des données en cache, on les met à jour
+                    if (cachedData) {
+                        const updatedData = [...cachedData.data];
+                        response.data.forEach((victim: any) => {
+                            const existingIndex = updatedData.findIndex(v => v.id === victim.id);
+                            if (existingIndex >= 0) {
+                                updatedData[existingIndex] = victim;
+                            } else {
+                                updatedData.push(victim);
+                            }
+                        });
+                        
+                        // Sauvegarder les données mises à jour
+                        await saveVictimsToCache(cacheKey, updatedData, {
+                            ...response.meta,
+                            timestamp: Date.now(),
+                            total: updatedData.length
+                        });
+                        
+                        // Mettre à jour l'UI avec les données paginées
+                        const paginatedData = updatedData.slice(startIndex, endIndex);
+                        setVictims(paginatedData);
+                        setMeta({
+                            ...response.meta,
+                            page,
+                            limit,
+                            total: updatedData.length,
+                            totalPages: Math.ceil(updatedData.length / limit),
+                            hasNextPage: endIndex < updatedData.length,
+                            hasPreviousPage: page > 1
+                        });
+                    } else {
+                        // Pas de cache, on utilise directement la réponse
+                        setVictims(response.data);
+                        setMeta(response.meta);
+                        
+                        // Sauvegarder dans le cache
+                        await saveVictimsToCache(cacheKey, response.data, {
+                            ...response.meta,
+                            timestamp: Date.now()
+                        });
+                    }
+                    
                     setUsingCache(false);
-
-                    // Sauvegarder dans le cache
-                    await saveVictimsToCache(cacheKey, response.data, response.meta);
-                    console.log('[ListVictims] Données sauvegardées dans le cache');
-                } else {
-                    setVictims([]);
-                    setMeta({
-                        total: 0,
-                        page: 1,
-                        limit: 20,
-                        totalPages: 0,
-                        hasNextPage: false,
-                        hasPreviousPage: false,
-                    });
                 }
             } catch (err: any) {
-                console.log('[ListVictims] Erreur chargement serveur:', err);
-                setError(err.message || "Erreur lors du chargement des victimes");
-
-                // Si erreur et pas de cache, essayer de charger le cache expiré
+                console.error('Erreur lors du chargement des données:', err);
                 if (!cachedData) {
-                    const expiredCache = await getVictimsFromCache(cacheKey);
-                    if (expiredCache) {
-                        console.log('[ListVictims] Utilisation du cache expiré');
-                        setVictims(expiredCache.data);
-                        setMeta(expiredCache.meta);
-                        setUsingCache(true);
-                    } else {
-                        setVictims([]);
-                    }
+                    setError('Impossible de charger les données');
                 }
             } finally {
                 setLoading(false);
             }
+        } else {
+            setLoading(false);
         }
     }, [buildQueryParams, fetchCtx?.fetcher]);
 
@@ -239,11 +371,19 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
         return () => clearTimeout(debounceTimeout);
     }, [fetchVictims]);
 
+    // Chargement initial des données
+    useEffect(() => {
+        // Ne charger que si on n'a pas déjà chargé les données
+        if (!hasLoadedInitialData) {
+            loadAllPages();
+        }
+    }, [loadAllPages, hasLoadedInitialData]);
+
     // Écouter les changements de connexion
     useEffect(() => {
         const handleOnline = () => {
             setIsOffline(false);
-            fetchVictims();
+            loadAllPages(); // Recharger les données quand on revient en ligne
         };
         const handleOffline = () => setIsOffline(true);
 
@@ -254,8 +394,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [loadAllPages]);
 
     const addFilterRule = useCallback(() => {
         const newRule: FilterRule = {
@@ -322,6 +461,57 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                 return 'bg-red-50 text-red-700 border-red-200';
         }
     }, []);
+
+    // Afficher le loader de chargement initial
+    if (initialLoading) {
+        const progressPercentage = Math.round((loadingProgress.current / loadingProgress.total) * 100);
+        
+        return (
+            <div className="fixed inset-0 bg-white/95 flex items-center justify-center z-50">
+                <div className="text-center max-w-md w-full px-4">
+                    {/* Logo ou icône */}
+                    <div className="flex justify-center mb-8">
+                        <div className="relative w-28 h-28">
+                            {/* Cercle de fond */}
+                            <div className="absolute inset-0 border-4 border-primary-100 rounded-full"></div>
+                            
+                            {/* Cercle animé */}
+                            <div 
+                                className="absolute inset-0 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"
+                                style={{
+                                    borderWidth: '6px',
+                                    borderColor: '#007fba',
+                                    borderTopColor: 'transparent'
+                                }}
+                            ></div>
+                            
+                            {/* Pourcentage */}
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <span className="text-primary-600 font-bold text-2xl">{progressPercentage}%</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {/* Texte */}
+                    <h2 className="text-2xl font-bold text-primary-700 mb-3">Chargement des données</h2>
+                    <p className="text-primary-600 font-medium mb-6">
+                        Page {loadingProgress.current} sur {loadingProgress.total}
+                    </p>
+                    
+                    {/* Barre de progression */}
+                    <div className="w-full max-w-xs h-2.5 bg-primary-100 rounded-full overflow-hidden mx-auto">
+                        <div 
+                            className="h-full bg-primary-500 transition-all duration-300 ease-out"
+                            style={{ 
+                                width: `${progressPercentage}%`,
+                                boxShadow: '0 0 12px rgba(0, 127, 186, 0.4)'
+                            }}
+                        ></div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <>
