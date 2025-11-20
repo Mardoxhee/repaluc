@@ -306,44 +306,65 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
         const cacheKey = 'all-victims-cache';
         
         // Fonction pour afficher les données avec pagination
-        // 1. Si on est hors ligne, on utilise uniquement le cache SANS SAUVEGARDER
-        if (isOffline) {
-            try {
-                const cachedResult = await getVictimsFromCache(cacheKey);
+        const displayData = (data: any[], metaData: any, fromCache: boolean = false) => {
+            // Si les données viennent du cache, on applique la pagination côté client
+            if (fromCache) {
+                const page = meta.page;
+                const limit = meta.limit;
+                const totalItems = data.length;
+                const totalPages = Math.ceil(totalItems / limit);
+                const hasNextPage = (page * limit) < totalItems;
+                const hasPreviousPage = page > 1;
                 
-                if (cachedResult?.data?.length) {
-                    // Appliquer les filtres sur les données en cache
-                    const filteredData = applyFilters(cachedResult.data, filters, searchTerm);
-                    const totalItems = filteredData.length;
-                    const totalPages = Math.max(1, Math.ceil(totalItems / meta.limit));
-                    const currentPage = Math.min(meta.page, totalPages);
-                    
-                    // Mettre à jour la page courante si nécessaire
-                    if (currentPage !== meta.page) {
-                        setMeta(prev => ({ ...prev, page: currentPage }));
-                    }
-                    
-                    // Calculer les données de la page courante
-                    const start = (currentPage - 1) * meta.limit;
-                    const end = start + meta.limit;
-                    const pageData = filteredData.slice(start, end);
-                    
-                    setVictims(pageData);
-                    setMeta(prev => ({
-                        ...prev,
-                        total: totalItems,
-                        totalPages: totalPages,
-                        hasNextPage: end < totalItems,
-                        hasPreviousPage: currentPage > 1
-                    }));
-                    setUsingCache(true);
-                } else {
-                    setError('Pas de connexion Internet et aucune donnée en cache disponible');
-                }
-            } catch (error) {
-                console.error('Erreur lors de la lecture du cache:', error);
-                setError('Erreur lors de la lecture des données en cache');
-            } finally {
+                // Appliquer la pagination
+                const startIndex = (page - 1) * limit;
+                const endIndex = startIndex + limit;
+                const paginatedData = data.slice(startIndex, endIndex);
+                
+                setVictims(paginatedData);
+                setMeta(prev => ({
+                    ...prev,
+                    page,
+                    limit,
+                    total: totalItems,
+                    totalPages,
+                    hasNextPage,
+                    hasPreviousPage
+                }));
+            } else {
+                // Si les données viennent de l'API, on utilise directement les métadonnées fournies
+                setVictims(data);
+                setMeta(prev => ({
+                    ...prev,
+                    ...metaData,
+                    hasNextPage: metaData.page < metaData.totalPages,
+                    hasPreviousPage: metaData.page > 1
+                }));
+            }
+            
+            setUsingCache(fromCache);
+            setLoading(false);
+        };
+
+        // 1. Si on est hors ligne, on utilise uniquement le cache
+        if (isOffline) {
+            const cachedResult = await getVictimsFromCache(cacheKey);
+            
+            if (cachedResult?.data?.length) {
+                // Appliquer les filtres sur les données en cache
+                const filteredData = applyFilters(cachedResult.data, filters, searchTerm);
+                const totalItems = filteredData.length;
+                const totalPages = Math.ceil(totalItems / meta.limit);
+                
+                displayData(filteredData, {
+                    ...cachedResult.meta,
+                    total: totalItems,
+                    totalPages: totalPages,
+                    hasNextPage: meta.page < totalPages,
+                    hasPreviousPage: meta.page > 1
+                }, true);
+            } else {
+                setError('Pas de connexion Internet et aucune donnée en cache disponible');
                 setLoading(false);
             }
             return;
@@ -355,19 +376,14 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
             const response = await fetchCtx.fetcher(`/victime/paginate/filtered?${queryParams}`);
 
             if (response?.data) {
-                // En mode en ligne, on affiche directement les données de l'API
-                setVictims(response.data);
-                setMeta({
+                // Mettre à jour le cache en arrière-plan
+                saveVictimsToCache(cacheKey, response.data, {
                     ...response.meta,
-                    page: response.meta?.page || 1,
-                    limit: response.meta?.limit || 20,
-                    total: response.meta?.total || response.data.length,
-                    totalPages: response.meta?.totalPages || 1,
-                    hasNextPage: response.meta?.page < response.meta?.totalPages,
-                    hasPreviousPage: response.meta?.page > 1
-                });
-                setUsingCache(false);
-                setLoading(false);
+                    timestamp: Date.now()
+                }).catch(console.error);
+                
+                // Afficher directement les données de l'API
+                displayData(response.data, response.meta, false);
             }
         } catch (err: any) {
             console.error('Erreur lors du chargement des données:', err);
@@ -378,22 +394,16 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                 if (cachedResult?.data?.length) {
                     const filteredData = applyFilters(cachedResult.data, filters, searchTerm);
                     const totalItems = filteredData.length;
-                    const totalPages = Math.max(1, Math.ceil(totalItems / meta.limit));
-                    const currentPage = Math.min(meta.page, totalPages);
+                    const totalPages = Math.ceil(totalItems / meta.limit);
                     
-                    const start = (currentPage - 1) * meta.limit;
-                    const end = start + meta.limit;
-                    const pageData = filteredData.slice(start, end);
-                    
-                    setVictims(pageData);
-                    setMeta(prev => ({
-                        ...prev,
+                    displayData(filteredData, {
+                        ...cachedResult.meta,
                         total: totalItems,
                         totalPages: totalPages,
-                        hasNextPage: end < totalItems,
-                        hasPreviousPage: currentPage > 1
-                    }));
-                    setUsingCache(true);
+                        hasNextPage: meta.page < totalPages,
+                        hasPreviousPage: meta.page > 1
+                    }, true);
+                    
                     setError('Connexion limitée : affichage des données en cache');
                     return;
                 }
@@ -401,6 +411,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                 console.error('Erreur lors de la récupération du cache:', cacheError);
             }
             
+            // Si on arrive ici, c'est qu'on n'a pas pu récupérer les données du cache
             setError('Impossible de charger les données. Vérifiez votre connexion Internet.');
             setLoading(false);
         }
