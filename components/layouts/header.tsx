@@ -18,7 +18,12 @@ const user = {
   department: 'FONAREV OPERATIONAL'
 };
 
-const Header = () => {
+interface HeaderProps {
+  onMenuToggle?: () => void;
+  isMobile?: boolean;
+}
+
+const Header: React.FC<HeaderProps> = ({ onMenuToggle, isMobile = false }) => {
   const [open, setOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
@@ -93,7 +98,7 @@ const Header = () => {
   });
 
   return (
-    <header className="h-20 bg-white/98 backdrop-blur-md shadow-sm border-b border-gray-200/80 flex items-center justify-between px-8 fixed top-0 left-64 right-0 z-20">
+    <header className={`h-20 bg-white/98 backdrop-blur-md shadow-sm border-b border-gray-200/80 flex items-center justify-between px-8 fixed top-0 right-0 z-20 ${isMobile ? 'left-0' : 'left-64'}`}>
       {/* Section gauche - Informations système */}
       <div className="flex items-center gap-6">
         {/* Logo République */}
@@ -234,7 +239,19 @@ const Header = () => {
                   <div className="flex-1">
                     <div className="font-bold text-gray-800">{user.name}</div>
                     <div className="text-sm text-gray-600">{user.role}</div>
-                    <div className="flex items-center gap-1 text-xs text-gray-500 mt-1">
+                    <div className="flex items-center justify-between h-16 px-4 bg-white shadow-sm">
+                      {/* Bouton de menu pour mobile */}
+                      {isMobile && onMenuToggle && (
+                        <button 
+                          onClick={onMenuToggle}
+                          className="p-2 text-gray-600 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md"
+                          aria-label="Ouvrir le menu"
+                        >
+                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" />
+                          </svg>
+                        </button>
+                      )}
                       <FiMail size={12} />
                       {user.email}
                     </div>

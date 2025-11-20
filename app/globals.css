@@ -96,6 +96,59 @@ body {
   animation-delay: 0.3s;
 }
 
+/* Styles responsives */
+@media (max-width: 768px) {
+  .container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  
+  /* Ajustement du padding pour le contenu principal */
+  main {
+    padding-top: 4rem; /* Espace pour le bouton du menu */
+  }
+  
+  /* Ajustement des marges et paddings pour les cartes et éléments de formulaire */
+  .card, .form-input, .form-select, .btn {
+    width: 100%;
+    margin-bottom: 0.75rem;
+  }
+  
+  /* Ajustement de la taille de la police pour les petits écrans */
+  html {
+    font-size: 14px;
+  }
+  
+  /* Ajustement des tableaux pour les petits écrans */
+  .table-responsive {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Ajustement des modales pour les petits écrans */
+  .modal {
+    padding: 1rem;
+  }
+}
+
+/* Styles spécifiques pour les très petits appareils */
+@media (max-width: 480px) {
+  .text-2xl {
+    font-size: 1.25rem;
+  }
+  
+  .text-xl {
+    font-size: 1.125rem;
+  }
+  
+  .btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+  }
+}
+
 @keyframes float {
 
   0%,

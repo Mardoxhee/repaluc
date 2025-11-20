@@ -37,6 +37,13 @@ interface FilterRule {
     label: string;
 }
 
+interface FilterType {
+    status: string;
+    category: string;
+    startDate: string;
+    endDate: string;
+}
+
 const prejudiceFinalOptions = [
     "Perte de vie",
     "Perte économique",
@@ -68,9 +75,48 @@ const operators = [
 ];
 
 const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
-    const [search, setSearch] = useState<string>("");
+    const [searchTerm, setSearchTerm] = useState<string>("");
+    const [filters, setFilters] = useState<FilterType>({
+        status: "",
+        category: "",
+        startDate: "",
+        endDate: ""
+    });
     const [filterRules, setFilterRules] = useState<FilterRule[]>([]);
     const [showFilterBuilder, setShowFilterBuilder] = useState(false);
+    
+    // Fonction pour appliquer les filtres et la recherche sur les données
+    const applyFilters = (data: any[], filters: FilterType, search: string) => {
+        return data.filter(victim => {
+            // Filtre par terme de recherche
+            const matchesSearch = !search || 
+                (victim.nom && victim.nom.toLowerCase().includes(search.toLowerCase())) ||
+                (victim.prenom && victim.prenom.toLowerCase().includes(search.toLowerCase())) ||
+                (victim.reference && victim.reference.toLowerCase().includes(search.toLowerCase()));
+            
+            // Filtre par statut
+            const matchesStatus = !filters.status || victim.status === filters.status;
+            
+            // Filtre par catégorie
+            const matchesCategory = !filters.category || victim.category === filters.category;
+            
+            // Filtre par date
+            let matchesDate = true;
+            if (filters.startDate) {
+                const startDate = new Date(filters.startDate);
+                const victimDate = new Date(victim.createdAt || victim.date || new Date());
+                matchesDate = matchesDate && victimDate >= startDate;
+            }
+            if (filters.endDate) {
+                const endDate = new Date(filters.endDate);
+                endDate.setHours(23, 59, 59, 999); // Fin de la journée
+                const victimDate = new Date(victim.createdAt || victim.date || new Date());
+                matchesDate = matchesDate && victimDate <= endDate;
+            }
+            
+            return matchesSearch && matchesStatus && matchesCategory && matchesDate;
+        });
+    };
     const [victims, setVictims] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string>("");
@@ -99,13 +145,17 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
     const fetchCtx = useContext(FetchContext);
 
     // Update filter fields with categories - useMemo pour éviter recalcul
-    const updatedFilterFields = useMemo(() =>
-        filterFields.map(field =>
-            field.key === 'categorie'
-                ? { ...field, options: mockCategories.map(cat => cat.nom) }
-                : field
-        ), [mockCategories]
-    );
+    const updatedFilterFields = useMemo(() => {
+        return filterFields.map(field => {
+            if (field.key === 'categorie') {
+                return {
+                    ...field,
+                    options: mockCategories ? mockCategories.map((cat: any) => cat.nom) : []
+                };
+            }
+            return field;
+        });
+    }, [mockCategories]);
 
     const loadAllPages = useCallback(async (): Promise<void> => {
         if (!fetchCtx?.fetcher) return;
@@ -205,7 +255,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
             limit: meta.limit.toString(),
         };
 
-        if (search) params.nom = search;
+        if (searchTerm) params.nom = searchTerm;
 
         // Build filters from rules
         filterRules.forEach((rule) => {
@@ -213,7 +263,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
         });
 
         return new URLSearchParams(params).toString();
-    }, [meta.page, meta.limit, search, filterRules]);
+    }, [meta.page, meta.limit, searchTerm, filterRules]);
 
     // Function to check if a specific victim has an evaluation and view it
     const handleViewEvaluation = async (victim: any) => {
@@ -250,118 +300,122 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
 
         setLoading(true);
         setError("");
-        const offline = !isOnline();
-        setIsOffline(offline);
+        const isOffline = !isOnline();
+        setIsOffline(isOffline);
 
-        // Toujours essayer de charger depuis le cache d'abord
         const cacheKey = 'all-victims-cache';
-        const cachedData = await getVictimsFromCache(cacheKey);
         
-        // Calculer la pagination
-        const page = meta.page;
-        const limit = meta.limit;
-        const startIndex = (page - 1) * limit;
-        const endIndex = startIndex + limit;
-
-        // Si on a des données en cache, les afficher immédiatement
-        if (cachedData?.data && Array.isArray(cachedData.data) && cachedData.data.length > 0) {
-            const totalItems = cachedData.data.length;
-            const totalPages = Math.ceil(totalItems / limit);
-            const hasNextPage = endIndex < totalItems;
-            const hasPreviousPage = page > 1;
-            
-            // S'assurer que la page demandée est valide
-            const currentPage = Math.min(page, totalPages);
-            const validStartIndex = (currentPage - 1) * limit;
-            const validEndIndex = Math.min(validStartIndex + limit, totalItems);
-            
-            const paginatedData = cachedData.data.slice(validStartIndex, validEndIndex);
-            
-            setVictims(paginatedData);
-            
-            // Mettre à jour les métadonnées avec la pagination
-            setMeta({
-                page: currentPage,
-                limit,
-                total: totalItems,
-                totalPages,
-                hasNextPage,
-                hasPreviousPage
-            });
-            
-            setUsingCache(true);
-            
-            // Si on est hors ligne, on s'arrête là
-            if (offline) {
-                setLoading(false);
-                return;
+        // Fonction pour afficher les données avec pagination
+        const displayData = (data: any[], metaData: any, fromCache: boolean = false) => {
+            // Si les données viennent du cache, on applique la pagination côté client
+            if (fromCache) {
+                const page = meta.page;
+                const limit = meta.limit;
+                const totalItems = data.length;
+                const totalPages = Math.ceil(totalItems / limit);
+                const hasNextPage = (page * limit) < totalItems;
+                const hasPreviousPage = page > 1;
+                
+                // Appliquer la pagination
+                const startIndex = (page - 1) * limit;
+                const endIndex = startIndex + limit;
+                const paginatedData = data.slice(startIndex, endIndex);
+                
+                setVictims(paginatedData);
+                setMeta(prev => ({
+                    ...prev,
+                    page,
+                    limit,
+                    total: totalItems,
+                    totalPages,
+                    hasNextPage,
+                    hasPreviousPage
+                }));
+            } else {
+                // Si les données viennent de l'API, on utilise directement les métadonnées fournies
+                setVictims(data);
+                setMeta(prev => ({
+                    ...prev,
+                    ...metaData,
+                    hasNextPage: metaData.page < metaData.totalPages,
+                    hasPreviousPage: metaData.page > 1
+                }));
             }
+            
+            setUsingCache(fromCache);
+            setLoading(false);
+        };
+
+        // 1. Si on est hors ligne, on utilise uniquement le cache
+        if (isOffline) {
+            const cachedResult = await getVictimsFromCache(cacheKey);
+            
+            if (cachedResult?.data?.length) {
+                // Appliquer les filtres sur les données en cache
+                const filteredData = applyFilters(cachedResult.data, filters, searchTerm);
+                const totalItems = filteredData.length;
+                const totalPages = Math.ceil(totalItems / meta.limit);
+                
+                displayData(filteredData, {
+                    ...cachedResult.meta,
+                    total: totalItems,
+                    totalPages: totalPages,
+                    hasNextPage: meta.page < totalPages,
+                    hasPreviousPage: meta.page > 1
+                }, true);
+            } else {
+                setError('Pas de connexion Internet et aucune donnée en cache disponible');
+                setLoading(false);
+            }
+            return;
         }
 
-        // Si on est en ligne, on essaie de rafraîchir les données
-        if (!offline) {
-            try {
-                const queryParams = buildQueryParams();
-                const response = await fetchCtx.fetcher(`/victime/paginate/filtered?${queryParams}`);
+        // 2. Si on est en ligne, on utilise l'API
+        try {
+            const queryParams = buildQueryParams();
+            const response = await fetchCtx.fetcher(`/victime/paginate/filtered?${queryParams}`);
 
-                if (response?.data) {
-                    // Si on a déjà des données en cache, on les met à jour
-                    if (cachedData) {
-                        const updatedData = [...cachedData.data];
-                        response.data.forEach((victim: any) => {
-                            const existingIndex = updatedData.findIndex(v => v.id === victim.id);
-                            if (existingIndex >= 0) {
-                                updatedData[existingIndex] = victim;
-                            } else {
-                                updatedData.push(victim);
-                            }
-                        });
-                        
-                        // Sauvegarder les données mises à jour
-                        await saveVictimsToCache(cacheKey, updatedData, {
-                            ...response.meta,
-                            timestamp: Date.now(),
-                            total: updatedData.length
-                        });
-                        
-                        // Mettre à jour l'UI avec les données paginées
-                        const paginatedData = updatedData.slice(startIndex, endIndex);
-                        setVictims(paginatedData);
-                        setMeta({
-                            ...response.meta,
-                            page,
-                            limit,
-                            total: updatedData.length,
-                            totalPages: Math.ceil(updatedData.length / limit),
-                            hasNextPage: endIndex < updatedData.length,
-                            hasPreviousPage: page > 1
-                        });
-                    } else {
-                        // Pas de cache, on utilise directement la réponse
-                        setVictims(response.data);
-                        setMeta(response.meta);
-                        
-                        // Sauvegarder dans le cache
-                        await saveVictimsToCache(cacheKey, response.data, {
-                            ...response.meta,
-                            timestamp: Date.now()
-                        });
-                    }
-                    
-                    setUsingCache(false);
-                }
-            } catch (err: any) {
-                console.error('Erreur lors du chargement des données:', err);
-                if (!cachedData) {
-                    setError('Impossible de charger les données');
-                }
-            } finally {
-                setLoading(false);
+            if (response?.data) {
+                // Mettre à jour le cache en arrière-plan
+                saveVictimsToCache(cacheKey, response.data, {
+                    ...response.meta,
+                    timestamp: Date.now()
+                }).catch(console.error);
+                
+                // Afficher directement les données de l'API
+                displayData(response.data, response.meta, false);
             }
-        } else {
+        } catch (err: any) {
+            console.error('Erreur lors du chargement des données:', err);
+            
+            // En cas d'erreur, essayer d'afficher les données en cache
+            try {
+                const cachedResult = await getVictimsFromCache(cacheKey);
+                if (cachedResult?.data?.length) {
+                    const filteredData = applyFilters(cachedResult.data, filters, searchTerm);
+                    const totalItems = filteredData.length;
+                    const totalPages = Math.ceil(totalItems / meta.limit);
+                    
+                    displayData(filteredData, {
+                        ...cachedResult.meta,
+                        total: totalItems,
+                        totalPages: totalPages,
+                        hasNextPage: meta.page < totalPages,
+                        hasPreviousPage: meta.page > 1
+                    }, true);
+                    
+                    setError('Connexion limitée : affichage des données en cache');
+                    return;
+                }
+            } catch (cacheError) {
+                console.error('Erreur lors de la récupération du cache:', cacheError);
+            }
+            
+            // Si on arrive ici, c'est qu'on n'a pas pu récupérer les données du cache
+            setError('Impossible de charger les données. Vérifiez votre connexion Internet.');
             setLoading(false);
         }
-    }, [buildQueryParams, fetchCtx?.fetcher]);
+    }, [buildQueryParams, fetchCtx?.fetcher, meta.page, meta.limit, filters, searchTerm]);
 
     useEffect(() => {
         const debounceTimeout = setTimeout(() => {
@@ -421,7 +475,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
 
     const clearAllFilters = useCallback(() => {
         setFilterRules([]);
-        setSearch("");
+        setSearchTerm("");
         setMeta(prev => ({ ...prev, page: 1 }));
     }, []);
 
@@ -582,8 +636,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                     <input
                                         type="text"
                                         placeholder="Rechercher par nom, dossier, ou référence..."
-                                        value={search}
-                                        onChange={(e) => setSearch(e.target.value)}
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
                                         className="w-full pl-10 pr-4 py-3 border border-gray-300 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                                     />
                                 </div>
@@ -659,7 +713,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                                         })}
                                                         className="px-3 py-2 border border-gray-300 bg-white focus:outline-none focus:border-blue-500"
                                                     >
-                                                        {updatedFilterFields.map(field => (
+                                                        {updatedFilterFields.map((field) => (
                                                             <option key={field.key} value={field.key}>
                                                                 {field.label}
                                                             </option>
@@ -716,12 +770,12 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                             )}
 
                             {/* Active Filters Summary */}
-                            {(filterRules.length > 0 || search) && (
+                            {(filterRules.length > 0 || searchTerm) && (
                                 <div className="flex items-center gap-2 mt-4 pt-4 border-t border-gray-200">
                                     <span className="text-sm font-medium text-gray-700">Filtres actifs:</span>
-                                    {search && (
+                                    {searchTerm && (
                                         <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs border border-blue-200">
-                                            Recherche: "{search}"
+                                            Recherche: "{searchTerm}"
                                         </span>
                                     )}
                                     {filterRules.map(rule => {
@@ -739,7 +793,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                     </div>
 
                     {/* Bulk Actions */}
-                    {victims.length > 0 && (filterRules.length > 0 || search) && (
+                    {victims.length > 0 && (filterRules.length > 0 || searchTerm) && (
                         <div className="bg-white border border-gray-200 p-4 mb-6">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">

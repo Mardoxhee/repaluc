@@ -2,7 +2,7 @@
 const DB_NAME = 'VictimsCache';
 const DB_VERSION = 1;
 const STORE_NAME = 'victims';
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const CACHE_DURATION = 100 * 24 * 60 * 60 * 1000; // 100 jours
 
 interface CacheEntry {
   key: string;
@@ -115,7 +115,21 @@ export const clearVictimsCache = async (): Promise<void> => {
   }
 };
 
-// Vérifier si on est en ligne
+// Vérifier si on est en ligne avec une meilleure gestion des erreurs
 export const isOnline = (): boolean => {
-  return navigator.onLine;
+  try {
+    // Vérifier si on est en ligne via l'API navigator
+    if (typeof navigator !== 'undefined' && 'onLine' in navigator) {
+      return navigator.onLine;
+    }
+    
+    // Si on ne peut pas utiliser navigator.onLine, on suppose que l'application est en ligne
+    // car c'est généralement le cas par défaut dans les navigateurs modernes
+    return true;
+  } catch (error) {
+    console.error('Erreur lors de la vérification de l\'état en ligne:', error);
+    // En cas d'erreur, on suppose que l'application est en ligne
+    // pour éviter de bloquer inutilement les fonctionnalités
+    return true;
+  }
 };

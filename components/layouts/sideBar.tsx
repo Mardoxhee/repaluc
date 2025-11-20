@@ -1,9 +1,14 @@
 "use client"
+
 import React from 'react';
 import { FiGrid, FiBox, FiUsers, FiRepeat, FiSettings, FiShield } from 'react-icons/fi';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+
+interface SideBarProps {
+  onNavigate?: () => void;
+}
 
 const navItems = [
   { label: 'LUC', icon: <FiBox size={20} />, href: '/luc' },
@@ -11,8 +16,14 @@ const navItems = [
   { label: 'Accès à la justice', icon: <FiUsers size={20} />, href: '/#' },
 ];
 
-const SideBar = () => {
+const SideBar: React.FC<SideBarProps> = ({ onNavigate }) => {
   const pathname = usePathname();
+
+  const handleNavigation = () => {
+    if (onNavigate) {
+      onNavigate();
+    }
+  };
 
   return (
     <aside className="h-screen w-64 min-w-64 max-w-64 bg-white border-r border-gray-200 flex flex-col shadow-lg fixed top-0 left-0 z-30">
@@ -23,12 +34,11 @@ const SideBar = () => {
           <div className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center shadow-lg border border-white/20 mb-2">
             <FiShield className="text-white text-xl" />
           </div>
-          {/* <div className="text-white text-xs font-bold tracking-wide">SYSTÈME LUC</div> */}
         </div>
       </div>
 
       {/* Navigation principale */}
-      <div className="flex-1 px-4 py-6">
+      <div className="flex-1 px-4 py-6 overflow-y-auto">
         <nav className="space-y-2">
           {navItems.map(item => {
             const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
@@ -36,6 +46,7 @@ const SideBar = () => {
               <Link
                 href={item.href}
                 key={item.label}
+                onClick={handleNavigation}
                 className={`
                   flex items-center gap-3 px-3 py-3 rounded-lg font-medium transition-all duration-200 group relative
                   ${isActive
@@ -44,18 +55,15 @@ const SideBar = () => {
                   }
                 `}
               >
-                {/* Indicateur actif */}
                 {isActive && (
                   <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary-500"></div>
                 )}
-
                 <span className={`
                   transition-colors duration-200
                   ${isActive ? 'text-primary-600' : 'text-gray-500 group-hover:text-primary-500'}
                 `}>
                   {item.icon}
                 </span>
-
                 <span className="font-medium text-sm">{item.label}</span>
               </Link>
             );
@@ -79,6 +87,7 @@ const SideBar = () => {
         {/* Lien réglages */}
         <Link
           href="/reglages"
+          onClick={handleNavigation}
           className={`
             flex items-center gap-3 px-3 py-2 rounded-lg font-medium transition-all duration-200 group relative
             ${pathname === '/reglages'
