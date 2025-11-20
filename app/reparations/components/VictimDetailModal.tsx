@@ -232,10 +232,15 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
     { id: 'plan-de-vie', label: 'Plan de vie', description: 'Formulaire de plan de vie pour la victime' }
   ];
 
+  // Fonction pour obtenir l'icône de l'onglet actif
+  const getActiveTabIcon = () => {
+    const activeTab = tabs.find(t => t.id === tab);
+    return activeTab ? React.createElement(activeTab.icon, { size: 16 }) : null;
+  };
+
   return (
     <>
       <Modal show={true} onClose={onClose} size="7xl">
-
         <div className='p-4 relative !bg-white !text-gray-900'>
           <button
             onClick={onClose}
@@ -246,18 +251,43 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
           >
             <X size={28} />
           </button>
-          <div className="mb-6">
-            <div className="flex border-b !border-gray-200">
+          
+          {/* Menu déroulant pour les petits écrans */}
+          <div className="md:hidden mb-4">
+            <div className="relative">
+              <select
+                value={tab}
+                onChange={(e) => setTab(e.target.value as any)}
+                className="block w-full p-2 pl-3 pr-10 text-base border border-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 rounded-md appearance-none"
+              >
+                {tabs.map((tabItem) => (
+                  <option key={tabItem.id} value={tabItem.id}>
+                    {tabItem.label}
+                  </option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                  <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+          
+          {/* Onglets pour les écrans moyens et grands */}
+          <div className="hidden md:block mb-6">
+            <div className="flex border-b !border-gray-200 overflow-x-auto">
               {tabs.map((tabItem) => {
                 const Icon = tabItem.icon;
                 return (
                   <button
                     key={tabItem.id}
                     onClick={() => setTab(tabItem.id as any)}
-                    className={`flex items-center gap-2 px-4 py-2 border-b-2 font-medium text-sm transition-colors ${tab === tabItem.id
-                      ? '!border-pink-500 !text-pink-600'
-                      : '!border-transparent !text-gray-500 hover:!text-gray-700 hover:!border-gray-300'
-                      }`}
+                    className={`flex items-center gap-2 px-4 py-2 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
+                      tab === tabItem.id
+                        ? '!border-pink-500 !text-pink-600'
+                        : '!border-transparent !text-gray-500 hover:!text-gray-700 hover:!border-gray-300'
+                    }`}
                   >
                     <Icon size={16} />
                     {tabItem.label}

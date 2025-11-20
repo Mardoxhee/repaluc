@@ -135,7 +135,13 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
         hasPreviousPage: false,
     });
     const [showVictimModal, setShowVictimModal] = useState(false);
-    const [selectedVictim, setSelectedVictim] = useState<any | null>(null);
+    const [selectedVictim, setSelectedVictim] = useState<any>(null);
+    
+    // Fonction pour afficher les détails d'une victime
+    const handleViewVictim = useCallback((victim: any) => {
+        setSelectedVictim(victim);
+        setShowVictimModal(true);
+    }, []);
     const [showEvaluationModal, setShowEvaluationModal] = useState(false);
     const [selectedVictimForEvaluation, setSelectedVictimForEvaluation] = useState<any | null>(null);
     const [showViewEvaluationModal, setShowViewEvaluationModal] = useState(false);
@@ -268,7 +274,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
     // Function to check if a specific victim has an evaluation and view it
     const handleViewEvaluation = async (victim: any) => {
         if (!fetchCtx?.fetcher) return;
-
+        
         try {
             const evalData = await fetchCtx.fetcher(`/evaluations-medicales?victimeId=${victim.id}`);
             const hasEvaluation = Array.isArray(evalData)

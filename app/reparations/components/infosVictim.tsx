@@ -39,6 +39,15 @@ interface InfosVictimProps {
         avatar?: string;
         isDirect?: boolean;
         programme?: string;
+        variablesSpecifiques?: {
+            AGE?: string;
+            CAMP?: string;
+            LOCALITE?: string;
+            "VICTIME OU PAS"?: string;
+            "NUMÉRO DU MÉNAGE"?: string;
+            "NUMÉRO BLOC DU MÉNAGE"?: string;
+            [key: string]: string | undefined;
+        };
     }
 }
 
@@ -302,10 +311,58 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                         </div>
                     </div>
 
+                    {/* Camp Information */}
+                    {victim.variablesSpecifiques && (
+                        <div className="mb-6">
+                            <div className="bg-blue-600 text-white px-4 py-2 border-b flex items-center">
+                                <MapPin className="mr-2 h-4 w-4" />
+                                <h2 className="font-bold text-sm uppercase tracking-wide">4. Informations du Camp</h2>
+                            </div>
+                            <div className="border border-gray-300 border-t-0">
+                                <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-200">
+                                    <div className="p-4 space-y-3">
+                                        {victim.variablesSpecifiques.CAMP && (
+                                            <div className="flex">
+                                                <span className="text-sm font-semibold text-gray-600 uppercase w-32 flex-shrink-0">Camp :</span>
+                                                <span className="text-sm text-gray-800">{victim.variablesSpecifiques.CAMP}</span>
+                                            </div>
+                                        )}
+                                        {victim.variablesSpecifiques.LOCALITE && (
+                                            <div className="flex">
+                                                <span className="text-sm font-semibold text-gray-600 uppercase w-32 flex-shrink-0">Localité :</span>
+                                                <span className="text-sm text-gray-800">{victim.variablesSpecifiques.LOCALITE}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="p-4 space-y-3">
+                                        {victim.variablesSpecifiques["NUMÉRO DU MÉNAGE"] && (
+                                            <div className="flex">
+                                                <span className="text-sm font-semibold text-gray-600 uppercase w-32 flex-shrink-0">N° Ménage :</span>
+                                                <span className="text-sm text-gray-800">{victim.variablesSpecifiques["NUMÉRO DU MÉNAGE"]}</span>
+                                            </div>
+                                        )}
+                                        {victim.variablesSpecifiques["NUMÉRO BLOC DU MÉNAGE"] && (
+                                            <div className="flex">
+                                                <span className="text-sm font-semibold text-gray-600 uppercase w-32 flex-shrink-0">N° Bloc :</span>
+                                                <span className="text-sm text-gray-800">{victim.variablesSpecifiques["NUMÉRO BLOC DU MÉNAGE"]}</span>
+                                            </div>
+                                        )}
+                                        {victim.variablesSpecifiques.AGE && (
+                                            <div className="flex">
+                                                <span className="text-sm font-semibold text-gray-600 uppercase w-32 flex-shrink-0">Âge déclaré :</span>
+                                                <span className="text-sm text-gray-800">{victim.variablesSpecifiques.AGE} ans</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Incident Information */}
                     <div className="mb-6">
                         <div className="bg-blue-600 text-white px-4 py-2 border-b">
-                            <h2 className="font-bold text-sm uppercase tracking-wide">4. Détails de l'Incident</h2>
+                            <h2 className="font-bold text-sm uppercase tracking-wide">5. Détails de l'Incident</h2>
                         </div>
                         <div className="border border-gray-300 border-t-0">
                             <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-200">
