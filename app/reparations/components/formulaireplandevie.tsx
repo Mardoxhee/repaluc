@@ -46,9 +46,10 @@ interface Victim {
 interface FormProps {
   victim?: Victim;
   userId?: number;
+  initialQuestions?: QuestionsByCategory;
 }
 
-const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
+const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuestions }) => {
   const [questions, setQuestions] = useState<QuestionsByCategory>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -254,7 +255,26 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId }) => {
     }
   };
 
+  // Charger les questions depuis les props ou l'API
   const fetchQuestions = async () => {
+    // Si des questions initiales sont fournies, les utiliser
+    if (initialQuestions && Object.keys(initialQuestions).length > 0) {
+      setQuestions(initialQuestions);
+      const categories = Object.keys(initialQuestions);
+      if (categories.length > 0 && !currentCategory) {
+        setCurrentCategory(categories[0]);
+      }
+      setLoading(false);
+      return;
+    }
+
+    // Sinon, charger depuis l'API
+    if (!isOnline()) {
+      setLoading(false);
+      setError('Vous êtes hors ligne. Impossible de charger les questions.');
+      return;
+    }
+
     try {
       setLoading(true);
       const response = await fetch(`${API_PLANVIE_URL}/question/type/plandevie`);

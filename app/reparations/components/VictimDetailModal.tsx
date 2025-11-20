@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import {
   Info,
   FileText,
@@ -17,6 +17,7 @@ import {
   ClipboardList,
   ChevronRight
 } from 'lucide-react';
+import { getQuestions } from '../../utils/planVieQuestionsCache';
 import { FetchContext } from '../../context/FetchContext';
 import { GiReceiveMoney } from "react-icons/gi";
 import { Modal } from 'flowbite-react';
@@ -115,6 +116,31 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
   const [addFileMode, setAddFileMode] = useState(false);
   const [newFileLabel, setNewFileLabel] = useState('');
   const [newFileName, setNewFileName] = useState('');
+  const [questions, setQuestions] = useState(null);
+  const [loadingQuestions, setLoadingQuestions] = useState(false);
+
+  // Charger les questions depuis le cache
+  useEffect(() => {
+    const loadQuestions = async () => {
+      if (tab === 'formulaires') {
+        setLoadingQuestions(true);
+        try {
+          const cachedQuestions = await getQuestions();
+          if (cachedQuestions) {
+            setQuestions(cachedQuestions);
+          } else {
+            console.log('Aucune question trouvée dans le cache');
+          }
+        } catch (error) {
+          console.error('Erreur lors du chargement des questions:', error);
+        } finally {
+          setLoadingQuestions(false);
+        }
+      }
+    };
+
+    loadQuestions();
+  }, [tab]);
 
   // Désactiver le scroll du body quand le modal est ouvert
   React.useEffect(() => {
@@ -587,8 +613,20 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                     <X size={16} />
                     Retour à la liste
                   </button>
-                  {selectedForm === 'plan-de-vie' && (
-                    <Formulaireplandevie victim={currentVictim} userId={1} />
+                  {loadingQuestions ? (
+                    <div className="flex justify-center items-center h-64">
+                      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500"></div>
+                    </div>
+                  ) : questions ? (
+                    <Formulaireplandevie 
+                      victim={victim} 
+                      userId={1} 
+                      initialQuestions={questions} 
+                    />
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      Impossible de charger les questions du formulaire. Veuillez vérifier votre connexion.
+                    </div>
                   )}
                 </div>
               )}

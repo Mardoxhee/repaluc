@@ -7,6 +7,9 @@ import { Search, Filter, Eye, Users, ChevronLeft, ChevronRight, X, Plus, Check, 
 import EvaluationModal from "./EvaluationModal";
 import ViewEvaluationModal from "./ViewEvaluationModal";
 import { saveVictimsToCache, getVictimsFromCache, isOnline } from '../../utils/victimsCache';
+import { saveQuestions, isCacheValid } from '../../utils/planVieQuestionsCache';
+
+const API_PLANVIE_URL = process.env.NEXT_PUBLIC_API_PLANVIE_URL;
 
 interface ReglagesProps {
     mockPrejudices: { id: number; nom: string }[];
@@ -75,6 +78,29 @@ const operators = [
 ];
 
 const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
+  // Charger les questions du formulaire plan de vie au démarrage
+  useEffect(() => {
+    const loadQuestions = async () => {
+      try {
+        // Vérifier si le cache est toujours valide (1 jour de cache)
+        const cacheValid = await isCacheValid(24 * 60 * 60 * 1000);
+        
+        if (!cacheValid && isOnline()) {
+          const response = await fetch(`${API_PLANVIE_URL}/question/type/plandevie`);
+          if (!response.ok) {
+            throw new Error('Erreur lors du chargement des questions');
+          }
+          const questions = await response.json();
+          await saveQuestions(questions);
+          console.log('Questions du formulaire plan de vie mises en cache');
+        }
+      } catch (error) {
+        console.error('Erreur lors du chargement des questions:', error);
+      }
+    };
+
+    loadQuestions();
+  }, []);
     const [searchTerm, setSearchTerm] = useState<string>("");
     const [filters, setFilters] = useState<FilterType>({
         status: "",
@@ -818,9 +844,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                         <th className="px-6 py-4 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">N°</th>
                                         <th className="px-6 py-4 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">Nom complet</th>
                                         <th className="px-6 py-4 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">Province</th>
-                                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">Territoire</th>
                                         <th className="px-6 py-4 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">Sexe</th>
-                                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">Statut</th>
                                         <th className="px-6 py-4 text-center text-xs font-semibold text-gray-900 uppercase tracking-wider">Actions</th>
                                     </tr>
                                 </thead>
@@ -868,15 +892,9 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                                 )}
                                             </td>
                                             <td className="px-6 py-4 text-sm text-gray-900">{victim.province || '-'}</td>
-                                            <td className="px-6 py-4 text-sm text-gray-900">{victim.territoire || '-'}</td>
                                             <td className="px-6 py-4 text-sm text-gray-900">
                                                 <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200">
                                                     {victim.sexe === "Homme" ? "M" : victim.sexe === "Femme" ? "F" : "-"}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <span className={`inline-flex items-center px-2 py-1 text-xs font-medium border ${getStatusBadgeStyle(victim.status)}`}>
-                                                    {victim.status || "Non vérifié"}
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4 text-center">
