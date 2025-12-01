@@ -151,6 +151,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
     const [showOfflineIndicator, setShowOfflineIndicator] = useState(true);
     const [initialLoading, setInitialLoading] = useState(false);
     const [loadingProgress, setLoadingProgress] = useState({ current: 0, total: 1 });
+    const [backgroundLoading, setBackgroundLoading] = useState(false);
     const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false);
     const [meta, setMeta] = useState({
         total: 0,
@@ -249,8 +250,10 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                 console.log('[LoadAllPages] Cache complet détecté - actualisation en arrière-plan...');
                 setInitialLoading(false);
                 // On lance l'actualisation sans bloquer l'UI
-                setTimeout(() => {
-                    loadAllPagesWithResume(cacheKey, progressKey, 1, []);
+                setTimeout(async () => {
+                    setBackgroundLoading(true);
+                    await loadAllPagesWithResume(cacheKey, progressKey, 1, []);
+                    setBackgroundLoading(false);
                 }, 100);
                 return;
             }
@@ -260,9 +263,17 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
             const existingData = cachedData?.data || [];
 
             console.log(`[LoadAllPages] Démarrage du chargement (page ${startPage}/${progress?.totalPages || '?'})`);
-            setInitialLoading(true);
+
+            // Si on a des données en cache, charger en arrière-plan
+            if (hasCachedData) {
+                setBackgroundLoading(true);
+                setInitialLoading(false);
+            } else {
+                setInitialLoading(true);
+            }
 
             await loadAllPagesWithResume(cacheKey, progressKey, startPage, existingData);
+            setBackgroundLoading(false);
 
         } catch (error) {
             console.error('[LoadAllPages] Erreur:', error);
@@ -371,6 +382,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
             console.error('[LoadAllPagesWithResume] Erreur:', error);
         } finally {
             setLoadingProgress({ current: 0, total: 1 });
+            setBackgroundLoading(false);
         }
     };
 
@@ -683,8 +695,35 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
 
     return (
         <>
+            {/* Barre de progression en arrière-plan */}
+            {backgroundLoading && loadingProgress.total > 1 && (
+                <div className="fixed top-0 left-0 right-0 z-50 bg-white shadow-md">
+                    <div className="px-6 py-3">
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-3">
+                                <div className="animate-spin rounded-full h-5 w-5 border-2 border-primary-500 border-t-transparent"></div>
+                                <span className="text-sm font-medium text-gray-700">
+                                    Synchronisation en cours...
+                                </span>
+                            </div>
+                            <span className="text-sm text-gray-600">
+                                Page {loadingProgress.current} / {loadingProgress.total}
+                            </span>
+                        </div>
+                        <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                            <div
+                                className="h-full bg-primary-500 transition-all duration-300 ease-out"
+                                style={{
+                                    width: `${Math.round((loadingProgress.current / loadingProgress.total) * 100)}%`
+                                }}
+                            ></div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="min-h-screen bg-gray-50">
-                <div className="w-full mx-auto p-6">
+                <div className="w-full mx-auto p-6" style={{ marginTop: backgroundLoading ? '72px' : '0' }}>
                     {/* Header */}
                     <div className="mb-8">
                         <div className="flex items-center justify-between">
