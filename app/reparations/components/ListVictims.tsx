@@ -3,7 +3,7 @@ import React, { useState, useEffect, useContext, useCallback, useMemo } from "re
 import { FetchContext } from "../../context/FetchContext";
 import Swal from 'sweetalert2';
 import VictimDetailModal from "./VictimDetailModal"
-import { Search, Filter, Eye, Users, ChevronLeft, ChevronRight, X, Plus, Check, Stethoscope, FileText, Wifi, WifiOff } from 'lucide-react';
+import { Search, Filter, Eye, Users, ChevronLeft, ChevronRight, X, Plus, Check, Stethoscope, FileText, Wifi, WifiOff, AlertCircle } from 'lucide-react';
 import EvaluationModal from "./EvaluationModal";
 import ViewEvaluationModal from "./ViewEvaluationModal";
 import { saveVictimsToCache, getVictimsFromCache, isOnline, saveProgress, getProgress } from '../../utils/victimsCache';
@@ -157,6 +157,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
     const [loadingProgress, setLoadingProgress] = useState({ current: 0, total: 1 });
     const [backgroundLoading, setBackgroundLoading] = useState(false);
     const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false);
+    const [incompleteLoadingMessage, setIncompleteLoadingMessage] = useState<string>("");
     const [meta, setMeta] = useState({
         total: 0,
         page: 1,
@@ -243,15 +244,25 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                 if (progress?.completed) {
                     console.log('[LoadAllPages] Mode hors ligne - utilisation du cache complet');
                     setInitialLoading(false);
+                    setIncompleteLoadingMessage(""); // Effacer le message si tout est complet
                     return;
                 }
-                // Sinon, impossible de continuer
+                // Sinon, impossible de continuer - afficher un message persistant
                 console.log('[LoadAllPages] Hors ligne - impossible de charger plus de données');
+                const percentage = progress?.lastPage && progress?.totalPages
+                    ? Math.round((progress.lastPage / progress.totalPages) * 100)
+                    : 0;
+                setIncompleteLoadingMessage(
+                    `Le chargement des données s'est arrêté à ${percentage}% (page ${progress?.lastPage || 0}/${progress?.totalPages || '?'}). Reconnectez-vous pour continuer.`
+                );
                 setInitialLoading(false);
+                setBackgroundLoading(false);
                 return;
             }
 
             // On est EN LIGNE à partir d'ici
+            // Effacer le message de chargement incomplet
+            setIncompleteLoadingMessage("");
 
             // Si le chargement est déjà complété, on peut juste actualiser en arrière-plan
             if (progress?.completed && hasCachedData) {
@@ -389,6 +400,9 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
             // Marquer comme terminé
             await saveProgress(progressKey, totalPages, totalPages, true);
             console.log(`[LoadAllPages] Chargement terminé: ${allVictims.length} victimes`);
+
+            // Effacer le message de chargement incomplet
+            setIncompleteLoadingMessage("");
 
         } catch (error) {
             console.error('[LoadAllPagesWithResume] Erreur:', error);
@@ -795,6 +809,19 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                     >
                                         {isOffline ? <WifiOff size={16} /> : <Wifi size={16} />}
                                     </button>
+                                </div>
+                            )}
+
+                            {/* Message de chargement incomplet */}
+                            {incompleteLoadingMessage && (
+                                <div className="mb-4 p-4 bg-yellow-50 border-l-4 border-yellow-400 text-yellow-800">
+                                    <div className="flex items-start gap-3">
+                                        <AlertCircle className="flex-shrink-0 mt-0.5" size={20} />
+                                        <div className="flex-1">
+                                            <p className="font-medium">Chargement incomplet</p>
+                                            <p className="text-sm mt-1">{incompleteLoadingMessage}</p>
+                                        </div>
+                                    </div>
                                 </div>
                             )}
                         </div>
