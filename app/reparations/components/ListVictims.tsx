@@ -111,38 +111,42 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
     const [filterRules, setFilterRules] = useState<FilterRule[]>([]);
     const [showFilterBuilder, setShowFilterBuilder] = useState(false);
     
-    // Fonction pour appliquer les filtres et la recherche sur les données
-    const applyFilters = (data: any[], filters: FilterType, search: string) => {
+    // Fonction pour appliquer les filtres localement sur les données en cache
+    const applyLocalFilters = useCallback((data: any[]) => {
         return data.filter(victim => {
-            // Filtre par terme de recherche
-            const matchesSearch = !search || 
-                (victim.nom && victim.nom.toLowerCase().includes(search.toLowerCase())) ||
-                (victim.prenom && victim.prenom.toLowerCase().includes(search.toLowerCase())) ||
-                (victim.reference && victim.reference.toLowerCase().includes(search.toLowerCase()));
-            
-            // Filtre par statut
-            const matchesStatus = !filters.status || victim.status === filters.status;
-            
-            // Filtre par catégorie
-            const matchesCategory = !filters.category || victim.category === filters.category;
-            
-            // Filtre par date
-            let matchesDate = true;
-            if (filters.startDate) {
-                const startDate = new Date(filters.startDate);
-                const victimDate = new Date(victim.createdAt || victim.date || new Date());
-                matchesDate = matchesDate && victimDate >= startDate;
-            }
-            if (filters.endDate) {
-                const endDate = new Date(filters.endDate);
-                endDate.setHours(23, 59, 59, 999); // Fin de la journée
-                const victimDate = new Date(victim.createdAt || victim.date || new Date());
-                matchesDate = matchesDate && victimDate <= endDate;
-            }
-            
-            return matchesSearch && matchesStatus && matchesCategory && matchesDate;
+            // 1. Filtre par terme de recherche (nom, prénom, référence)
+            const matchesSearch = !searchTerm ||
+                (victim.nom && victim.nom.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                (victim.prenom && victim.prenom.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                (victim.reference && victim.reference.toLowerCase().includes(searchTerm.toLowerCase()));
+
+            // 2. Filtre par règles dynamiques (filterRules)
+            const matchesRules = filterRules.length === 0 || filterRules.every(rule => {
+                const value = victim[rule.field];
+
+                if (!value && rule.value) return false;
+
+                switch (rule.operator) {
+                    case 'equals':
+                        return value === rule.value;
+                    case 'contains':
+                        return String(value).toLowerCase().includes(String(rule.value).toLowerCase());
+                    case 'greaterThan':
+                        return Number(value) > Number(rule.value);
+                    case 'lessThan':
+                        return Number(value) < Number(rule.value);
+                    case 'startsWith':
+                        return String(value).toLowerCase().startsWith(String(rule.value).toLowerCase());
+                    case 'endsWith':
+                        return String(value).toLowerCase().endsWith(String(rule.value).toLowerCase());
+                    default:
+                        return true;
+                }
+            });
+
+            return matchesSearch && matchesRules;
         });
-    };
+    }, [searchTerm, filterRules]);
     const [victims, setVictims] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string>("");
@@ -207,21 +211,25 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
             if (hasCachedData) {
                 console.log(`[LoadAllPages] ${cachedData.data.length} victimes en cache`);
 
-                // Afficher les données en cache immédiatement
+                // Appliquer les filtres et la recherche sur les données en cache
+                const filteredData = applyLocalFilters(cachedData.data);
+                console.log(`[LoadAllPages] ${filteredData.length} victimes après filtrage local`);
+
+                // Paginer les résultats filtrés
                 const page = meta.page;
                 const limit = meta.limit;
                 const startIndex = (page - 1) * limit;
                 const endIndex = startIndex + limit;
-                const paginatedData = cachedData.data.slice(startIndex, endIndex);
+                const paginatedData = filteredData.slice(startIndex, endIndex);
 
                 setVictims(paginatedData);
                 setMeta(prev => ({
                     ...prev,
                     page,
                     limit,
-                    total: cachedData.data.length,
-                    totalPages: Math.ceil(cachedData.data.length / limit),
-                    hasNextPage: endIndex < cachedData.data.length,
+                    total: filteredData.length,
+                    totalPages: Math.ceil(filteredData.length / limit),
+                    hasNextPage: endIndex < filteredData.length,
                     hasPreviousPage: page > 1
                 }));
 
@@ -451,24 +459,28 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
         if (isOffline) {
             try {
                 const cachedResult = await getVictimsFromCache(cacheKey);
-                
+
                 if (cachedResult?.data?.length) {
-                    // Appliquer les filtres sur les données en cache
-                    const filteredData = applyFilters(cachedResult.data, filters, searchTerm);
+                    console.log(`[FetchVictims] Mode offline - ${cachedResult.data.length} victimes en cache`);
+
+                    // Appliquer les filtres localement
+                    const filteredData = applyLocalFilters(cachedResult.data);
+                    console.log(`[FetchVictims] ${filteredData.length} victimes après filtrage local`);
+
                     const totalItems = filteredData.length;
                     const totalPages = Math.max(1, Math.ceil(totalItems / meta.limit));
                     const currentPage = Math.min(meta.page, totalPages);
-                    
+
                     // Mettre à jour la page courante si nécessaire
                     if (currentPage !== meta.page) {
                         setMeta(prev => ({ ...prev, page: currentPage }));
                     }
-                    
+
                     // Calculer les données de la page courante
                     const start = (currentPage - 1) * meta.limit;
                     const end = start + meta.limit;
                     const pageData = filteredData.slice(start, end);
-                    
+
                     setVictims(pageData);
                     setMeta(prev => ({
                         ...prev,
@@ -517,7 +529,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
             try {
                 const cachedResult = await getVictimsFromCache(cacheKey);
                 if (cachedResult?.data?.length) {
-                    const filteredData = applyFilters(cachedResult.data, filters, searchTerm);
+                    const filteredData = applyLocalFilters(cachedResult.data);
                     const totalItems = filteredData.length;
                     const totalPages = Math.max(1, Math.ceil(totalItems / meta.limit));
                     const currentPage = Math.min(meta.page, totalPages);
@@ -545,7 +557,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
             setError('Impossible de charger les données. Vérifiez votre connexion Internet.');
             setLoading(false);
         }
-    }, [buildQueryParams, fetchCtx?.fetcher, meta.page, meta.limit, filters, searchTerm]);
+    }, [buildQueryParams, fetchCtx?.fetcher, meta.page, meta.limit, filters, searchTerm, applyLocalFilters]);
 
     useEffect(() => {
         const debounceTimeout = setTimeout(() => {
