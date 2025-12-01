@@ -183,11 +183,11 @@ const DashboardVictims = () => {
   }, [fetcher]);
 
   // Calculs des totaux
-  const totalVictimes = stats.sexe.reduce((acc, item: any) => acc + parseInt(item.total), 0);
-  const totalFemmes = stats.sexe.find((item: any) => item.sexe === 'Femme')?.total || 0;
-  const totalHommes = stats.sexe.find((item: any) => item.sexe === 'Homme')?.total || 0;
-  const totalProvinces = stats.province.length;
-  const totalTerritoires = stats.territoire.length;
+  const totalVictimes = stats?.sexe?.reduce((acc, item: any) => acc + parseInt(item.total), 0);
+  const totalFemmes = stats?.sexe?.find((item: any) => item.sexe === 'Femme')?.total || 0;
+  const totalHommes = stats?.sexe?.find((item: any) => item.sexe === 'Homme')?.total || 0;
+  const totalProvinces = stats?.province?.length;
+  const totalTerritoires = stats?.territoire?.length;
 
   // Préparation des données pour les graphiques
   const sexeChartData = stats.sexe.map((item: any, index) => ({

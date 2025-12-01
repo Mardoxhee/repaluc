@@ -26,7 +26,7 @@ const serwist = new Serwist({
 serwist.registerCapture(
   ({ request, url }) => {
     return (
-      request.destination === "document" || 
+      request.destination === "document" ||
       url.pathname.endsWith(".html") ||
       url.pathname === "/" ||
       url.pathname.startsWith("/luc") ||
