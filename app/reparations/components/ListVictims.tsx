@@ -228,36 +228,38 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                 setHasLoadedInitialData(true);
             }
 
-            // Si le chargement est déjà complété et on est hors ligne, on s'arrête là
-            if (progress?.completed && !isOnline()) {
-                console.log('[LoadAllPages] Chargement déjà terminé (mode hors ligne)');
+            // Si on est hors ligne
+            if (!isOnline()) {
+                // Si on a tout téléchargé, on reste sur le cache
+                if (progress?.completed) {
+                    console.log('[LoadAllPages] Mode hors ligne - utilisation du cache complet');
+                    setInitialLoading(false);
+                    return;
+                }
+                // Sinon, impossible de continuer
+                console.log('[LoadAllPages] Hors ligne - impossible de charger plus de données');
                 setInitialLoading(false);
                 return;
             }
 
-            // Si on est hors ligne mais qu'on n'a pas tout téléchargé, on attend
-            if (!isOnline() && (!progress?.completed)) {
-                console.log('[LoadAllPages] Hors ligne - reprise impossible');
-                setInitialLoading(false);
-                return;
-            }
+            // On est EN LIGNE à partir d'ici
 
-            // Si on est en ligne et que le chargement est déjà complété, on actualise en arrière-plan
-            if (progress?.completed) {
-                console.log('[LoadAllPages] Actualisation en arrière-plan...');
+            // Si le chargement est déjà complété, on peut juste actualiser en arrière-plan
+            if (progress?.completed && hasCachedData) {
+                console.log('[LoadAllPages] Cache complet détecté - actualisation en arrière-plan...');
+                setInitialLoading(false);
                 // On lance l'actualisation sans bloquer l'UI
                 setTimeout(() => {
-                    loadAllPagesWithResume(cacheKey, progressKey, 1, cachedData?.data || []);
+                    loadAllPagesWithResume(cacheKey, progressKey, 1, []);
                 }, 100);
-                setInitialLoading(false);
                 return;
             }
 
-            // Sinon, continuer ou reprendre le chargement
+            // Sinon, continuer ou reprendre le chargement avec le spinner
             const startPage = progress?.lastPage ? progress.lastPage + 1 : 1;
             const existingData = cachedData?.data || [];
 
-            console.log(`[LoadAllPages] Démarrage du chargement (page ${startPage})`);
+            console.log(`[LoadAllPages] Démarrage du chargement (page ${startPage}/${progress?.totalPages || '?'})`);
             setInitialLoading(true);
 
             await loadAllPagesWithResume(cacheKey, progressKey, startPage, existingData);
