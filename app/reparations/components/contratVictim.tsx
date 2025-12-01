@@ -170,29 +170,49 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
         fetchContrat();
     }, [victim.id]);
 
-    const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const getCoordinates = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>, canvas: HTMLCanvasElement) => {
+        const rect = canvas.getBoundingClientRect();
+        if ('touches' in e) {
+            // Événement tactile
+            const touch = e.touches[0];
+            return {
+                x: touch.clientX - rect.left,
+                y: touch.clientY - rect.top
+            };
+        } else {
+            // Événement souris
+            return {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
+        }
+    };
+
+    const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+        e.preventDefault(); // Empêche le scroll sur mobile
         const canvas = canvasRef.current;
         if (!canvas) return;
 
-        const rect = canvas.getBoundingClientRect();
+        const coords = getCoordinates(e, canvas);
         const ctx = canvas.getContext('2d');
         if (ctx) {
             ctx.beginPath();
-            ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+            ctx.moveTo(coords.x, coords.y);
             setIsDrawing(true);
         }
     };
 
-    const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+        e.preventDefault(); // Empêche le scroll sur mobile
         if (!isDrawing) return;
 
         const canvas = canvasRef.current;
         if (!canvas) return;
 
-        const rect = canvas.getBoundingClientRect();
+        const coords = getCoordinates(e, canvas);
         const ctx = canvas.getContext('2d');
         if (ctx) {
-            ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+            ctx.lineTo(coords.x, coords.y);
             ctx.stroke();
         }
     };
@@ -972,8 +992,11 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                                                         onMouseMove={draw}
                                                         onMouseUp={stopDrawing}
                                                         onMouseLeave={stopDrawing}
+                                                        onTouchStart={startDrawing}
+                                                        onTouchMove={draw}
+                                                        onTouchEnd={stopDrawing}
                                                         className="cursor-crosshair bg-white"
-                                                        style={{ display: 'block' }}
+                                                        style={{ display: 'block', touchAction: 'none' }}
                                                     />
                                                     <button
                                                         onClick={clearSignature}
