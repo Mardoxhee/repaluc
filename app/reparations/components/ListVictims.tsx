@@ -6,7 +6,7 @@ import VictimDetailModal from "./VictimDetailModal"
 import { Search, Filter, Eye, Users, ChevronLeft, ChevronRight, X, Plus, Check, Stethoscope, FileText, Wifi, WifiOff } from 'lucide-react';
 import EvaluationModal from "./EvaluationModal";
 import ViewEvaluationModal from "./ViewEvaluationModal";
-import { saveVictimsToCache, getVictimsFromCache, isOnline } from '../../utils/victimsCache';
+import { saveVictimsToCache, getVictimsFromCache, isOnline, saveProgress, getProgress } from '../../utils/victimsCache';
 import { saveQuestions, isCacheValid } from '../../utils/planVieQuestionsCache';
 
 const API_PLANVIE_URL = process.env.NEXT_PUBLIC_API_PLANVIE_URL;
@@ -191,33 +191,29 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
 
     const loadAllPages = useCallback(async (): Promise<void> => {
         if (!fetchCtx?.fetcher) return;
-        
-        setInitialLoading(true);
-        setLoadingProgress({ current: 0, total: 1 });
-        
+
+        const cacheKey = 'all-victims-cache';
+        const progressKey = 'victims-load-progress';
+
         try {
-            // Vérifier d'abord le cache
-            const cacheKey = 'all-victims-cache';
+            // Vérifier la progression précédente
+            const progress = await getProgress(progressKey);
             const cachedData = await getVictimsFromCache(cacheKey);
-            
-            // Vérifier si on a des données en cache de manière plus sûre
-            const hasCachedData = cachedData && 
-                                Array.isArray(cachedData.data) && 
-                                cachedData.data.length > 0;
-            
+
+            // Si on a des données en cache (complètes ou partielles), les afficher immédiatement
+            const hasCachedData = cachedData && Array.isArray(cachedData.data) && cachedData.data.length > 0;
+
             if (hasCachedData) {
-                console.log('Chargement des données depuis le cache...');
-                
-                // Calculer la pagination
+                console.log(`[LoadAllPages] ${cachedData.data.length} victimes en cache`);
+
+                // Afficher les données en cache immédiatement
                 const page = meta.page;
                 const limit = meta.limit;
                 const startIndex = (page - 1) * limit;
                 const endIndex = startIndex + limit;
                 const paginatedData = cachedData.data.slice(startIndex, endIndex);
-                
+
                 setVictims(paginatedData);
-                
-                // Mettre à jour les métadonnées avec la pagination
                 setMeta(prev => ({
                     ...prev,
                     page,
@@ -227,59 +223,154 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                     hasNextPage: endIndex < cachedData.data.length,
                     hasPreviousPage: page > 1
                 }));
-                
+
                 setUsingCache(true);
-                setInitialLoading(false);
                 setHasLoadedInitialData(true);
-                
-                // Si on est en ligne, on peut rafraîchir en arrière-plan
-                if (isOnline()) {
-                    fetchVictims();
-                }
-                
+            }
+
+            // Si le chargement est déjà complété et on est hors ligne, on s'arrête là
+            if (progress?.completed && !isOnline()) {
+                console.log('[LoadAllPages] Chargement déjà terminé (mode hors ligne)');
+                setInitialLoading(false);
                 return;
             }
 
-            // Charger la première page
+            // Si on est hors ligne mais qu'on n'a pas tout téléchargé, on attend
+            if (!isOnline() && (!progress?.completed)) {
+                console.log('[LoadAllPages] Hors ligne - reprise impossible');
+                setInitialLoading(false);
+                return;
+            }
+
+            // Si on est en ligne et que le chargement est déjà complété, on actualise en arrière-plan
+            if (progress?.completed) {
+                console.log('[LoadAllPages] Actualisation en arrière-plan...');
+                // On lance l'actualisation sans bloquer l'UI
+                setTimeout(() => {
+                    loadAllPagesWithResume(cacheKey, progressKey, 1, cachedData?.data || []);
+                }, 100);
+                setInitialLoading(false);
+                return;
+            }
+
+            // Sinon, continuer ou reprendre le chargement
+            const startPage = progress?.lastPage ? progress.lastPage + 1 : 1;
+            const existingData = cachedData?.data || [];
+
+            console.log(`[LoadAllPages] Démarrage du chargement (page ${startPage})`);
+            setInitialLoading(true);
+
+            await loadAllPagesWithResume(cacheKey, progressKey, startPage, existingData);
+
+        } catch (error) {
+            console.error('[LoadAllPages] Erreur:', error);
+            setInitialLoading(false);
+        }
+    }, [fetchCtx?.fetcher, meta.page, meta.limit]);
+
+    // Nouvelle fonction qui gère la reprise du chargement
+    const loadAllPagesWithResume = async (
+        cacheKey: string,
+        progressKey: string,
+        startPage: number,
+        existingData: any[]
+    ): Promise<void> => {
+        if (!fetchCtx?.fetcher) return;
+
+        try {
+            // Charger la première page pour connaître le total
             const firstPage = await fetchCtx.fetcher(`/victime/paginate/filtered?page=1&limit=20`);
-            if (!firstPage?.data) return;
+            if (!firstPage?.data) {
+                setInitialLoading(false);
+                return;
+            }
 
-            const allVictims = [...firstPage.data];
             const totalPages = firstPage.meta?.totalPages || 1;
-            
-            setLoadingProgress({ current: 1, total: totalPages });
+            let allVictims = [...existingData];
 
-            // Charger les pages restantes
-            for (let page = 2; page <= totalPages; page++) {
-                const response = await fetchCtx.fetcher(`/victime/paginate/filtered?page=${page}&limit=20`);
-                if (response?.data) {
-                    allVictims.push(...response.data);
-                    setLoadingProgress({ current: page, total: totalPages });
+            // Si on reprend depuis le début, on réinitialise
+            if (startPage === 1) {
+                allVictims = [...firstPage.data];
+                setLoadingProgress({ current: 1, total: totalPages });
+                await saveProgress(progressKey, 1, totalPages, false);
+
+                // Sauvegarder immédiatement la première page
+                await saveVictimsToCache(cacheKey, allVictims, {
+                    ...firstPage.meta,
+                    timestamp: Date.now(),
+                    total: allVictims.length,
+                    page: 1,
+                    limit: 20,
+                    totalPages
+                });
+
+                // Afficher la première page
+                setVictims(firstPage.data);
+                setMeta(firstPage.meta);
+                setHasLoadedInitialData(true);
+                setInitialLoading(false);
+            } else {
+                console.log(`[Resume] Reprise à partir de la page ${startPage}/${totalPages}`);
+                setLoadingProgress({ current: startPage - 1, total: totalPages });
+                setInitialLoading(false);
+            }
+
+            // Charger les pages restantes en arrière-plan
+            for (let page = Math.max(2, startPage); page <= totalPages; page++) {
+                try {
+                    const response = await fetchCtx.fetcher(`/victime/paginate/filtered?page=${page}&limit=20`);
+                    if (response?.data) {
+                        // Ajouter les nouvelles données
+                        const startIndex = (page - 1) * 20;
+                        allVictims = [
+                            ...allVictims.slice(0, startIndex),
+                            ...response.data,
+                            ...allVictims.slice(startIndex + response.data.length)
+                        ];
+
+                        setLoadingProgress({ current: page, total: totalPages });
+
+                        // Sauvegarder progressivement (toutes les 10 pages ou dernière page)
+                        if (page % 10 === 0 || page === totalPages) {
+                            await saveVictimsToCache(cacheKey, allVictims, {
+                                ...firstPage.meta,
+                                timestamp: Date.now(),
+                                total: allVictims.length,
+                                page: 1,
+                                limit: 20,
+                                totalPages
+                            });
+                            await saveProgress(progressKey, page, totalPages, page === totalPages);
+                            console.log(`[Progress] Sauvegardé jusqu'à la page ${page}/${totalPages}`);
+                        }
+                    }
+                } catch (pageError) {
+                    console.error(`[LoadPage] Erreur page ${page}:`, pageError);
+                    // En cas d'erreur, sauvegarder la progression actuelle
+                    await saveVictimsToCache(cacheKey, allVictims, {
+                        ...firstPage.meta,
+                        timestamp: Date.now(),
+                        total: allVictims.length,
+                        page: 1,
+                        limit: 20,
+                        totalPages
+                    });
+                    await saveProgress(progressKey, page - 1, totalPages, false);
+                    console.log(`[Progress] Sauvegarde d'urgence à la page ${page - 1}`);
+                    throw pageError;
                 }
             }
 
-            // Sauvegarder toutes les données dans IndexedDB
-            await saveVictimsToCache(cacheKey, allVictims, {
-                ...firstPage.meta,
-                timestamp: Date.now(),
-                total: allVictims.length,
-                // On garde la pagination d'origine
-                page: firstPage.meta?.page || 1,
-                limit: firstPage.meta?.limit || 20,
-                totalPages: firstPage.meta?.totalPages || Math.ceil(allVictims.length / 20)
-            });
-            
-            // Mettre à jour le state avec la première page
-            setVictims(firstPage.data);
-            setMeta(firstPage.meta);
-            setHasLoadedInitialData(true);
+            // Marquer comme terminé
+            await saveProgress(progressKey, totalPages, totalPages, true);
+            console.log(`[LoadAllPages] Chargement terminé: ${allVictims.length} victimes`);
 
         } catch (error) {
-            console.error('Erreur lors du chargement des données:', error);
+            console.error('[LoadAllPagesWithResume] Erreur:', error);
         } finally {
-            setInitialLoading(false);
+            setLoadingProgress({ current: 0, total: 1 });
         }
-    }, [fetchCtx?.fetcher]);
+    };
 
     const buildQueryParams = useCallback(() => {
         const params: Record<string, string> = {

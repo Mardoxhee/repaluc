@@ -1,7 +1,8 @@
 // Utilitaire IndexedDB pour le cache des victimes
 const DB_NAME = 'VictimsCache';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = 'victims';
+const PROGRESS_STORE_NAME = 'progress';
 const CACHE_DURATION = 100 * 24 * 60 * 60 * 1000; // 100 jours
 
 interface CacheEntry {
@@ -9,6 +10,14 @@ interface CacheEntry {
   data: any;
   meta: any;
   timestamp: number;
+}
+
+interface ProgressEntry {
+  key: string;
+  lastPage: number;
+  totalPages: number;
+  timestamp: number;
+  completed: boolean;
 }
 
 // Ouvrir la base de données
@@ -23,6 +32,9 @@ const openDB = (): Promise<IDBDatabase> => {
       const db = (event.target as IDBOpenDBRequest).result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: 'key' });
+      }
+      if (!db.objectStoreNames.contains(PROGRESS_STORE_NAME)) {
+        db.createObjectStore(PROGRESS_STORE_NAME, { keyPath: 'key' });
       }
     };
   });
@@ -112,6 +124,53 @@ export const clearVictimsCache = async (): Promise<void> => {
   } catch (error) {
     console.log('[VictimsCache] Erreur vidage:', error);
     throw error;
+  }
+};
+
+// Sauvegarder la progression du chargement
+export const saveProgress = async (key: string, lastPage: number, totalPages: number, completed: boolean = false): Promise<void> => {
+  try {
+    const db = await openDB();
+    const transaction = db.transaction([PROGRESS_STORE_NAME], 'readwrite');
+    const store = transaction.objectStore(PROGRESS_STORE_NAME);
+
+    const entry: ProgressEntry = {
+      key,
+      lastPage,
+      totalPages,
+      timestamp: Date.now(),
+      completed
+    };
+
+    store.put(entry);
+
+    return new Promise((resolve, reject) => {
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+  } catch (error) {
+    console.log('[VictimsCache] Erreur sauvegarde progression:', error);
+  }
+};
+
+// Récupérer la progression du chargement
+export const getProgress = async (key: string): Promise<ProgressEntry | null> => {
+  try {
+    const db = await openDB();
+    const transaction = db.transaction([PROGRESS_STORE_NAME], 'readonly');
+    const store = transaction.objectStore(PROGRESS_STORE_NAME);
+    const request = store.get(key);
+
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => {
+        const entry = request.result as ProgressEntry | undefined;
+        resolve(entry || null);
+      };
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    console.log('[VictimsCache] Erreur récupération progression:', error);
+    return null;
   }
 };
 
