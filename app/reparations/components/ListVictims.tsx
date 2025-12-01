@@ -266,6 +266,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
 
             // Si on a des données en cache, charger en arrière-plan
             if (hasCachedData) {
+                console.log('[LoadAllPages] Activation du mode background loading');
                 setBackgroundLoading(true);
                 setInitialLoading(false);
             } else {
@@ -273,6 +274,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
             }
 
             await loadAllPagesWithResume(cacheKey, progressKey, startPage, existingData);
+
+            console.log('[LoadAllPages] Désactivation du mode background loading');
             setBackgroundLoading(false);
 
         } catch (error) {
@@ -301,10 +304,12 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
             const totalPages = firstPage.meta?.totalPages || 1;
             let allVictims = [...existingData];
 
+            // Initialiser la progression dès le début
+            setLoadingProgress({ current: startPage === 1 ? 1 : startPage - 1, total: totalPages });
+
             // Si on reprend depuis le début, on réinitialise
             if (startPage === 1) {
                 allVictims = [...firstPage.data];
-                setLoadingProgress({ current: 1, total: totalPages });
                 await saveProgress(progressKey, 1, totalPages, false);
 
                 // Sauvegarder immédiatement la première page
@@ -324,7 +329,6 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                 setInitialLoading(false);
             } else {
                 console.log(`[Resume] Reprise à partir de la page ${startPage}/${totalPages}`);
-                setLoadingProgress({ current: startPage - 1, total: totalPages });
                 setInitialLoading(false);
             }
 
@@ -696,23 +700,28 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
     return (
         <>
             {/* Barre de progression en arrière-plan */}
-            {backgroundLoading && loadingProgress.total > 1 && (
-                <div className="fixed top-0 left-0 right-0 z-50 bg-white shadow-md">
+            {backgroundLoading && loadingProgress.total > 0 && (
+                <div className="fixed top-0 left-0 right-0 z-50 bg-white shadow-md border-b border-gray-200">
                     <div className="px-6 py-3">
                         <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-3">
                                 <div className="animate-spin rounded-full h-5 w-5 border-2 border-primary-500 border-t-transparent"></div>
                                 <span className="text-sm font-medium text-gray-700">
-                                    Synchronisation en cours...
+                                    Synchronisation des données en cours...
                                 </span>
                             </div>
-                            <span className="text-sm text-gray-600">
-                                Page {loadingProgress.current} / {loadingProgress.total}
-                            </span>
+                            <div className="flex items-center gap-3">
+                                <span className="text-sm text-gray-600">
+                                    {loadingProgress.current} / {loadingProgress.total} pages
+                                </span>
+                                <span className="text-xs font-medium text-primary-600">
+                                    {Math.round((loadingProgress.current / loadingProgress.total) * 100)}%
+                                </span>
+                            </div>
                         </div>
-                        <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                        <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
                             <div
-                                className="h-full bg-primary-500 transition-all duration-300 ease-out"
+                                className="h-full bg-gradient-to-r from-primary-500 to-primary-600 transition-all duration-300 ease-out"
                                 style={{
                                     width: `${Math.round((loadingProgress.current / loadingProgress.total) * 100)}%`
                                 }}
