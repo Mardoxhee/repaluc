@@ -701,7 +701,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
         <>
             {/* Barre de progression en arrière-plan */}
             {backgroundLoading && loadingProgress.total > 0 && (
-                <div className="fixed top-0 left-0 right-0 z-50 bg-white shadow-md border-b border-gray-200">
+                <div className="  left-0 right-0 z-50 bg-white shadow-md border-b border-gray-200">
                     <div className="px-6 py-3">
                         <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-3">
@@ -732,7 +732,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
             )}
 
             <div className="min-h-screen bg-gray-50">
-                <div className="w-full mx-auto p-6" style={{ marginTop: backgroundLoading ? '72px' : '0' }}>
+                <div className="w-full mx-auto p-6" style={{ marginTop: backgroundLoading ? '0px' : '0' }}>
                     {/* Header */}
                     <div className="mb-8">
                         <div className="flex items-center justify-between">
