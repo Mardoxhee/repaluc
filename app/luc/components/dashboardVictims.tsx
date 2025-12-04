@@ -169,9 +169,9 @@ const DashboardVictims = () => {
   }));
 
   const prejudiceChartData = stats.prejudiceFinal.map((item: any, index) => ({
-    name: item.prejudiceFinal.length > 30 ? item.prejudiceFinal.substring(0, 30) + '...' : item.prejudiceFinal,
-    fullName: item.prejudiceFinal,
-    value: parseInt(item.total),
+    name: item?.prejudiceFinal?.length > 30 ? item?.prejudiceFinal?.substring(0, 30) + '...' : item.prejudiceFinal,
+    fullName: item?.prejudiceFinal,
+    value: parseInt(item?.total),
     color: COLORS[index % COLORS.length]
   }));
 
