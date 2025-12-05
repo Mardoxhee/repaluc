@@ -12,6 +12,7 @@ import {
 } from '@/app/utils/planVieCache';
 
 const API_PLANVIE_URL = process.env.NEXT_PUBLIC_API_PLANVIE_URL;
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
 
 interface Assertion {
   id: number;
@@ -71,18 +72,18 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
       loadDraftFromCache();
     }
     checkPendingForms();
-    
+
     // Écouter les changements de connexion
     const handleOnline = () => {
       setIsOffline(false);
       syncPendingForms();
     };
     const handleOffline = () => setIsOffline(true);
-    
+
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     setIsOffline(!isOnline());
-    
+
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
@@ -97,7 +98,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
           .then(() => setHasDraft(true))
           .catch(err => console.error('Erreur sauvegarde auto:', err));
       }, 1000); // Debounce de 1 seconde
-      
+
       return () => clearTimeout(timer);
     }
   }, [formData, victim?.id, userId]);
@@ -105,7 +106,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
   // Charger le brouillon depuis le cache
   const loadDraftFromCache = async () => {
     if (!victim?.id) return;
-    
+
     try {
       const draft = await getDraftFromCache(victim.id);
       if (draft && Object.keys(draft).length > 0) {
@@ -118,7 +119,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
           cancelButtonText: 'Non, recommencer',
           confirmButtonColor: '#901c67'
         });
-        
+
         if (result.isConfirmed) {
           setFormData(draft);
           setHasDraft(true);
@@ -152,13 +153,13 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
   // Synchroniser les formulaires en attente
   const syncPendingForms = async () => {
     if (!isOnline()) return;
-    
+
     try {
       const pending = await getPendingForms();
       if (pending.length === 0) return;
-      
+
       console.log(`[Sync] ${pending.length} formulaire(s) à synchroniser`);
-      
+
       for (const form of pending) {
         try {
           const questionResponse = Object.entries(form.formData).map(([questionId, reponse]) => {
@@ -198,9 +199,9 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
           console.error(`[Sync] Erreur sync formulaire ${form.key}:`, error);
         }
       }
-      
+
       await checkPendingForms();
-      
+
       await Swal.fire({
         icon: 'success',
         title: 'Synchronisation réussie',
@@ -325,12 +326,12 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
       } else {
         newValues = currentValues.filter((v: string) => v !== value);
       }
-      
+
       // Retirer l'erreur de validation si au moins une option est cochée
       if (newValues.length > 0) {
         setValidationErrors(prev => prev.filter(id => id !== questionId));
       }
-      
+
       return {
         ...prev,
         [questionId]: newValues
@@ -355,23 +356,23 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
     let hasErrors = false;
     const allErrorIds: number[] = [];
     const categories = Object.keys(questions);
-    
+
     for (const category of categories) {
       const categoryQuestions = questions[category]
         .filter((question) => shouldShowQuestion(question, questions[category]));
-      
+
       for (const question of categoryQuestions) {
         const answer = formData[question.id];
-        
-        if (!answer || 
-            (typeof answer === 'string' && answer.trim() === '') ||
-            (Array.isArray(answer) && answer.length === 0)) {
+
+        if (!answer ||
+          (typeof answer === 'string' && answer.trim() === '') ||
+          (Array.isArray(answer) && answer.length === 0)) {
           hasErrors = true;
           allErrorIds.push(question.id);
         }
       }
     }
-    
+
     if (hasErrors) {
       setValidationErrors(allErrorIds);
       await Swal.fire({
@@ -428,7 +429,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
         await deleteDraft(victim.id);
         setHasDraft(false);
         await checkPendingForms();
-        
+
         await Swal.fire({
           icon: 'info',
           title: 'Sauvegardé hors ligne',
@@ -438,7 +439,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
           `,
           confirmButtonColor: '#901c67'
         });
-        
+
         setSaving(false);
         return;
       }
@@ -470,10 +471,29 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
         showConfirmButton: false
       });
 
+      // Mettre à jour le statut de la victime à "interrogé" après enregistrement du plan de vie
+      try {
+        const victimResponse = await fetch(`${API_BASE_URL}/victime/${victim.id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            status: 'interrogé'
+          })
+        });
+
+        if (!victimResponse.ok) {
+          console.log('[Plan de Vie] Erreur lors de la mise à jour du statut de la victime:', victimResponse.status);
+        }
+      } catch (updateError) {
+        console.log('[Plan de Vie] Erreur réseau lors de la mise à jour du statut de la victime:', updateError);
+      }
+
       console.log('Réponse du serveur:', result);
     } catch (err: any) {
       console.log('Erreur:', err);
-      
+
       // En cas d'erreur réseau, proposer de sauvegarder hors ligne
       if (err.message.includes('fetch') || err.message.includes('network')) {
         const result = await Swal.fire({
@@ -485,13 +505,13 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
           cancelButtonText: 'Annuler',
           confirmButtonColor: '#901c67'
         });
-        
+
         if (result.isConfirmed) {
           await savePendingForm(victim.id, userId || 1, formData);
           await deleteDraft(victim.id);
           setHasDraft(false);
           await checkPendingForms();
-          
+
           await Swal.fire({
             icon: 'success',
             title: 'Sauvegardé hors ligne',
@@ -516,22 +536,22 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
   const validateCurrentCategory = (): boolean => {
     const currentQuestions = questions[currentCategory]
       .filter((question) => shouldShowQuestion(question, questions[currentCategory]));
-    
+
     const missingAnswers: string[] = [];
     const errorIds: number[] = [];
-    
+
     for (const question of currentQuestions) {
       const answer = formData[question.id];
-      
+
       // Vérifier si la réponse est vide
-      if (!answer || 
-          (typeof answer === 'string' && answer.trim() === '') ||
-          (Array.isArray(answer) && answer.length === 0)) {
+      if (!answer ||
+        (typeof answer === 'string' && answer.trim() === '') ||
+        (Array.isArray(answer) && answer.length === 0)) {
         missingAnswers.push(question.numero);
         errorIds.push(question.id);
       }
     }
-    
+
     if (missingAnswers.length > 0) {
       setValidationErrors(errorIds);
       Swal.fire({
@@ -545,7 +565,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
       });
       return false;
     }
-    
+
     setValidationErrors([]);
     return true;
   };
@@ -868,11 +888,10 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
       {/* Status Indicators */}
       <div className="mb-4 flex flex-wrap gap-3">
         {/* Connection Status */}
-        <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
-          isOffline 
-            ? 'bg-orange-100 text-orange-800 border border-orange-300' 
-            : 'bg-green-100 text-green-800 border border-green-300'
-        }`}>
+        <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${isOffline
+          ? 'bg-orange-100 text-orange-800 border border-orange-300'
+          : 'bg-green-100 text-green-800 border border-green-300'
+          }`}>
           {isOffline ? <WifiOff size={16} /> : <Wifi size={16} />}
           <span className="font-medium">
             {isOffline ? 'Hors ligne' : 'En ligne'}
@@ -929,8 +948,8 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
               key={category}
               onClick={() => setCurrentCategory(category)}
               className={`px-3 py-2 text-sm font-medium transition-all border ${currentCategory === category
-                  ? 'text-white border-blue-600'
-                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
+                ? 'text-white border-blue-600'
+                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
                 }`}
               style={currentCategory === category ? { backgroundColor: '#901c67', borderColor: '#901c67' } : {}}
             >
@@ -963,11 +982,10 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
                     .map((question) => (
                       <div
                         key={question.id}
-                        className={`bg-gray-50 p-4 border-l-4 shadow-sm transition-all ${
-                          validationErrors.includes(question.id) 
-                            ? 'border-red-500 bg-red-50' 
-                            : 'border-blue-600'
-                        }`}
+                        className={`bg-gray-50 p-4 border-l-4 shadow-sm transition-all ${validationErrors.includes(question.id)
+                          ? 'border-red-500 bg-red-50'
+                          : 'border-blue-600'
+                          }`}
                       >
                         {/* Question Label */}
                         <label className="block">
