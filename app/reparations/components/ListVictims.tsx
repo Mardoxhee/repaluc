@@ -1042,6 +1042,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                         <th className="px-6 py-4 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">Nom complet</th>
                                         <th className="px-6 py-4 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">Province</th>
                                         <th className="px-6 py-4 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">Sexe</th>
+                                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">Statut</th>
                                         <th className="px-6 py-4 text-center text-xs font-semibold text-gray-900 uppercase tracking-wider">Actions</th>
                                     </tr>
                                 </thead>
@@ -1092,6 +1093,11 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                             <td className="px-6 py-4 text-sm text-gray-900">
                                                 <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200">
                                                     {victim.sexe === "Homme" ? "M" : victim.sexe === "Femme" ? "F" : "-"}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className={`inline-flex items-center px-2 py-1 text-xs font-medium border ${getStatusBadgeStyle(victim.status)}`}>
+                                                    {victim.status || "Non vérifié"}
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4 text-center">
