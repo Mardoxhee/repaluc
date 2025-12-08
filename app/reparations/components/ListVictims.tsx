@@ -244,7 +244,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                 if (progress?.completed) {
                     console.log('[LoadAllPages] Mode hors ligne - utilisation du cache complet');
                     setInitialLoading(false);
-                    setIncompleteLoadingMessage(""); // Effacer le message si tout est complet
+                    setIncompleteLoadingMessage("");
                     return;
                 }
                 // Sinon, impossible de continuer - afficher un message persistant
@@ -264,16 +264,11 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
             // Effacer le message de chargement incomplet
             setIncompleteLoadingMessage("");
 
-            // Si le chargement est déjà complété, on peut juste actualiser en arrière-plan
-            if (progress?.completed && hasCachedData) {
-                console.log('[LoadAllPages] Cache complet détecté - actualisation en arrière-plan...');
+            // IMPORTANT: Si le chargement est déjà complété, NE PAS relancer la synchronisation
+            if (progress?.completed) {
+                console.log('[LoadAllPages] Synchronisation déjà terminée - pas de rechargement');
                 setInitialLoading(false);
-                // On lance l'actualisation sans bloquer l'UI
-                setTimeout(async () => {
-                    setBackgroundLoading(true);
-                    await loadAllPagesWithResume(cacheKey, progressKey, 1, []);
-                    setBackgroundLoading(false);
-                }, 100);
+                setBackgroundLoading(false);
                 return;
             }
 
@@ -301,7 +296,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
             console.error('[LoadAllPages] Erreur:', error);
             setInitialLoading(false);
         }
-    }, [fetchCtx?.fetcher, meta.page, meta.limit]);
+    }, [fetchCtx?.fetcher, meta.page, meta.limit, applyLocalFilters]);
 
     // Nouvelle fonction qui gère la reprise du chargement
     const loadAllPagesWithResume = async (
@@ -581,21 +576,43 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
         return () => clearTimeout(debounceTimeout);
     }, [fetchVictims]);
 
-    // Chargement initial des données
+    // Chargement initial des données - s'exécute UNE SEULE FOIS au montage
     useEffect(() => {
-        // Ne charger que si on n'a pas déjà chargé les données
-        if (!hasLoadedInitialData) {
-            loadAllPages();
-        }
-    }, [loadAllPages, hasLoadedInitialData]);
+        let isMounted = true;
+
+        const initializeData = async () => {
+            if (isMounted) {
+                await loadAllPages();
+            }
+        };
+
+        initializeData();
+
+        return () => {
+            isMounted = false;
+        };
+    }, []);
 
     // Écouter les changements de connexion
     useEffect(() => {
-        const handleOnline = () => {
+        const handleOnline = async () => {
             setIsOffline(false);
-            loadAllPages(); // Recharger les données quand on revient en ligne
+            console.log('[Connection] Retour en ligne détecté');
+
+            // Vérifier si la synchronisation est déjà terminée
+            const progress = await getProgress('victims-load-progress');
+            if (!progress?.completed) {
+                console.log('[Connection] Reprise de la synchronisation...');
+                // Déclencher un rechargement en rechargeant les données
+                fetchVictims();
+            } else {
+                console.log('[Connection] Synchronisation déjà terminée - pas de rechargement');
+            }
         };
-        const handleOffline = () => setIsOffline(true);
+        const handleOffline = () => {
+            setIsOffline(true);
+            console.log('[Connection] Mode hors ligne activé');
+        };
 
         window.addEventListener('online', handleOnline);
         window.addEventListener('offline', handleOffline);
@@ -604,7 +621,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
         };
-    }, [loadAllPages]);
+    }, [fetchVictims]);
 
     const addFilterRule = useCallback(() => {
         const newRule: FilterRule = {
