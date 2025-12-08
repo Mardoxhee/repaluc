@@ -78,29 +78,29 @@ const operators = [
 ];
 
 const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
-  // Charger les questions du formulaire plan de vie au démarrage
-  useEffect(() => {
-    const loadQuestions = async () => {
-      try {
-        // Vérifier si le cache est toujours valide (1 jour de cache)
-        const cacheValid = await isCacheValid(24 * 60 * 60 * 1000);
-        
-        if (!cacheValid && isOnline()) {
-          const response = await fetch(`${API_PLANVIE_URL}/question/type/plandevie`);
-          if (!response.ok) {
-            throw new Error('Erreur lors du chargement des questions');
-          }
-          const questions = await response.json();
-          await saveQuestions(questions);
-          console.log('Questions du formulaire plan de vie mises en cache');
-        }
-      } catch (error) {
-        console.error('Erreur lors du chargement des questions:', error);
-      }
-    };
+    // Charger les questions du formulaire plan de vie au démarrage
+    useEffect(() => {
+        const loadQuestions = async () => {
+            try {
+                // Vérifier si le cache est toujours valide (1 jour de cache)
+                const cacheValid = await isCacheValid(24 * 60 * 60 * 1000);
 
-    loadQuestions();
-  }, []);
+                if (!cacheValid && isOnline()) {
+                    const response = await fetch(`${API_PLANVIE_URL}/question/type/plandevie`);
+                    if (!response.ok) {
+                        throw new Error('Erreur lors du chargement des questions');
+                    }
+                    const questions = await response.json();
+                    await saveQuestions(questions);
+                    console.log('Questions du formulaire plan de vie mises en cache');
+                }
+            } catch (error) {
+                console.error('Erreur lors du chargement des questions:', error);
+            }
+        };
+
+        loadQuestions();
+    }, []);
     const [searchTerm, setSearchTerm] = useState<string>("");
     const [filters, setFilters] = useState<FilterType>({
         status: "",
@@ -110,7 +110,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
     });
     const [filterRules, setFilterRules] = useState<FilterRule[]>([]);
     const [showFilterBuilder, setShowFilterBuilder] = useState(false);
-    
+
     // Fonction pour appliquer les filtres localement sur les données en cache
     const applyLocalFilters = useCallback((data: any[]) => {
         return data.filter(victim => {
@@ -168,7 +168,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
     });
     const [showVictimModal, setShowVictimModal] = useState(false);
     const [selectedVictim, setSelectedVictim] = useState<any>(null);
-    
+
     // Fonction pour afficher les détails d'une victime
     const handleViewVictim = useCallback((victim: any) => {
         setSelectedVictim(victim);
@@ -426,7 +426,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
     // Function to check if a specific victim has an evaluation and view it
     const handleViewEvaluation = async (victim: any) => {
         if (!fetchCtx?.fetcher) return;
-        
+
         try {
             const evalData = await fetchCtx.fetcher(`/evaluations-medicales?victimeId=${victim.id}`);
             const hasEvaluation = Array.isArray(evalData)
@@ -462,7 +462,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
         setIsOffline(isOffline);
 
         const cacheKey = 'all-victims-cache';
-        
+
         // Fonction pour afficher les données avec pagination
         // 1. Si on est hors ligne, on utilise uniquement le cache SANS SAUVEGARDER
         if (isOffline) {
@@ -533,7 +533,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
             }
         } catch (err: any) {
             console.error('Erreur lors du chargement des données:', err);
-            
+
             // En cas d'erreur, essayer d'afficher les données en cache
             try {
                 const cachedResult = await getVictimsFromCache(cacheKey);
@@ -542,11 +542,11 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                     const totalItems = filteredData.length;
                     const totalPages = Math.max(1, Math.ceil(totalItems / meta.limit));
                     const currentPage = Math.min(meta.page, totalPages);
-                    
+
                     const start = (currentPage - 1) * meta.limit;
                     const end = start + meta.limit;
                     const pageData = filteredData.slice(start, end);
-                    
+
                     setVictims(pageData);
                     setMeta(prev => ({
                         ...prev,
@@ -556,13 +556,16 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                         hasPreviousPage: currentPage > 1
                     }));
                     setUsingCache(true);
-                    setError('Connexion limitée : affichage des données en cache');
+                    // On considère que l'affichage via le cache est un succès :
+                    // ne pas laisser l'application en état d'erreur ou de chargement.
+                    setError("");
+                    setLoading(false);
                     return;
                 }
             } catch (cacheError) {
                 console.error('Erreur lors de la récupération du cache:', cacheError);
             }
-            
+
             setError('Impossible de charger les données. Vérifiez votre connexion Internet.');
             setLoading(false);
         }
@@ -692,7 +695,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
     // Afficher le loader de chargement initial
     if (initialLoading) {
         const progressPercentage = Math.round((loadingProgress.current / loadingProgress.total) * 100);
-        
+
         return (
             <div className="fixed inset-0 bg-white/95 flex items-center justify-center z-50">
                 <div className="text-center max-w-md w-full px-4">
@@ -701,9 +704,9 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                         <div className="relative w-28 h-28">
                             {/* Cercle de fond */}
                             <div className="absolute inset-0 border-4 border-primary-100 rounded-full"></div>
-                            
+
                             {/* Cercle animé */}
-                            <div 
+                            <div
                                 className="absolute inset-0 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"
                                 style={{
                                     borderWidth: '6px',
@@ -711,25 +714,25 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                     borderTopColor: 'transparent'
                                 }}
                             ></div>
-                            
+
                             {/* Pourcentage */}
                             <div className="absolute inset-0 flex items-center justify-center">
                                 <span className="text-primary-600 font-bold text-2xl">{progressPercentage}%</span>
                             </div>
                         </div>
                     </div>
-                    
+
                     {/* Texte */}
                     <h2 className="text-2xl font-bold text-primary-700 mb-3">Chargement des données</h2>
                     <p className="text-primary-600 font-medium mb-6">
                         Page {loadingProgress.current} sur {loadingProgress.total}
                     </p>
-                    
+
                     {/* Barre de progression */}
                     <div className="w-full max-w-xs h-2.5 bg-primary-100 rounded-full overflow-hidden mx-auto">
-                        <div 
+                        <div
                             className="h-full bg-primary-500 transition-all duration-300 ease-out"
-                            style={{ 
+                            style={{
                                 width: `${progressPercentage}%`,
                                 boxShadow: '0 0 12px rgba(0, 127, 186, 0.4)'
                             }}
@@ -787,8 +790,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                             {/* Indicateur de statut */}
                             {(isOffline || usingCache) && showOfflineIndicator && (
                                 <div className={`flex items-center gap-3 px-4 py-2 rounded-lg border ${isOffline
-                                        ? 'bg-orange-50 text-orange-800 border-orange-200'
-                                        : 'bg-blue-50 text-blue-800 border-blue-200'
+                                    ? 'bg-orange-50 text-orange-800 border-orange-200'
+                                    : 'bg-blue-50 text-blue-800 border-blue-200'
                                     }`}>
                                     {isOffline ? (
                                         <>
@@ -819,8 +822,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                     <button
                                         onClick={() => setShowOfflineIndicator(true)}
                                         className={`flex items-center gap-2 px-3 py-2 rounded-full shadow-lg border ${isOffline
-                                                ? 'bg-orange-100 text-orange-800 border-orange-300'
-                                                : 'bg-blue-100 text-blue-800 border-blue-300'
+                                            ? 'bg-orange-100 text-orange-800 border-orange-300'
+                                            : 'bg-blue-100 text-blue-800 border-blue-300'
                                             } hover:scale-105 transition-transform`}
                                         title={isOffline ? "Mode Hors Ligne" : "Données en cache"}
                                     >
