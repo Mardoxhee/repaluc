@@ -979,15 +979,15 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                                                         src={signatureUrl}
                                                         alt="Signature"
                                                         className="max-w-full h-auto"
-                                                        style={{ maxWidth: '400px', maxHeight: '150px' }}
+                                                        style={{ maxWidth: '500px', maxHeight: '300px' }}
                                                     />
                                                 </div>
                                             ) : (
                                                 <div className="signature-box relative inline-block">
                                                     <canvas
                                                         ref={canvasRef}
-                                                        width={400}
-                                                        height={150}
+                                                        width={500}
+                                                        height={300}
                                                         onMouseDown={startDrawing}
                                                         onMouseMove={draw}
                                                         onMouseUp={stopDrawing}
