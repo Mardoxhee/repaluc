@@ -20,6 +20,7 @@ interface Victim {
     typeViolation?: string;
     prejudicesSubis?: string;
     indemnisation?: number;
+    prejudiceFinal?: string;
 }
 
 interface Tranche {
@@ -713,7 +714,9 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                             {/* Section reconnaissance */}
                             <div className="mb-6">
                                 <p className="font-bold text-sm mb-2">A été reconnue comme victime du préjudice suivant :</p>
-                                <p className="text-sm italic mb-4">Perte de vie</p>
+                                <p className="text-sm italic mb-4">
+                                    {victim.prejudiceFinal || 'Pas de prejudice final ressorti'}
+                                </p>
                                 <p className="text-sm leading-relaxed mb-4">
                                     À ce titre, une indemnisation d'un montant de l'équivalent en Francs Congolais de
                                     4.320 USD (Quatre mille trois cent vingt dollars américains) vous est proposée, en tant
