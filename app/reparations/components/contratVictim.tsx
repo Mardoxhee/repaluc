@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Trash2, FileText, Eraser, Download } from 'lucide-react';
+import { Plus, Trash2, FileText, Eraser, Download, X } from 'lucide-react';
 import { isOnline } from '../../utils/victimsCache';
 import { savePendingContract, getAllPendingContracts, deletePendingContract, PendingContract } from '../../utils/contractsCache';
 
@@ -97,6 +97,11 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
     const [loadingContrat, setLoadingContrat] = useState(true);
     const [signatureUrl, setSignatureUrl] = useState<string>('');
     const [showContratDetail, setShowContratDetail] = useState(false);
+    const [showSignatureModal, setShowSignatureModal] = useState(false);
+
+    const formattedSignatureDate = existingContrat
+        ? new Date(existingContrat.dateSignature).toLocaleDateString('fr-FR')
+        : '';
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -995,7 +1000,7 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                             <div className="mt-8 grid grid-cols-2 gap-8">
                                 <div>
                                     <p className="text-sm mb-2">
-                                        Fait à <span className="border-b border-dotted border-gray-400 inline-block w-32"></span>, le <span className="border-b border-dotted border-gray-400 inline-block w-32"></span>
+                                        Fait à <span className="border-b border-dotted border-gray-400 inline-block w-32">{victim.territoire || ''}</span>, le <span className="border-b border-dotted border-gray-400 inline-block w-32">{formattedSignatureDate}</span>
                                     </p>
                                     <div className="mt-6">
                                         <p className="font-bold text-sm mb-2">Pour le FONAREV</p>
@@ -1016,7 +1021,7 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                                             <p className="text-sm mb-2">Signature ou empreinte :</p>
                                             <p className="text-xs italic text-gray-600 mb-2">(précédée de la mention LU ET APPROUVÉ)</p>
 
-                                            {/* Afficher la signature existante ou le canvas pour dessiner */}
+                                            {/* Afficher la signature existante ou un bouton pour ouvrir le modal de signature */}
                                             {existingContrat && signatureUrl ? (
                                                 <div className="signature-box inline-block">
                                                     <img
@@ -1027,30 +1032,13 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                                                     />
                                                 </div>
                                             ) : (
-                                                <div className="signature-box relative inline-block">
-                                                    <canvas
-                                                        ref={canvasRef}
-                                                        width={500}
-                                                        height={300}
-                                                        onMouseDown={startDrawing}
-                                                        onMouseMove={draw}
-                                                        onMouseUp={stopDrawing}
-                                                        onMouseLeave={stopDrawing}
-                                                        onTouchStart={startDrawing}
-                                                        onTouchMove={draw}
-                                                        onTouchEnd={stopDrawing}
-                                                        className="cursor-crosshair bg-white"
-                                                        style={{ display: 'block', touchAction: 'none' }}
-                                                    />
-                                                    <button
-                                                        onClick={clearSignature}
-                                                        className="absolute top-2 right-2 p-2 bg-red-100 text-red-600 rounded hover:bg-red-200 transition-colors no-print"
-                                                        title="Effacer la signature"
-                                                        type="button"
-                                                    >
-                                                        <Eraser size={16} />
-                                                    </button>
-                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowSignatureModal(true)}
+                                                    className="no-print inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors"
+                                                >
+                                                    Signer le contrat
+                                                </button>
                                             )}
                                         </div>
                                     </div>
@@ -1065,29 +1053,12 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                                 </div>
                             )}
 
-                            {/* Bouton de sauvegarde */}
-                            {!existingContrat && (
-                                <div className="mt-8 flex justify-end gap-4 no-print">
-                                    <button
-                                        onClick={() => window.history.back()}
-                                        className="px-6 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
-                                    >
-                                        Annuler
-                                    </button>
-                                    <button
-                                        onClick={saveContract}
-                                        disabled={isSaving}
-                                        className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        {isSaving ? 'Sauvegarde...' : 'Sauvegarder le contrat'}
-                                    </button>
-                                </div>
-                            )}
+                            {/* Boutons de sauvegarde déplacés dans le modal de signature */}
 
                             {existingContrat && (
                                 <div className="mt-8 p-4 bg-green-50 border border-green-200 rounded no-print">
                                     <p className="text-green-800 text-sm">
-                                        ✓ Contrat signé le {new Date(existingContrat.dateSignature).toLocaleDateString('fr-FR')}
+                                        ✓ Contrat signé le {formattedSignatureDate}
                                     </p>
                                 </div>
                             )}
@@ -1095,6 +1066,74 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                     </div>
                 )}
             </div>
+            {/* Modal de signature */}
+            {showSignatureModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+                    <div className="bg-white w-full max-w-3xl mx-4 rounded-lg shadow-xl relative">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+                            <h3 className="text-base font-semibold text-gray-800">Signature du contrat</h3>
+                            <button
+                                type="button"
+                                onClick={() => setShowSignatureModal(false)}
+                                className="p-1 rounded hover:bg-gray-100 text-gray-500"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <div className="p-4">
+                            <p className="text-sm text-gray-600 mb-3">
+                                Merci de dessiner la signature ou l'empreinte de la victime dans l'espace ci-dessous.
+                            </p>
+                            <div className="signature-box relative inline-block w-full">
+                                <canvas
+                                    ref={canvasRef}
+                                    width={800}
+                                    height={300}
+                                    onMouseDown={startDrawing}
+                                    onMouseMove={draw}
+                                    onMouseUp={stopDrawing}
+                                    onMouseLeave={stopDrawing}
+                                    onTouchStart={startDrawing}
+                                    onTouchMove={draw}
+                                    onTouchEnd={stopDrawing}
+                                    className="cursor-crosshair bg-white w-full"
+                                    style={{ display: 'block', touchAction: 'none' }}
+                                />
+                                <button
+                                    onClick={clearSignature}
+                                    className="absolute top-2 right-2 p-2 bg-red-100 text-red-600 rounded hover:bg-red-200 transition-colors no-print"
+                                    title="Effacer la signature"
+                                    type="button"
+                                >
+                                    <Eraser size={16} />
+                                </button>
+                            </div>
+                            <div className="mt-4 flex justify-end gap-2 no-print">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowSignatureModal(false)}
+                                    className="px-4 py-2 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50"
+                                >
+                                    Fermer
+                                </button>
+                                {!existingContrat && (
+                                    <button
+                                        type="button"
+                                        onClick={async () => {
+                                            await saveContract();
+                                            setShowSignatureModal(false);
+                                        }}
+                                        disabled={isSaving}
+                                        className="px-4 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {isSaving ? 'Sauvegarde...' : 'Sauvegarder le contrat'}
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 };
