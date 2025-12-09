@@ -47,7 +47,7 @@ interface FilterType {
 const prejudiceFinalOptions = [
     "Perte de vie",
     "Perte économique",
-    "Atteinte à l'intégrité physique",
+    "Préjudice corporel",
     "Violence Sexuelle Liée au Conflit"
 ];
 

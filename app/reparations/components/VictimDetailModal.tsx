@@ -23,7 +23,7 @@ import { GiReceiveMoney } from "react-icons/gi";
 import { Modal } from 'flowbite-react';
 import InfosVictim from './infosVictim';
 import Formulaireplandevie from './formulaireplandevie';
-import ContratVictim from './contratVictim';
+import ContratVictim from './contrat';
 import Swal from 'sweetalert2';
 
 // Fonction pour obtenir le lien réel du fichier
@@ -618,10 +618,10 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                       <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500"></div>
                     </div>
                   ) : questions ? (
-                    <Formulaireplandevie 
-                      victim={victim} 
-                      userId={1} 
-                      initialQuestions={questions} 
+                    <Formulaireplandevie
+                      victim={victim}
+                      userId={1}
+                      initialQuestions={questions}
                     />
                   ) : (
                     <div className="text-center py-8 text-gray-500">
