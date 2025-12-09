@@ -29,20 +29,32 @@ const uploadSignature = async (dataUrl: string, victimId: number): Promise<strin
     return data.url || data.link || '';
 };
 
-export const syncPendingContracts = async (): Promise<{ synced: number; failed: number }> => {
+// Vérifier si un contrat existe déjà pour une victime
+const checkExistingContract = async (victimId: number): Promise<boolean> => {
+    try {
+        const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
+        const response = await fetch(`${baseUrl}/contrat/${victimId}`);
+        return response.ok;
+    } catch {
+        return false;
+    }
+};
+
+export const syncPendingContracts = async (): Promise<{ synced: number; failed: number; skipped: number }> => {
     if (isSyncing) {
         console.log('[ContractsSyncService] Synchronisation déjà en cours...');
-        return { synced: 0, failed: 0 };
+        return { synced: 0, failed: 0, skipped: 0 };
     }
 
     if (!isOnline()) {
         console.log('[ContractsSyncService] Hors ligne, synchronisation reportée');
-        return { synced: 0, failed: 0 };
+        return { synced: 0, failed: 0, skipped: 0 };
     }
 
     isSyncing = true;
     let synced = 0;
     let failed = 0;
+    let skipped = 0;
 
     try {
         const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
@@ -50,13 +62,24 @@ export const syncPendingContracts = async (): Promise<{ synced: number; failed: 
 
         if (pending.length === 0) {
             console.log('[ContractsSyncService] Aucun contrat en attente');
-            return { synced: 0, failed: 0 };
+            return { synced: 0, failed: 0, skipped: 0 };
         }
 
         console.log(`[ContractsSyncService] ${pending.length} contrat(s) en attente de synchronisation`);
 
         for (const item of pending) {
             try {
+                // Vérifier si un contrat existe déjà pour cette victime
+                const contractExists = await checkExistingContract(item.victimId);
+
+                if (contractExists) {
+                    // Le contrat existe déjà, supprimer de la file d'attente sans re-créer
+                    console.log(`[ContractsSyncService] ⏭ Contrat déjà existant pour victime ${item.victimId}, suppression de la file d'attente`);
+                    await deletePendingContract(item.id as number);
+                    skipped++;
+                    continue;
+                }
+
                 let finalSignature = item.contractData.signature || 'SIG_ELEC';
 
                 // Upload de la signature si présente
@@ -80,7 +103,15 @@ export const syncPendingContracts = async (): Promise<{ synced: number; failed: 
                 if (!resp.ok) {
                     const errorText = await resp.text();
                     console.log('[ContractsSyncService] Erreur API:', errorText);
-                    failed++;
+
+                    // Si erreur 409 (conflit) ou contrat déjà existant, supprimer quand même
+                    if (resp.status === 409 || errorText.toLowerCase().includes('exist')) {
+                        console.log(`[ContractsSyncService] Contrat déjà existant (erreur API), suppression de la file`);
+                        await deletePendingContract(item.id as number);
+                        skipped++;
+                    } else {
+                        failed++;
+                    }
                     continue;
                 }
 
@@ -93,14 +124,14 @@ export const syncPendingContracts = async (): Promise<{ synced: number; failed: 
             }
         }
 
-        console.log(`[ContractsSyncService] Synchronisation terminée: ${synced} réussi(s), ${failed} échec(s)`);
+        console.log(`[ContractsSyncService] Synchronisation terminée: ${synced} créé(s), ${skipped} déjà existant(s), ${failed} échec(s)`);
     } catch (err) {
         console.log('[ContractsSyncService] Erreur globale de synchro:', err);
     } finally {
         isSyncing = false;
     }
 
-    return { synced, failed };
+    return { synced, failed, skipped };
 };
 
 // Démarrer la synchronisation automatique
