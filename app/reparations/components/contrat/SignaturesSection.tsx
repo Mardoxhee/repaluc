@@ -1,6 +1,8 @@
 'use client';
 import React from 'react';
+import { Clock, Wifi } from 'lucide-react';
 import { Victim, Contrat, SaveMessage } from './types';
+import { PendingContract } from '../../../utils/contractsCache';
 
 interface SignaturesSectionProps {
     victim: Victim;
@@ -8,6 +10,7 @@ interface SignaturesSectionProps {
     signatureUrl: string;
     formattedSignatureDate: string;
     saveMessage: SaveMessage | null;
+    pendingOfflineContrat: PendingContract | null;
     setShowSignatureModal: (show: boolean) => void;
 }
 
@@ -17,6 +20,7 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
     signatureUrl,
     formattedSignatureDate,
     saveMessage,
+    pendingOfflineContrat,
     setShowSignatureModal,
 }) => {
     return (
@@ -54,6 +58,24 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
                                         className="max-w-full h-auto"
                                         style={{ maxWidth: '500px', maxHeight: '300px' }}
                                     />
+                                </div>
+                            ) : pendingOfflineContrat ? (
+                                <div className="no-print p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <div className="flex items-center justify-center w-10 h-10 bg-amber-100 rounded-full">
+                                            <Clock className="w-5 h-5 text-amber-600" />
+                                        </div>
+                                        <div>
+                                            <p className="font-semibold text-amber-800">Contrat signé hors ligne</p>
+                                            <p className="text-sm text-amber-700">
+                                                Signé le {new Date(pendingOfflineContrat.createdAt).toLocaleDateString('fr-FR')} à {new Date(pendingOfflineContrat.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-sm text-amber-700 mt-3 pl-1">
+                                        <Wifi className="w-4 h-4" />
+                                        <span>En attente de synchronisation avec le serveur...</span>
+                                    </div>
                                 </div>
                             ) : (
                                 <button

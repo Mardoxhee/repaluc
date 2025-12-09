@@ -1,6 +1,13 @@
 import React from "react";
 import MainLayout from "@/components/layouts/MainLayout";
+import { ContractsSyncProvider } from "../components/ContractsSyncProvider";
 
 export default function ClientsLayout({ children }: { children: React.ReactNode }) {
-  return <MainLayout>{children}</MainLayout>;
+  return (
+    <MainLayout>
+      <ContractsSyncProvider>
+        {children}
+      </ContractsSyncProvider>
+    </MainLayout>
+  );
 }

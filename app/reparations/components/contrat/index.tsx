@@ -25,6 +25,7 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
         showSignatureModal,
         formattedSignatureDate,
         totalMontant,
+        pendingOfflineContrat,
         setConsentements,
         setRepresentant,
         setShowContratDetail,
@@ -147,6 +148,7 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                                 signatureUrl={signatureUrl}
                                 formattedSignatureDate={formattedSignatureDate}
                                 saveMessage={saveMessage}
+                                pendingOfflineContrat={pendingOfflineContrat}
                                 setShowSignatureModal={setShowSignatureModal}
                             />
                         </div>

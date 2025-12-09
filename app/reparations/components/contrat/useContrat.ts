@@ -89,6 +89,7 @@ export function useContrat(victim: Victim) {
     const [signatureUrl, setSignatureUrl] = useState<string>('');
     const [showContratDetail, setShowContratDetail] = useState(false);
     const [showSignatureModal, setShowSignatureModal] = useState(false);
+    const [pendingOfflineContrat, setPendingOfflineContrat] = useState<PendingContract | null>(null);
 
     const formattedSignatureDate = existingContrat
         ? new Date(existingContrat.dateSignature).toLocaleDateString('fr-FR')
@@ -168,6 +169,25 @@ export function useContrat(victim: Victim) {
         };
 
         fetchContrat();
+    }, [victim.id]);
+
+    // Vérifier s'il y a un contrat en attente offline pour cette victime
+    useEffect(() => {
+        const checkPendingOffline = async () => {
+            try {
+                const pending = await getAllPendingContracts();
+                const victimPending = pending.find(p => p.victimId === victim.id);
+                setPendingOfflineContrat(victimPending || null);
+            } catch (error) {
+                console.log('Erreur lors de la vérification des contrats offline:', error);
+            }
+        };
+
+        checkPendingOffline();
+
+        // Revérifier périodiquement (au cas où la synchro a eu lieu)
+        const interval = setInterval(checkPendingOffline, 5000);
+        return () => clearInterval(interval);
     }, [victim.id]);
 
     const uploadSignature = async (dataUrl: string): Promise<string> => {
@@ -488,6 +508,7 @@ export function useContrat(victim: Victim) {
         showSignatureModal,
         formattedSignatureDate,
         totalMontant,
+        pendingOfflineContrat,
 
         // Setters
         setConsentements,
