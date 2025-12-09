@@ -1,6 +1,8 @@
 'use client';
 import React, { useState, useRef, useEffect } from 'react';
 import { Plus, Trash2, FileText, Eraser, Download } from 'lucide-react';
+import { isOnline } from '../../utils/victimsCache';
+import { savePendingContract, getAllPendingContracts, deletePendingContract, PendingContract } from '../../utils/contractsCache';
 
 interface Victim {
     id: number;
@@ -170,6 +172,19 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
         fetchContrat();
     }, [victim.id]);
 
+    useEffect(() => {
+        const handleOnline = () => {
+            console.log('[ContractsSync] Retour en ligne détecté, tentative de synchronisation des contrats');
+            syncPendingContracts();
+        };
+
+        window.addEventListener('online', handleOnline);
+
+        return () => {
+            window.removeEventListener('online', handleOnline);
+        };
+    }, []);
+
     const getCoordinates = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>, canvas: HTMLCanvasElement) => {
         const rect = canvas.getBoundingClientRect();
         if ('touches' in e) {
@@ -231,38 +246,72 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
         }
     };
 
-    const uploadSignature = async (canvas: HTMLCanvasElement): Promise<string> => {
+    const uploadSignature = async (dataUrl: string): Promise<string> => {
+        const uploadEndpoint = process.env.NEXT_PUBLIC_UPLOAD_ENDPOINT || 'https://360.fonasite.app:5521/minio/files/upload';
+
+        // Convertir dataURL en Blob
+        const res = await fetch(dataUrl);
+        const blob = await res.blob();
+
+        const file = new File([blob], `signature_${victim.id}_${Date.now()}.png`, { type: 'image/png' });
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const resp = await fetch(uploadEndpoint, {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!resp.ok) {
+            throw new Error(`Failed to upload signature: ${resp.statusText}`);
+        }
+
+        const data = await resp.json();
+        console.log('Signature uploaded:', data);
+        return data.url || data.link || '';
+    };
+
+    const syncPendingContracts = async () => {
+        if (!isOnline()) return;
+
         try {
-            // Convertir le canvas en Blob
-            const blob = await new Promise<Blob>((resolve) => {
-                canvas.toBlob((blob) => {
-                    if (blob) resolve(blob);
-                }, 'image/png');
-            });
+            const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
+            const pending: PendingContract[] = await getAllPendingContracts();
 
-            // Créer un fichier à partir du Blob
-            const file = new File([blob], `signature_${victim.id}_${Date.now()}.png`, { type: 'image/png' });
+            for (const item of pending) {
+                try {
+                    let finalSignature = item.contractData.signature || 'SIG_ELEC';
 
-            const formData = new FormData();
-            formData.append("file", file);
+                    if (item.signatureDataUrl) {
+                        finalSignature = await uploadSignature(item.signatureDataUrl);
+                    }
 
-            const uploadEndpoint = process.env.NEXT_PUBLIC_UPLOAD_ENDPOINT || 'https://360.fonasite.app:5521/minio/files/upload';
+                    const payload = {
+                        ...item.contractData,
+                        signature: finalSignature,
+                    };
 
-            const resp = await fetch(uploadEndpoint, {
-                method: "POST",
-                body: formData,
-            });
+                    const resp = await fetch(`${baseUrl}/contrat`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(payload),
+                    });
 
-            if (!resp.ok) {
-                throw new Error(`Failed to upload signature: ${resp.statusText}`);
+                    if (!resp.ok) {
+                        console.log('[ContractsSync] Erreur API, on garde le contrat en attente');
+                        continue;
+                    }
+
+                    await deletePendingContract(item.id as number);
+                    console.log('[ContractsSync] Contrat synchronisé pour victime', item.victimId);
+                } catch (err) {
+                    console.log('[ContractsSync] Erreur lors de la synchro d\'un contrat:', err);
+                }
             }
-
-            const data = await resp.json();
-            console.log("Signature uploaded:", data);
-            return data.url || data.link || '';
-        } catch (error) {
-            console.log("Erreur lors de l'envoi de la signature:", error);
-            throw error;
+        } catch (err) {
+            console.log('[ContractsSync] Erreur globale de synchro:', err);
         }
     };
 
@@ -271,9 +320,9 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
         setSaveMessage(null);
 
         try {
-            // Uploader la signature si elle existe
+            // Récupérer la signature sous forme de dataURL (pour stockage offline)
             const canvas = canvasRef.current;
-            let signatureUrl = 'SIG_ELEC';
+            let signatureDataUrl: string | null = null;
 
             if (canvas) {
                 const ctx = canvas.getContext('2d');
@@ -282,13 +331,10 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                     const hasSignature = imageData.data.some((pixel, i) => i % 4 === 3 && pixel > 0);
 
                     if (hasSignature) {
-                        // Uploader la signature et récupérer l'URL
-                        signatureUrl = await uploadSignature(canvas);
+                        signatureDataUrl = canvas.toDataURL('image/png');
                     }
                 }
             }
-
-            const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
 
             // Préparer le body de la requête avec planIndemnisation imbriqué
             const contractData = {
@@ -305,7 +351,7 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                 pieceIdentiteRepresentant: representant.pieceIdentite || null,
                 accepteReparation: consentements.accepteReparation,
                 dateSignature: new Date().toISOString(),
-                signature: signatureUrl,
+                signature: 'SIG_ELEC',
                 lieuSignature: `${victim.territoire || ''}, ${victim.province || ''}`.trim() || 'Goma',
                 victimeId: victim.id,
                 planIndemnisation: tranches.map(t => ({
@@ -315,22 +361,17 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                 }))
             };
 
-            const response = await fetch(`${baseUrl}/contrat`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(contractData)
+            // Sauvegarder d'abord dans l'IndexedDB
+            await savePendingContract({
+                victimId: victim.id,
+                contractData,
+                signatureDataUrl,
             });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                console.log('Erreur API:', errorData);
-                throw new Error('Erreur lors de la sauvegarde du contrat');
-            }
+            // Tenter une synchro immédiate si on est en ligne
+            await syncPendingContracts();
 
-            const result = await response.json();
-            setSaveMessage({ type: 'success', text: 'Contrat sauvegardé avec succès !' });
+            setSaveMessage({ type: 'success', text: 'Contrat enregistré (hors ligne si nécessaire). La synchronisation se fera automatiquement.' });
 
             // Masquer le message après 3 secondes
             setTimeout(() => setSaveMessage(null), 3000);
