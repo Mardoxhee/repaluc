@@ -132,7 +132,7 @@ const VictimsWithFilters: React.FC<VictimsWithFiltersProps> = ({
     const provinces = [
         { value: '', label: 'Toutes les provinces' },
         { value: 'Kinshasa', label: 'Kinshasa' },
-        { value: 'Kongo-Central', label: 'Kongo-Central' },
+        { value: 'Kongo Central', label: 'Kongo Central' },
         { value: 'Sud-Kivu', label: 'Sud-Kivu' },
     ];
     

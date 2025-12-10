@@ -18,7 +18,7 @@ interface ReglagesProps {
 const provincesRDC = [
     "Bas-Uele", "Haut-Uele", "Ituri", "Tshopo", "Mongala", "Nord-Ubangi",
     "Sud-Ubangi", "Équateur", "Tshuapa", "Mai-Ndombe", "Kwilu", "Kwango",
-    "Kinshasa", "Kongo-Central", "Kasai", "Kasai-Central", "Kasai-Oriental",
+    "Kinshasa", "Kongo Central", "Kasai", "Kasai-Central", "Kasai-Oriental",
     "Lomami", "Sankuru", "Maniema", "Sud-Kivu", "Nord-Kivu", "Tanganyika",
     "Haut-Lomami", "Lualaba", "Haut-Katanga",
 ];
