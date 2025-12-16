@@ -22,10 +22,15 @@ export const FetchProvider = ({ children }: { children: ReactNode }) => {
         try {
             const fullUrl = url.startsWith('http') ? url : `${baseUrl}${url}`;
             const response = await fetch(fullUrl, options);
+
+            // Gérer les erreurs HTTP (404, 500, etc.) sans crasher
             if (!response.ok) {
-                console.log('Aucune donnée retournée ou erreur pour', fullUrl, 'Status:', response.status);
-                console.log('throw new Error sur status', response.status, 'pour', fullUrl);
+                console.log(`[Fetcher] Endpoint non disponible: ${fullUrl} (Status: ${response.status})`);
+                setLoading(false);
+                // Retourner null au lieu de throw pour les erreurs HTTP
+                return null;
             }
+
             let data = null;
             const contentType = response.headers.get('content-type');
             if (contentType && contentType.includes('application/json')) {
@@ -39,9 +44,10 @@ export const FetchProvider = ({ children }: { children: ReactNode }) => {
             return data;
         } catch (err: any) {
             setError(err.message || 'Erreur réseau');
-            console.log('Erreur réseau ou aucune donnée:', err);
+            console.log('[Fetcher] Erreur réseau:', err.message);
             setLoading(false);
-            throw err;
+            // Retourner null au lieu de throw pour éviter les crashs
+            return null;
         }
     }, [baseUrl]);
 
