@@ -99,9 +99,8 @@ const SideBar: React.FC<SideBarProps> = ({ onNavigate }) => {
           {pathname === '/reglages' && (
             <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary-500 rounded-r"></div>
           )}
-          <FiSettings size={18} className={`transition-colors ${
-            pathname === '/reglages' ? 'text-primary-600' : 'text-gray-500 group-hover:text-primary-500'
-          }`} />
+          <FiSettings size={18} className={`transition-colors ${pathname === '/reglages' ? 'text-primary-600' : 'text-gray-500 group-hover:text-primary-500'
+            }`} />
           <span className="text-sm">Paramètres</span>
         </Link>
       </div>

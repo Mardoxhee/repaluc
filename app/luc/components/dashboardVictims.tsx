@@ -79,6 +79,7 @@ type SexeStat = { sexe: string; total: number };
 const DashboardVictims = () => {
   const { fetcher } = useFetch();
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<{
     sexe: SexeStat[];
     trancheAge: any[];
@@ -101,9 +102,22 @@ const DashboardVictims = () => {
     prejudice: []
   });
 
+  // Helper pour fetch avec gestion d'erreur silencieuse
+  const safeFetch = async (url: string, defaultValue: any = []) => {
+    try {
+      const result = await fetcher(url);
+      return result ?? defaultValue;
+    } catch (err) {
+      console.log(`[Dashboard LUC] Endpoint non disponible: ${url}`);
+      return defaultValue;
+    }
+  };
+
   useEffect(() => {
     const fetchAllStats = async () => {
       setLoading(true);
+      setError(null);
+
       try {
         const [
           sexeData,
@@ -116,16 +130,26 @@ const DashboardVictims = () => {
           categorieData,
           prejudiceData
         ] = await Promise.all([
-          fetcher('/victime/stats/sexe'),
-          fetcher('/victime/stats/tranche-age'),
-          fetcher('/victime/stats/province'),
-          fetcher('/victime/stats/programme'),
-          fetcher('/victime/stats/territoire'),
-          fetcher('/victime/stats/prejudice-final'),
-          fetcher('/victime/stats/total-indemnisation'),
-          fetcher('/victime/stats/categorie'),
-          fetcher('/victime/stats/prejudice')
+          safeFetch('/victime/stats/sexe', []),
+          safeFetch('/victime/stats/tranche-age', []),
+          safeFetch('/victime/stats/province', []),
+          safeFetch('/victime/stats/programme', []),
+          safeFetch('/victime/stats/territoire', []),
+          safeFetch('/victime/stats/prejudice-final', []),
+          safeFetch('/victime/stats/total-indemnisation', { totalIndemnisation: 0 }),
+          safeFetch('/victime/stats/categorie', []),
+          safeFetch('/victime/stats/prejudice', [])
         ]);
+
+        // Vérifier si toutes les données sont vides (API probablement non disponible)
+        const allEmpty = [
+          sexeData, trancheAgeData, provinceData, programmeData,
+          territoireData, prejudiceFinalData, categorieData, prejudiceData
+        ].every(data => !data || (Array.isArray(data) && data.length === 0));
+
+        if (allEmpty) {
+          setError("Les statistiques ne sont pas disponibles pour le moment. L'API de statistiques victimes n'est pas accessible.");
+        }
 
         setStats({
           sexe: sexeData || [],
@@ -138,8 +162,9 @@ const DashboardVictims = () => {
           categorie: categorieData || [],
           prejudice: prejudiceData || []
         });
-      } catch (error) {
-        console.log('Erreur lors du chargement des statistiques:', error);
+      } catch (err) {
+        console.log('[Dashboard LUC] Erreur lors du chargement des statistiques:', err);
+        setError("Impossible de charger les statistiques. Veuillez vérifier votre connexion ou réessayer plus tard.");
       } finally {
         setLoading(false);
       }
@@ -204,6 +229,17 @@ const DashboardVictims = () => {
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Tableau de Bord des Victimes</h1>
         <p className="text-gray-600">Vue d'ensemble des données et statistiques du système FONAREV</p>
       </div>
+
+      {/* Message d'erreur si API non disponible */}
+      {error && (
+        <div className="mb-8 bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-3">
+          <FiAlertTriangle className="text-amber-500 text-xl flex-shrink-0" />
+          <div>
+            <p className="text-amber-800 font-medium">Données non disponibles</p>
+            <p className="text-amber-600 text-sm">{error}</p>
+          </div>
+        </div>
+      )}
 
       {/* Cartes de statistiques principales */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
