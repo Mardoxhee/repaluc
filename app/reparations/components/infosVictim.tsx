@@ -1,8 +1,13 @@
-import React from 'react';
-import { DollarSign, FileText, User, MapPin, Calendar, Shield, Check, UserCircle } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Camera, DollarSign, FileText, RefreshCw, User, MapPin, Calendar, Shield, Check, UserCircle, X } from 'lucide-react';
+import Swal from 'sweetalert2';
+import { isOnline } from '@/app/utils/victimsCache';
+import { savePendingVictimPhoto, getLatestVictimPhoto } from '@/app/utils/victimPhotosCache';
+import { syncPendingVictimPhotos } from '@/app/utils/victimPhotosSyncService';
 
 interface InfosVictimProps {
     victim: {
+        id: number;
         nom?: string;
         dateNaissance?: string;
         age?: number;
@@ -37,6 +42,7 @@ interface InfosVictimProps {
         comment?: string;
         commentaire?: string;
         avatar?: string;
+        photo?: string | null;
         isDirect?: boolean;
         programme?: string;
         variablesSpecifiques?: {
@@ -48,11 +54,12 @@ interface InfosVictimProps {
             "NUMÉRO BLOC DU MÉNAGE"?: string;
             [key: string]: string | undefined;
         };
-    }
+    };
 }
 
 const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
     const {
+        id,
         nom,
         dateNaissance,
         age,
@@ -87,9 +94,221 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
         comment,
         commentaire,
         avatar,
+        photo,
     } = victim;
     const { isDirect } = victim;
 
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const videoRef = useRef<HTMLVideoElement | null>(null);
+    const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+    const [localPhotoPreview, setLocalPhotoPreview] = useState<string | null>(null);
+    const [savingPhoto, setSavingPhoto] = useState(false);
+
+    const [showCamera, setShowCamera] = useState(false);
+    const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('environment');
+    const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+    const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
+
+    const displayedPhoto = photo || avatar || localPhotoPreview;
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadLocalPhoto = async () => {
+            try {
+                const latest = await getLatestVictimPhoto(id);
+                if (!cancelled && latest?.photoDataUrl) {
+                    setLocalPhotoPreview(latest.photoDataUrl);
+                }
+            } catch {
+                // ignore
+            }
+        };
+
+        loadLocalPhoto();
+        return () => {
+            cancelled = true;
+        };
+    }, [id]);
+
+    const stopCamera = useCallback(() => {
+        if (cameraStream) {
+            for (const track of cameraStream.getTracks()) {
+                track.stop();
+            }
+        }
+        setCameraStream(null);
+        if (videoRef.current) {
+            videoRef.current.srcObject = null;
+        }
+    }, [cameraStream]);
+
+    const startCamera = useCallback(async (facingMode: 'user' | 'environment') => {
+        if (!navigator?.mediaDevices?.getUserMedia) {
+            throw new Error('Caméra non supportée sur cet appareil');
+        }
+
+        stopCamera();
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                facingMode: { ideal: facingMode },
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+            },
+            audio: false,
+        });
+
+        setCameraStream(stream);
+        if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            // iOS/Safari: play() trop tôt => écran noir. On attend loadedmetadata.
+            await new Promise<void>((resolve) => {
+                const video = videoRef.current;
+                if (!video) {
+                    resolve();
+                    return;
+                }
+
+                const onLoaded = () => {
+                    video.removeEventListener('loadedmetadata', onLoaded);
+                    resolve();
+                };
+                video.addEventListener('loadedmetadata', onLoaded);
+
+                // Fallback si l'événement n'arrive pas
+                setTimeout(() => {
+                    video.removeEventListener('loadedmetadata', onLoaded);
+                    resolve();
+                }, 1200);
+            });
+
+            try {
+                await videoRef.current.play();
+            } catch {
+                // ignore
+            }
+        }
+    }, [stopCamera]);
+
+    useEffect(() => {
+        if (!showCamera) return;
+
+        let cancelled = false;
+
+        const run = async () => {
+            try {
+                await startCamera(cameraFacingMode);
+            } catch (e: any) {
+                if (cancelled) return;
+                setShowCamera(false);
+                await Swal.fire({
+                    icon: 'error',
+                    title: 'Caméra indisponible',
+                    text: e?.message || 'Impossible d\'accéder à la caméra',
+                    confirmButtonColor: '#901c67'
+                });
+            }
+        };
+
+        run();
+
+        return () => {
+            cancelled = true;
+            stopCamera();
+            setCapturedPhoto(null);
+        };
+    }, [showCamera, cameraFacingMode, startCamera, stopCamera]);
+
+    const handlePickPhoto = async () => {
+        // Essayer la vraie caméra (preview + switch). Sinon fallback sur input file.
+        if (navigator?.mediaDevices?.getUserMedia) {
+            setCapturedPhoto(null);
+            setShowCamera(true);
+            return;
+        }
+
+        fileInputRef.current?.click();
+    };
+
+    const handleSwitchCamera = async () => {
+        const next = cameraFacingMode === 'environment' ? 'user' : 'environment';
+        setCameraFacingMode(next);
+        setCapturedPhoto(null);
+    };
+
+    const handleCapture = () => {
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        if (!video || !canvas) return;
+
+        const width = video.videoWidth || 720;
+        const height = video.videoHeight || 1280;
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        ctx.drawImage(video, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+        setCapturedPhoto(dataUrl);
+    };
+
+    const handleRetake = () => {
+        setCapturedPhoto(null);
+    };
+
+    const persistPhoto = useCallback(async (dataUrl: string) => {
+        setSavingPhoto(true);
+        try {
+            setLocalPhotoPreview(dataUrl);
+            await savePendingVictimPhoto(id, dataUrl);
+
+            if (isOnline()) {
+                await syncPendingVictimPhotos();
+            }
+
+            await Swal.fire({
+                icon: 'success',
+                title: 'Photo enregistrée',
+                text: isOnline()
+                    ? 'Photo enregistrée. Synchronisation en cours si nécessaire.'
+                    : 'Photo enregistrée hors ligne. Elle sera envoyée à la reconnexion.',
+                timer: 1800,
+                showConfirmButton: false
+            });
+        } finally {
+            setSavingPhoto(false);
+        }
+    }, [id]);
+
+    const handlePhotoSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        try {
+            const dataUrl = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onerror = () => reject(new Error('Impossible de lire le fichier'));
+                reader.onload = () => resolve(String(reader.result));
+                reader.readAsDataURL(file);
+            });
+
+            await persistPhoto(dataUrl);
+        } catch (err: any) {
+            await Swal.fire({
+                icon: 'error',
+                title: 'Erreur',
+                text: err?.message || 'Impossible d\'enregistrer la photo',
+                confirmButtonColor: '#901c67'
+            });
+        } finally {
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    };
 
     return (
         <div className="bg-white text-gray-900 max-w-5xl mx-auto print:max-w-none relative">
@@ -116,9 +335,9 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                 {/* Left Column - Photo & Key Info */}
                 <div className="col-span-12 md:col-span-4">
                     <div className="border border-gray-300 p-4 mb-4">
-                        {avatar ? (
+                        {displayedPhoto ? (
                             <img
-                                src={avatar}
+                                src={displayedPhoto}
                                 alt="Photo d'identité"
                                 className="w-32 h-32 object-cover border border-gray-400 mx-auto block rounded-lg"
                             />
@@ -128,7 +347,118 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                             </div>
                         )}
                         <p className="text-xs text-gray-500 text-center mt-2">Photo d'identité</p>
+
+                        <div className="mt-3 flex justify-center">
+                            <button
+                                type="button"
+                                onClick={handlePickPhoto}
+                                disabled={savingPhoto}
+                                className="flex items-center gap-2 px-3 py-2 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <Camera size={16} />
+                                {savingPhoto ? 'Enregistrement...' : 'Remplir la photo'}
+                            </button>
+                        </div>
+
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            onChange={handlePhotoSelected}
+                            className="hidden"
+                        />
                     </div>
+
+                    {showCamera && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+                            <div className="bg-white w-full max-w-md rounded-lg overflow-hidden shadow-xl">
+                                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+                                    <h3 className="text-sm font-semibold text-gray-800">Photo de la victime</h3>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowCamera(false)}
+                                        className="p-2 rounded hover:bg-gray-100 text-gray-600"
+                                        title="Fermer"
+                                    >
+                                        <X size={18} />
+                                    </button>
+                                </div>
+
+                                <div className="p-4">
+                                    <div className="w-full aspect-[3/4] bg-black rounded overflow-hidden relative">
+                                        {capturedPhoto ? (
+                                            <img src={capturedPhoto} alt="Capture" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <video
+                                                ref={videoRef}
+                                                className="w-full h-full object-cover"
+                                                playsInline
+                                                muted
+                                                autoPlay
+                                                onLoadedMetadata={() => {
+                                                    const v = videoRef.current;
+                                                    if (!v) return;
+                                                    v.play().catch(() => undefined);
+                                                }}
+                                            />
+                                        )}
+                                    </div>
+
+                                    <canvas ref={canvasRef} className="hidden" />
+
+                                    <div className="mt-4 flex items-center justify-between gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={handleSwitchCamera}
+                                            disabled={savingPhoto}
+                                            className="flex items-center gap-2 px-3 py-2 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                            title="Basculer caméra"
+                                        >
+                                            <RefreshCw size={16} />
+                                            Switch
+                                        </button>
+
+                                        {!capturedPhoto ? (
+                                            <button
+                                                type="button"
+                                                onClick={handleCapture}
+                                                disabled={savingPhoto}
+                                                className="flex-1 px-4 py-2 text-sm rounded text-white disabled:opacity-50"
+                                                style={{ backgroundColor: '#901c67' }}
+                                            >
+                                                Capturer
+                                            </button>
+                                        ) : (
+                                            <div className="flex-1 flex gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={handleRetake}
+                                                    disabled={savingPhoto}
+                                                    className="px-3 py-2 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                                >
+                                                    Refaire
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={async () => {
+                                                        if (!capturedPhoto) return;
+                                                        await persistPhoto(capturedPhoto);
+                                                        setShowCamera(false);
+                                                    }}
+                                                    disabled={savingPhoto}
+                                                    className="flex-1 px-4 py-2 text-sm rounded text-white disabled:opacity-50"
+                                                    style={{ backgroundColor: '#901c67' }}
+                                                >
+                                                    Utiliser
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Status Badges */}
                     <div className="space-y-3 mb-6">

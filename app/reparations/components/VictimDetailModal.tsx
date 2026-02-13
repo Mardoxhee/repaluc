@@ -80,6 +80,7 @@ interface Victim {
   status?: string;
   dossier?: string;
   avatar?: string;
+  photo?: string | null;
   comment?: string;
   commentaire?: string;
   prejudiceFinal?: string;
