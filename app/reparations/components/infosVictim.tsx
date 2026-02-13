@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Camera, DollarSign, FileText, RefreshCw, User, MapPin, Calendar, Shield, Check, UserCircle, X } from 'lucide-react';
+import { Camera, DollarSign, FileText, User, MapPin, Calendar, Shield, Check, UserCircle, FolderOpen, Loader2, RefreshCw, X } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { isOnline } from '@/app/utils/victimsCache';
 import { savePendingVictimPhoto, getLatestVictimPhoto } from '@/app/utils/victimPhotosCache';
@@ -98,19 +98,117 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
     } = victim;
     const { isDirect } = victim;
 
-    const fileInputRef = useRef<HTMLInputElement | null>(null);
+    // Deux références pour distinguer caméra et galerie
+    const cameraInputRef = useRef<HTMLInputElement | null>(null);
+    const galleryInputRef = useRef<HTMLInputElement | null>(null);
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
     const [localPhotoPreview, setLocalPhotoPreview] = useState<string | null>(null);
     const [savingPhoto, setSavingPhoto] = useState(false);
+    const [remoteResolvedSrc, setRemoteResolvedSrc] = useState<string | null>(null);
+    const [isResolvingRemote, setIsResolvingRemote] = useState(false);
+    const [isImageLoaded, setIsImageLoaded] = useState(false);
 
     const [showCamera, setShowCamera] = useState(false);
-    const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('environment');
-    const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
-    const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
+    const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
+    const [stream, setStream] = useState<MediaStream | null>(null);
+    const [capturedDataUrl, setCapturedDataUrl] = useState<string | null>(null);
 
-    const displayedPhoto = photo || avatar || localPhotoPreview;
+    const photoIsDirectUrl = !!photo && (photo.startsWith('http') || photo.startsWith('data:'));
+    const displayedPhoto =
+        (photoIsDirectUrl ? photo : null) ||
+        remoteResolvedSrc ||
+        localPhotoPreview ||
+        avatar;
+
+    useEffect(() => {
+        // Les dataURL (photo capturée / IDB) peuvent ne pas déclencher onLoad de façon fiable sur certains devices,
+        // ce qui laisse l'image en opacity-0. On force donc l'état "loaded" pour les dataURL.
+        if (displayedPhoto && displayedPhoto.startsWith('data:')) {
+            setIsImageLoaded(true);
+        } else {
+            setIsImageLoaded(false);
+        }
+    }, [displayedPhoto]);
+
+    const stopStream = useCallback((s: MediaStream | null) => {
+        if (!s) return;
+        for (const track of s.getTracks()) track.stop();
+    }, []);
+
+    const startCamera = useCallback(async () => {
+        if (typeof window === 'undefined') return;
+
+        if (!window.isSecureContext) {
+            throw new Error('La caméra nécessite HTTPS (ou localhost).');
+        }
+        if (!navigator?.mediaDevices?.getUserMedia) {
+            throw new Error('Ce navigateur ne supporte pas l\'accès caméra.');
+        }
+
+        stopStream(stream);
+        setStream(null);
+
+        const constraints: MediaStreamConstraints = {
+            video: { facingMode },
+            audio: false,
+        };
+
+        const nextStream = await navigator.mediaDevices.getUserMedia(constraints);
+        setStream(nextStream);
+
+        const video = videoRef.current;
+        if (video) {
+            video.srcObject = nextStream;
+
+            await new Promise<void>((resolve) => {
+                const onLoaded = () => {
+                    video.removeEventListener('loadedmetadata', onLoaded);
+                    resolve();
+                };
+                video.addEventListener('loadedmetadata', onLoaded);
+                setTimeout(() => {
+                    video.removeEventListener('loadedmetadata', onLoaded);
+                    resolve();
+                }, 1200);
+            });
+
+            await video.play().catch(() => undefined);
+        }
+    }, [facingMode, stopStream, stream]);
+
+    useEffect(() => {
+        if (!showCamera) return;
+
+        let cancelled = false;
+
+        const run = async () => {
+            try {
+                await startCamera();
+            } catch (e: any) {
+                if (cancelled) return;
+                setShowCamera(false);
+                await Swal.fire({
+                    icon: 'error',
+                    title: 'Caméra indisponible',
+                    text: e?.message || 'Impossible d\'accéder à la caméra',
+                    confirmButtonColor: '#901c67'
+                });
+            }
+        };
+
+        run();
+
+        return () => {
+            cancelled = true;
+            stopStream(stream);
+            setStream(null);
+            setCapturedDataUrl(null);
+            if (videoRef.current) videoRef.current.srcObject = null;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [showCamera, facingMode]);
 
     useEffect(() => {
         let cancelled = false;
@@ -132,139 +230,61 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
         };
     }, [id]);
 
-    const stopCamera = useCallback(() => {
-        if (cameraStream) {
-            for (const track of cameraStream.getTracks()) {
-                track.stop();
-            }
-        }
-        setCameraStream(null);
-        if (videoRef.current) {
-            videoRef.current.srcObject = null;
-        }
-    }, [cameraStream]);
-
-    const startCamera = useCallback(async (facingMode: 'user' | 'environment') => {
-        if (!navigator?.mediaDevices?.getUserMedia) {
-            throw new Error('Caméra non supportée sur cet appareil');
-        }
-
-        stopCamera();
-
-        const stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-                facingMode: { ideal: facingMode },
-                width: { ideal: 1280 },
-                height: { ideal: 720 },
-            },
-            audio: false,
-        });
-
-        setCameraStream(stream);
-        if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-            // iOS/Safari: play() trop tôt => écran noir. On attend loadedmetadata.
-            await new Promise<void>((resolve) => {
-                const video = videoRef.current;
-                if (!video) {
-                    resolve();
-                    return;
-                }
-
-                const onLoaded = () => {
-                    video.removeEventListener('loadedmetadata', onLoaded);
-                    resolve();
-                };
-                video.addEventListener('loadedmetadata', onLoaded);
-
-                // Fallback si l'événement n'arrive pas
-                setTimeout(() => {
-                    video.removeEventListener('loadedmetadata', onLoaded);
-                    resolve();
-                }, 1200);
-            });
-
-            try {
-                await videoRef.current.play();
-            } catch {
-                // ignore
-            }
-        }
-    }, [stopCamera]);
-
-    useEffect(() => {
-        if (!showCamera) return;
-
-        let cancelled = false;
-
-        const run = async () => {
-            try {
-                await startCamera(cameraFacingMode);
-            } catch (e: any) {
-                if (cancelled) return;
-                setShowCamera(false);
-                await Swal.fire({
-                    icon: 'error',
-                    title: 'Caméra indisponible',
-                    text: e?.message || 'Impossible d\'accéder à la caméra',
-                    confirmButtonColor: '#901c67'
-                });
-            }
-        };
-
-        run();
-
-        return () => {
-            cancelled = true;
-            stopCamera();
-            setCapturedPhoto(null);
-        };
-    }, [showCamera, cameraFacingMode, startCamera, stopCamera]);
-
-    const handlePickPhoto = async () => {
-        // Essayer la vraie caméra (preview + switch). Sinon fallback sur input file.
-        const hasGetUserMedia =
-            typeof navigator !== 'undefined' &&
-            !!navigator.mediaDevices &&
-            typeof navigator.mediaDevices.getUserMedia === 'function';
-
-        if (hasGetUserMedia) {
-            setCapturedPhoto(null);
-            setShowCamera(true);
-            return;
-        }
-
-        fileInputRef.current?.click();
-    };
-
-    const handleSwitchCamera = async () => {
-        const next = cameraFacingMode === 'environment' ? 'user' : 'environment';
-        setCameraFacingMode(next);
-        setCapturedPhoto(null);
-    };
-
-    const handleCapture = () => {
+    const takePhotoFromVideo = useCallback(async () => {
         const video = videoRef.current;
         const canvas = canvasRef.current;
         if (!video || !canvas) return;
 
-        const width = video.videoWidth || 720;
-        const height = video.videoHeight || 1280;
-
+        const width = video.videoWidth || 1280;
+        const height = video.videoHeight || 720;
         canvas.width = width;
         canvas.height = height;
 
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
-
         ctx.drawImage(video, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-        setCapturedPhoto(dataUrl);
-    };
 
-    const handleRetake = () => {
-        setCapturedPhoto(null);
-    };
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+        setCapturedDataUrl(dataUrl);
+    }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        setRemoteResolvedSrc(null);
+        setIsResolvingRemote(false);
+
+        const resolveRemote = async () => {
+            if (!photo) return;
+            if (photo.startsWith('data:') || photo.startsWith('http')) {
+                setRemoteResolvedSrc(photo);
+                return;
+            }
+
+            if (!isOnline()) return;
+            const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+            if (!baseUrl) return;
+
+            try {
+                setIsResolvingRemote(true);
+                const response = await fetch(`${baseUrl}/minio/files/${photo}`);
+                if (!response.ok) return;
+                const data = await response.json();
+                const src = data?.data?.src;
+                if (!cancelled && typeof src === 'string' && src.length > 0) {
+                    setRemoteResolvedSrc(src);
+                }
+            } catch {
+                // ignore
+            } finally {
+                if (!cancelled) setIsResolvingRemote(false);
+            }
+        };
+
+        resolveRemote();
+        return () => {
+            cancelled = true;
+        };
+    }, [photo]);
 
     const persistPhoto = useCallback(async (dataUrl: string) => {
         setSavingPhoto(true);
@@ -273,7 +293,8 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
             await savePendingVictimPhoto(id, dataUrl);
 
             if (isOnline()) {
-                await syncPendingVictimPhotos();
+                // Ne pas bloquer l'UI sur le réseau
+                syncPendingVictimPhotos().catch(() => undefined);
             }
 
             await Swal.fire({
@@ -311,20 +332,14 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                 confirmButtonColor: '#901c67'
             });
         } finally {
-            if (fileInputRef.current) fileInputRef.current.value = '';
+            // Réinitialiser les deux inputs pour permettre de re-sélectionner le même fichier
+            if (cameraInputRef.current) cameraInputRef.current.value = '';
+            if (galleryInputRef.current) galleryInputRef.current.value = '';
         }
     };
 
     return (
         <div className="bg-white text-gray-900 max-w-5xl mx-auto print:max-w-none relative">
-            {/* Export PDF Button */}
-            {/* <button
-                onClick={handleExportPDF}
-                className="absolute right-0 top-0 mt-4 mr-4 px-4 py-2 bg-pink-700 hover:bg-pink-800 text-white font-bold rounded shadow print:hidden z-20"
-                type="button"
-            >
-                Exporter en PDF
-            </button> */}
             {/* Header */}
             <div className="border-b-2 border-gray-800 pb-4 mb-6">
                 <h1 className="text-2xl font-bold text-gray-800 text-center tracking-wide">
@@ -341,11 +356,20 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                 <div className="col-span-12 md:col-span-4">
                     <div className="border border-gray-300 p-4 mb-4">
                         {displayedPhoto ? (
-                            <img
-                                src={displayedPhoto}
-                                alt="Photo d'identité"
-                                className="w-32 h-32 object-cover border border-gray-400 mx-auto block rounded-lg"
-                            />
+                            <div className="w-32 h-32 mx-auto relative">
+                                {!isImageLoaded && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 border border-gray-400 rounded-lg">
+                                        <Loader2 className="w-6 h-6 text-gray-500 animate-spin" />
+                                    </div>
+                                )}
+                                <img
+                                    src={displayedPhoto}
+                                    alt="Photo d'identité"
+                                    className={`w-32 h-32 object-cover border border-gray-400 mx-auto block rounded-lg ${isImageLoaded ? 'opacity-100' : 'opacity-0'}`}
+                                    onLoad={() => setIsImageLoaded(true)}
+                                    onError={() => setIsImageLoaded(true)}
+                                />
+                            </div>
                         ) : (
                             <div className="w-32 h-32 mx-auto flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 border border-gray-400 rounded-lg">
                                 <UserCircle className="w-20 h-20 text-gray-400" />
@@ -353,23 +377,53 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                         )}
                         <p className="text-xs text-gray-500 text-center mt-2">Photo d'identité</p>
 
-                        <div className="mt-3 flex justify-center">
+                        {/* Deux boutons pour capturer ou choisir une photo */}
+                        <div className="mt-3 flex flex-col gap-2">
                             <button
                                 type="button"
-                                onClick={handlePickPhoto}
-                                disabled={savingPhoto}
-                                className="flex items-center gap-2 px-3 py-2 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                onClick={() => {
+                                    setCapturedDataUrl(null);
+                                    setShowCamera(true);
+                                }}
+                                disabled={savingPhoto || isResolvingRemote}
+                                className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm rounded text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                style={{ backgroundColor: '#901c67' }}
                             >
                                 <Camera size={16} />
-                                {savingPhoto ? 'Enregistrement...' : 'Remplir la photo'}
+                                {savingPhoto ? 'Enregistrement...' : 'Prendre une photo'}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => galleryInputRef.current?.click()}
+                                disabled={savingPhoto || isResolvingRemote}
+                                className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <FolderOpen size={16} />
+                                Choisir dans la galerie
                             </button>
                         </div>
 
+                        {(isResolvingRemote || savingPhoto) && (
+                            <div className="mt-2 flex items-center justify-center gap-2 text-xs text-gray-500">
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <span>{savingPhoto ? 'Enregistrement / synchronisation...' : 'Chargement de la photo...'}</span>
+                            </div>
+                        )}
+
+                        {/* Input caché pour la caméra (avec capture) */}
                         <input
-                            ref={fileInputRef}
+                            ref={cameraInputRef}
                             type="file"
                             accept="image/*"
                             capture="environment"
+                            onChange={handlePhotoSelected}
+                            className="hidden"
+                        />
+                        {/* Input caché pour la galerie (sans capture) */}
+                        <input
+                            ref={galleryInputRef}
+                            type="file"
+                            accept="image/*"
                             onChange={handlePhotoSelected}
                             className="hidden"
                         />
@@ -379,7 +433,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
                             <div className="bg-white w-full max-w-md rounded-lg overflow-hidden shadow-xl">
                                 <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-                                    <h3 className="text-sm font-semibold text-gray-800">Photo de la victime</h3>
+                                    <h3 className="text-sm font-semibold text-gray-800">Caméra</h3>
                                     <button
                                         type="button"
                                         onClick={() => setShowCamera(false)}
@@ -391,9 +445,9 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                                 </div>
 
                                 <div className="p-4">
-                                    <div className="w-full aspect-[3/4] bg-black rounded overflow-hidden relative">
-                                        {capturedPhoto ? (
-                                            <img src={capturedPhoto} alt="Capture" className="w-full h-full object-cover" />
+                                    <div className="w-full h-[420px] bg-black rounded overflow-hidden relative">
+                                        {capturedDataUrl ? (
+                                            <img src={capturedDataUrl} alt="Capture" className="w-full h-full object-cover" />
                                         ) : (
                                             <video
                                                 ref={videoRef}
@@ -401,11 +455,6 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                                                 playsInline
                                                 muted
                                                 autoPlay
-                                                onLoadedMetadata={() => {
-                                                    const v = videoRef.current;
-                                                    if (!v) return;
-                                                    v.play().catch(() => undefined);
-                                                }}
                                             />
                                         )}
                                     </div>
@@ -415,7 +464,10 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                                     <div className="mt-4 flex items-center justify-between gap-2">
                                         <button
                                             type="button"
-                                            onClick={handleSwitchCamera}
+                                            onClick={() => {
+                                                setCapturedDataUrl(null);
+                                                setFacingMode((f) => (f === 'user' ? 'environment' : 'user'));
+                                            }}
                                             disabled={savingPhoto}
                                             className="flex items-center gap-2 px-3 py-2 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                                             title="Basculer caméra"
@@ -424,11 +476,11 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                                             Switch
                                         </button>
 
-                                        {!capturedPhoto ? (
+                                        {!capturedDataUrl ? (
                                             <button
                                                 type="button"
-                                                onClick={handleCapture}
-                                                disabled={savingPhoto}
+                                                onClick={takePhotoFromVideo}
+                                                disabled={!stream || savingPhoto}
                                                 className="flex-1 px-4 py-2 text-sm rounded text-white disabled:opacity-50"
                                                 style={{ backgroundColor: '#901c67' }}
                                             >
@@ -438,7 +490,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                                             <div className="flex-1 flex gap-2">
                                                 <button
                                                     type="button"
-                                                    onClick={handleRetake}
+                                                    onClick={() => setCapturedDataUrl(null)}
                                                     disabled={savingPhoto}
                                                     className="px-3 py-2 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                                                 >
@@ -447,8 +499,8 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                                                 <button
                                                     type="button"
                                                     onClick={async () => {
-                                                        if (!capturedPhoto) return;
-                                                        await persistPhoto(capturedPhoto);
+                                                        if (!capturedDataUrl) return;
+                                                        await persistPhoto(capturedDataUrl);
                                                         setShowCamera(false);
                                                     }}
                                                     disabled={savingPhoto}
@@ -460,14 +512,20 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                                             </div>
                                         )}
                                     </div>
+
+                                    {(savingPhoto || !stream) && !capturedDataUrl && (
+                                        <div className="mt-3 flex items-center justify-center gap-2 text-xs text-gray-500">
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            <span>{savingPhoto ? 'Enregistrement / synchronisation...' : 'Démarrage caméra...'}</span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* Status Badges */}
+                    {/* Status Badges (inchangé) */}
                     <div className="space-y-3 mb-6">
-                        {/* Flag Victime Directe/Indirecte (badge discret) */}
                         <div className="border border-gray-300 p-3">
                             <div className="flex items-center gap-2 mb-2">
                                 <Shield className="text-gray-600" size={14} />
@@ -477,11 +535,6 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                                 <span className="text-sm font-medium text-gray-800">{isDirect || "Non spécifié"}</span>
                             </div>
                         </div>
-                        {/* {isDirect ?
-                            <span className="inline-block px-2 py-1 text-xs font-semibold rounded bg-green-100 text-green-700 border border-green-300 mb-2">
-                                {isDirect}
-                            </span>
-                            : null} */}
                         <div className="border border-gray-300 p-3">
                             <div className="flex items-center gap-2 mb-2">
                                 <User className="text-gray-600" size={14} />
@@ -491,7 +544,6 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                                 <span className="text-sm font-medium text-gray-800">{categorie || "Non spécifiée"}</span>
                             </div>
                         </div>
-
                         <div className="border border-gray-300 p-3">
                             <div className="flex items-center gap-2 mb-2">
                                 <Shield className="text-gray-600" size={14} />
@@ -501,7 +553,6 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                                 <span className="text-sm font-medium text-gray-800">{typeViolation || "Non spécifié"}</span>
                             </div>
                         </div>
-
                         <div className="border border-gray-300 p-3">
                             <div className="flex items-center gap-2 mb-2">
                                 <FileText className="text-gray-600" size={14} />
@@ -511,7 +562,6 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                                 <span className="text-sm font-medium text-gray-800">{programme || "Non spécifiés"}</span>
                             </div>
                         </div>
-
                         <div className="border border-gray-300 p-3">
                             <div className="flex items-center gap-2 mb-2">
                                 <Calendar className="text-gray-600" size={14} />
@@ -527,7 +577,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                     </div>
                 </div>
 
-                {/* Right Column - Detailed Information */}
+                {/* Right Column - Detailed Information (inchangé) */}
                 <div className="col-span-12 md:col-span-8">
                     {/* Personal Information */}
                     <div className="mb-6">
@@ -732,7 +782,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                     {/* Compensation & Final Damage */}
                     <div className="mb-6">
                         <div className="bg-blue-600 text-white px-4 py-2 border-b">
-                            <h2 className="font-bold text-sm uppercase tracking-wide">5. Préjudice et Mésure de réparation</h2>
+                            <h2 className="font-bold text-sm uppercase tracking-wide">6. Préjudice et Mésure de réparation</h2>
                         </div>
                         <div className="border border-gray-300 border-t-0 p-4">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -765,7 +815,6 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                                         {reparations.split(',').map((item, idx) => (
                                             <li key={idx} className="flex items-center justify-between px-4 py-2">
                                                 <span className="text-sm text-gray-800">{item.trim()}</span>
-                                                {/* <Check size={18} className="text-green-600" /> */}
                                             </li>
                                         ))}
                                     </ul>
@@ -777,7 +826,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                     {/* Comments */}
                     <div className="mb-6">
                         <div className="bg-blue-600 text-white px-4 py-2 border-b">
-                            <h2 className="font-bold text-sm uppercase tracking-wide">6. Observations</h2>
+                            <h2 className="font-bold text-sm uppercase tracking-wide">7. Observations</h2>
                         </div>
                         <div className="border border-gray-300 border-t-0 p-4">
                             <div className="bg-gray-50 border border-gray-200 p-4 min-h-20">

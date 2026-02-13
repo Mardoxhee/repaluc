@@ -28,7 +28,13 @@ const uploadPhoto = async (dataUrl: string, victimId: number): Promise<string> =
   });
 
   if (!resp.ok) {
-    throw new Error(`Failed to upload photo: ${resp.statusText}`);
+    let bodyText = '';
+    try {
+      bodyText = await resp.text();
+    } catch {
+      // ignore
+    }
+    throw new Error(`Failed to upload photo: ${resp.status} ${resp.statusText}${bodyText ? ` - ${bodyText}` : ''}`);
   }
 
   const data = await resp.json();
@@ -49,6 +55,16 @@ const patchVictimPhoto = async (victimId: number, photoUrl: string): Promise<boo
     },
     body: JSON.stringify({ photo: photoUrl }),
   });
+
+  if (!resp.ok) {
+    let bodyText = '';
+    try {
+      bodyText = await resp.text();
+    } catch {
+      // ignore
+    }
+    console.error('[VictimPhotosSync] PATCH failed', { victimId, status: resp.status, statusText: resp.statusText, bodyText });
+  }
 
   return resp.ok;
 };
@@ -98,7 +114,12 @@ export const syncPendingVictimPhotos = async (): Promise<{ synced: number; faile
 
         await markVictimPhotoSynced(item.id, remoteUrl);
         synced++;
-      } catch {
+      } catch (e) {
+        console.error('[VictimPhotosSync] Failed to sync photo', {
+          itemId: item.id,
+          victimId: item.victimId,
+          error: e,
+        });
         failed++;
       }
     }
