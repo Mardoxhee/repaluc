@@ -1,7 +1,8 @@
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext, useEffect, useRef } from 'react';
 import {
   Info,
   FileText,
+  Camera,
   Edit,
   Trash,
   Plus,
@@ -13,6 +14,7 @@ import {
   Settings,
   UserCheck,
   Loader2,
+  RefreshCw,
   Stethoscope,
   ClipboardList,
   ChevronRight
@@ -26,6 +28,8 @@ import Formulaireplandevie from './formulaireplandevie';
 import ContratVictim from './contrat';
 import SuiviPaiement from './SuiviPaiement';
 import Swal from 'sweetalert2';
+import { isOnline } from '@/app/utils/victimsCache';
+import { getPendingDocsForVictim, getPendingVictimDocById, savePendingVictimDoc } from '@/app/utils/victimDocsCache';
 
 // Fonction pour obtenir le lien réel du fichier
 const getFileLink = async (lien: string): Promise<string> => {
@@ -112,15 +116,133 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
   const [loadingFiles, setLoadingFiles] = useState(true);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [newFileFile, setNewFileFile] = useState<File | null>(null);
+  const [pendingDocs, setPendingDocs] = useState<Array<{ id: number; label: string; name: string }>>([]);
   const [selectedFile, setSelectedFile] = useState<{ id: number; label: string; name: string; lien?: string } | null>(null);
   const [editFileIdx, setEditFileIdx] = useState<number | null>(null);
   const [editFileLabel, setEditFileLabel] = useState('');
   const [editFileName, setEditFileName] = useState('');
   const [addFileMode, setAddFileMode] = useState(false);
+  const [docLabelPreset, setDocLabelPreset] = useState<'piece_identite' | 'autre'>('piece_identite');
   const [newFileLabel, setNewFileLabel] = useState('');
   const [newFileName, setNewFileName] = useState('');
+  const fileDocInputRef = useRef<HTMLInputElement | null>(null);
+
+  const docVideoRef = useRef<HTMLVideoElement | null>(null);
+  const docCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [showDocCamera, setShowDocCamera] = useState(false);
+  const [docFacingMode, setDocFacingMode] = useState<'user' | 'environment'>('environment');
+  const [docStream, setDocStream] = useState<MediaStream | null>(null);
+  const [docCapturedDataUrl, setDocCapturedDataUrl] = useState<string | null>(null);
   const [questions, setQuestions] = useState(null);
   const [loadingQuestions, setLoadingQuestions] = useState(false);
+
+  const [showDocPreview, setShowDocPreview] = useState(false);
+  const [docPreviewUrl, setDocPreviewUrl] = useState<string | null>(null);
+  const [docPreviewTitle, setDocPreviewTitle] = useState<string>('Document');
+  const [docPreviewIsObjectUrl, setDocPreviewIsObjectUrl] = useState(false);
+
+  const stopDocStream = (s: MediaStream | null) => {
+    if (!s) return;
+    for (const track of s.getTracks()) track.stop();
+  };
+
+  const startDocCamera = async () => {
+    if (typeof window === 'undefined') return;
+    if (!window.isSecureContext) {
+      throw new Error('La caméra nécessite HTTPS (ou localhost).');
+    }
+    if (!navigator?.mediaDevices?.getUserMedia) {
+      throw new Error('Ce navigateur ne supporte pas l\'accès caméra.');
+    }
+
+    stopDocStream(docStream);
+    setDocStream(null);
+
+    const constraints: MediaStreamConstraints = {
+      video: { facingMode: docFacingMode },
+      audio: false,
+    };
+
+    const nextStream = await navigator.mediaDevices.getUserMedia(constraints);
+    setDocStream(nextStream);
+
+    const video = docVideoRef.current;
+    if (video) {
+      video.srcObject = nextStream;
+
+      await new Promise<void>((resolve) => {
+        const onLoaded = () => {
+          video.removeEventListener('loadedmetadata', onLoaded);
+          resolve();
+        };
+        video.addEventListener('loadedmetadata', onLoaded);
+        setTimeout(() => {
+          video.removeEventListener('loadedmetadata', onLoaded);
+          resolve();
+        }, 1200);
+      });
+
+      await video.play().catch(() => undefined);
+    }
+  };
+
+  useEffect(() => {
+    if (!showDocCamera) return;
+    let cancelled = false;
+
+    const run = async () => {
+      try {
+        await startDocCamera();
+      } catch (e: any) {
+        if (cancelled) return;
+        setShowDocCamera(false);
+        await Swal.fire({
+          icon: 'error',
+          title: 'Caméra indisponible',
+          text: e?.message || 'Impossible d\'accéder à la caméra',
+        });
+      }
+    };
+
+    run();
+
+    return () => {
+      cancelled = true;
+      stopDocStream(docStream);
+      setDocStream(null);
+      setDocCapturedDataUrl(null);
+      if (docVideoRef.current) docVideoRef.current.srcObject = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showDocCamera, docFacingMode]);
+
+  const captureDoc = async () => {
+    const video = docVideoRef.current;
+    const canvas = docCanvasRef.current;
+    if (!video || !canvas) return;
+
+    const width = video.videoWidth || 1280;
+    const height = video.videoHeight || 720;
+    canvas.width = width;
+    canvas.height = height;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, width, height);
+
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+    setDocCapturedDataUrl(dataUrl);
+  };
+
+  const useCapturedDoc = async () => {
+    if (!docCapturedDataUrl) return;
+    const res = await fetch(docCapturedDataUrl);
+    const blob = await res.blob();
+    const ext = blob.type === 'image/jpeg' ? 'jpg' : 'png';
+    const file = new File([blob], `document_${currentVictim.id}_${Date.now()}.${ext}`, { type: blob.type || 'image/jpeg' });
+    setNewFileFile(file);
+    setShowDocCamera(false);
+  };
 
   // Charger les questions depuis le cache
   useEffect(() => {
@@ -207,8 +329,55 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
     fetchDocs();
   }, [currentVictim?.id]);
 
+  // Charger les documents en attente (offline) depuis IndexedDB
+  React.useEffect(() => {
+    if (!currentVictim?.id) return;
+    let cancelled = false;
+
+    const loadPending = async () => {
+      try {
+        const pending = await getPendingDocsForVictim(currentVictim.id);
+        if (cancelled) return;
+        setPendingDocs(
+          pending
+            .filter((d) => !d.synced)
+            .map((d) => ({ id: d.id || 0, label: d.label, name: d.fileName }))
+            .filter((d) => d.id)
+        );
+      } catch {
+        if (!cancelled) setPendingDocs([]);
+      }
+    };
+
+    loadPending();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentVictim?.id, tab]);
+
   // Fonction pour ouvrir un fichier
   const handleOpenFile = async (file: { id: number; label: string; name?: string; lien?: string }) => {
+    // Doc en attente (offline)
+    if (!file.lien && typeof file.id === 'number') {
+      try {
+        const pending = await getPendingVictimDocById(file.id);
+        if (!pending?.fileData) throw new Error('Document local introuvable');
+        const url = URL.createObjectURL(pending.fileData);
+        setDocPreviewTitle(file.label || 'Document');
+        setDocPreviewUrl(url);
+        setDocPreviewIsObjectUrl(true);
+        setShowDocPreview(true);
+        return;
+      } catch (error) {
+        await Swal.fire({
+          icon: 'error',
+          title: 'Erreur',
+          text: 'Impossible d\'ouvrir le document local',
+        });
+        return;
+      }
+    }
+
     if (!file.lien) {
       await Swal.fire({
         icon: 'error',
@@ -220,7 +389,10 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
 
     try {
       const fileUrl = await getFileLink(file.lien);
-      window.open(fileUrl, '_blank');
+      setDocPreviewTitle(file.label || 'Document');
+      setDocPreviewUrl(fileUrl);
+      setDocPreviewIsObjectUrl(false);
+      setShowDocPreview(true);
     } catch (error) {
       await Swal.fire({
         icon: 'error',
@@ -229,6 +401,15 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
       });
     }
   };
+
+  useEffect(() => {
+    if (!showDocPreview) return;
+    return () => {
+      if (docPreviewIsObjectUrl && docPreviewUrl) {
+        URL.revokeObjectURL(docPreviewUrl);
+      }
+    };
+  }, [showDocPreview, docPreviewIsObjectUrl, docPreviewUrl]);
 
   const confirmVictim = async () => {
     if (!currentVictim.id) {
@@ -383,8 +564,50 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
               {/* Section gestion des fichiers */}
               <h4 className="font-semibold !text-gray-700 mb-4">Gestion des fichiers</h4>
               <div className="space-y-2 mb-4">
+                {pendingDocs.map((doc) => (
+                  <div
+                    key={`pending-${doc.id}`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleOpenFile({ id: doc.id, label: doc.label, name: doc.name })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') handleOpenFile({ id: doc.id, label: doc.label, name: doc.name });
+                    }}
+                    className="w-full text-left flex items-center justify-between p-3 !bg-yellow-50 rounded-lg !border !border-yellow-200 hover:!bg-yellow-100 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-3">
+                      <FileText className="!text-yellow-700" size={16} />
+                      <div>
+                        <div className="text-sm font-medium !text-gray-700">{doc.label} <span className="text-xs !text-yellow-800">(en attente)</span></div>
+                        <div className="text-xs !text-gray-600">{doc.name}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenFile({ id: doc.id, label: doc.label, name: doc.name });
+                        }}
+                        className="px-2 py-1 !bg-yellow-100 !text-yellow-800 text-sm rounded hover:!bg-yellow-200 flex items-center gap-1"
+                        title="Voir le document"
+                      >
+                        <Eye size={16} className="text-yellow-800" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
                 {files.map((file, idx) => (
-                  <div key={file.id} className="flex items-center justify-between p-3 !bg-gray-50 rounded-lg !border !border-gray-200">
+                  <div
+                    key={file.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleOpenFile(file)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') handleOpenFile(file);
+                    }}
+                    className="flex items-center justify-between p-3 !bg-gray-50 rounded-lg !border !border-gray-200 hover:!bg-gray-100 transition-colors cursor-pointer"
+                  >
                     {editFileIdx === idx ? (
                       <div className="flex items-center gap-2 flex-1">
                         <input
@@ -429,7 +652,8 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                         <div className="flex items-center gap-2">
                           <button
                             className="px-2 py-1 !bg-blue-50 !text-blue-600 text-sm rounded hover:!bg-blue-100 flex items-center gap-1"
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               setEditFileIdx(idx);
                               setEditFileLabel(file.label);
                               setEditFileName(file.name || '');
@@ -439,7 +663,8 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                           </button>
                           <button
                             className="px-2 py-1 !bg-red-50 !text-red-600 text-sm rounded hover:!bg-red-100 flex items-center gap-1"
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               if (window.confirm('Supprimer ce fichier ?')) {
                                 setFiles(files.filter((_, i) => i !== idx));
                               }
@@ -449,7 +674,10 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleOpenFile(file)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenFile(file);
+                            }}
                             className="px-2 py-1 !bg-blue-50 !text-blue-600 text-sm rounded hover:!bg-blue-100 flex items-center gap-1"
                             title="Voir le document"
                           >
@@ -462,6 +690,37 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                 ))}
               </div>
 
+              <Modal show={showDocPreview} onClose={() => setShowDocPreview(false)} size="3xl">
+                <div className="p-4 !bg-white !text-gray-900">
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <div className="text-sm font-semibold !text-gray-800 truncate">{docPreviewTitle}</div>
+                    <button
+                      type="button"
+                      onClick={() => setShowDocPreview(false)}
+                      className="p-2 rounded hover:!bg-gray-100 !text-gray-600"
+                      title="Fermer"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+
+                  <div className="w-full h-[70vh] border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
+                    {docPreviewUrl ? (
+                      docPreviewUrl.includes('data:image') || docPreviewUrl.match(/\.(png|jpe?g|webp)$/i) ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={docPreviewUrl} alt={docPreviewTitle} className="w-full h-full object-contain" />
+                      ) : (
+                        <iframe src={docPreviewUrl} className="w-full h-full" title={docPreviewTitle} />
+                      )
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-sm text-gray-500">
+                        Chargement...
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </Modal>
+
               {addFileMode ? (
                 <form
                   className="flex items-center gap-2 p-3 !bg-gray-50 rounded-lg !border !border-gray-200"
@@ -471,6 +730,33 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
 
                     setUploadingFile(true);
                     try {
+                      // Offline: stocker localement dans IndexedDB
+                      if (!isOnline()) {
+                        const idbId = await savePendingVictimDoc({
+                          victimId: currentVictim.id,
+                          label: newFileLabel,
+                          file: newFileFile,
+                        });
+
+                        setPendingDocs((prev) => [
+                          { id: idbId, label: newFileLabel, name: newFileFile.name },
+                          ...prev,
+                        ]);
+
+                        await Swal.fire({
+                          icon: 'success',
+                          title: 'Document enregistré',
+                          text: 'Document enregistré hors ligne. Il sera synchronisé à la reconnexion.',
+                          timer: 1500,
+                          showConfirmButton: false
+                        });
+
+                        setNewFileLabel('');
+                        setNewFileFile(null);
+                        setAddFileMode(false);
+                        return;
+                      }
+
                       // 1. Upload fichier sur Minio
                       const formData = new FormData();
                       formData.append('file', newFileFile);
@@ -544,18 +830,79 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                   }}
                 >
                   <input
-                    className="!border !border-gray-300 px-2 py-1 rounded text-sm flex-1 !bg-white !text-gray-900"
+                    type="hidden"
                     value={newFileLabel}
-                    onChange={e => setNewFileLabel(e.target.value)}
-                    placeholder="Label du fichier"
-                    required
-                    disabled={uploadingFile}
+                    readOnly
                   />
+
+                  <div className="flex flex-col gap-2 flex-1">
+                    <div className="flex items-center gap-2">
+                      <select
+                        className="!border !border-gray-300 px-2 py-1 rounded text-sm !bg-white !text-gray-900"
+                        value={docLabelPreset}
+                        onChange={(e) => {
+                          const v = e.target.value as any;
+                          setDocLabelPreset(v);
+                          if (v === 'piece_identite') {
+                            setNewFileLabel("Pièce d'identité");
+                          } else {
+                            setNewFileLabel('');
+                          }
+                        }}
+                        disabled={uploadingFile}
+                      >
+                        <option value="piece_identite">Pièce d'identité</option>
+                        <option value="autre">Autre</option>
+                      </select>
+
+                      {docLabelPreset === 'autre' && (
+                        <input
+                          className="!border !border-gray-300 px-2 py-1 rounded text-sm flex-1 !bg-white !text-gray-900"
+                          value={newFileLabel}
+                          onChange={e => setNewFileLabel(e.target.value)}
+                          placeholder="Label du fichier"
+                          required
+                          disabled={uploadingFile}
+                        />
+                      )}
+                    </div>
+
+                    {docLabelPreset === 'piece_identite' && (
+                      <div className="text-xs !text-gray-500">Label: Pièce d'identité</div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 flex-1">
+                    <button
+                      type="button"
+                      className="px-3 py-1 !bg-purple-600 !text-white text-sm rounded hover:!bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={() => {
+                        setDocCapturedDataUrl(null);
+                        setShowDocCamera(true);
+                      }}
+                      disabled={uploadingFile}
+                      title="Capturer un document"
+                    >
+                      <Camera size={14} className="inline-block mr-1" />
+                      Capturer
+                    </button>
+                    <button
+                      type="button"
+                      className="px-3 py-1 !bg-gray-200 !text-gray-800 text-sm rounded hover:!bg-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={() => fileDocInputRef.current?.click()}
+                      disabled={uploadingFile}
+                      title="Choisir un fichier"
+                    >
+                      Choisir
+                    </button>
+                    <div className="text-xs !text-gray-500 truncate flex-1">
+                      {newFileFile?.name || 'Aucun fichier'}
+                    </div>
+                  </div>
                   <input
+                    ref={fileDocInputRef}
                     type="file"
-                    className="!border !border-gray-300 px-2 py-1 rounded text-sm flex-1 !bg-white !text-gray-900"
+                    className="hidden"
                     onChange={e => setNewFileFile(e.target.files?.[0] || null)}
-                    required
                     disabled={uploadingFile}
                   />
                   <button
@@ -588,12 +935,104 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
               ) : (
                 <button
                   className="flex items-center gap-2 px-4 py-2 !bg-pink-600 !text-white text-sm font-medium rounded hover:!bg-pink-700 transition-colors"
-                  onClick={() => setAddFileMode(true)}
+                  onClick={() => {
+                    setDocLabelPreset('piece_identite');
+                    setNewFileLabel("Pièce d'identité");
+                    setAddFileMode(true);
+                  }}
                 >
                   <Plus size={16} />
                   Ajouter un fichier
                 </button>
               )}
+            </div>
+          )}
+
+          {showDocCamera && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+              <div className="bg-white w-full max-w-md rounded-lg overflow-hidden shadow-xl">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+                  <h3 className="text-sm font-semibold text-gray-800">Caméra (document)</h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowDocCamera(false)}
+                    className="p-2 rounded hover:bg-gray-100 text-gray-600"
+                    title="Fermer"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <div className="p-4">
+                  <div className="w-full h-[420px] bg-black rounded overflow-hidden relative">
+                    {docCapturedDataUrl ? (
+                      <img src={docCapturedDataUrl} alt="Capture" className="w-full h-full object-cover" />
+                    ) : (
+                      <video
+                        ref={docVideoRef}
+                        className="w-full h-full object-cover"
+                        playsInline
+                        muted
+                        autoPlay
+                      />
+                    )}
+                  </div>
+
+                  <canvas ref={docCanvasRef} className="hidden" />
+
+                  <div className="mt-4 flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDocCapturedDataUrl(null);
+                        setDocFacingMode((f) => (f === 'user' ? 'environment' : 'user'));
+                      }}
+                      className="flex items-center gap-2 px-3 py-2 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                      title="Basculer caméra"
+                    >
+                      <RefreshCw size={16} />
+                      Switch
+                    </button>
+
+                    {!docCapturedDataUrl ? (
+                      <button
+                        type="button"
+                        onClick={captureDoc}
+                        disabled={!docStream}
+                        className="flex-1 px-4 py-2 text-sm rounded text-white disabled:opacity-50"
+                        style={{ backgroundColor: '#901c67' }}
+                      >
+                        Capturer
+                      </button>
+                    ) : (
+                      <div className="flex-1 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDocCapturedDataUrl(null)}
+                          className="px-3 py-2 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50"
+                        >
+                          Refaire
+                        </button>
+                        <button
+                          type="button"
+                          onClick={useCapturedDoc}
+                          className="flex-1 px-4 py-2 text-sm rounded text-white"
+                          style={{ backgroundColor: '#901c67' }}
+                        >
+                          Utiliser
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {!docStream && !docCapturedDataUrl && (
+                    <div className="mt-3 flex items-center justify-center gap-2 text-xs text-gray-500">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Démarrage caméra...</span>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
