@@ -223,7 +223,12 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
 
     const handlePickPhoto = async () => {
         // Essayer la vraie caméra (preview + switch). Sinon fallback sur input file.
-        if (navigator?.mediaDevices?.getUserMedia) {
+        const hasGetUserMedia =
+            typeof navigator !== 'undefined' &&
+            !!navigator.mediaDevices &&
+            typeof navigator.mediaDevices.getUserMedia === 'function';
+
+        if (hasGetUserMedia) {
             setCapturedPhoto(null);
             setShowCamera(true);
             return;
