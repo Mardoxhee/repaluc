@@ -3,7 +3,7 @@ import React, { useState, useEffect, useContext, useCallback, useMemo } from "re
 import { FetchContext } from "../../context/FetchContext";
 import Swal from 'sweetalert2';
 import VictimDetailModal from "./VictimDetailModal"
-import { Search, Filter, Eye, Users, ChevronLeft, ChevronRight, X, Plus, Check, Stethoscope, FileText, Wifi, WifiOff, AlertCircle } from 'lucide-react';
+import { Search, Filter, Eye, Users, ChevronLeft, ChevronRight, X, Plus, Check, Stethoscope, FileText, Wifi, WifiOff, AlertCircle, BadgeCheck } from 'lucide-react';
 import EvaluationModal from "./EvaluationModal";
 import ViewEvaluationModal from "./ViewEvaluationModal";
 import { saveVictimsToCache, getVictimsFromCache, isOnline, saveProgress, getProgress } from '../../utils/victimsCache';
@@ -673,6 +673,9 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
         switch (status?.toLowerCase()) {
             case 'confirmé':
                 return 'bg-green-50 text-green-700 border-green-200';
+            case 'admis à la luc':
+            case 'admis a la luc':
+                return 'bg-green-50 text-green-700 border-green-200';
             case 'non confirmé':
                 return 'bg-orange-50 text-orange-700 border-orange-200';
             case 'en traitement':
@@ -1046,7 +1049,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                         <th className="px-6 py-4 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">Province</th>
                                         <th className="px-6 py-4 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">Sexe</th>
                                         <th className="px-6 py-4 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">Statut</th>
-                                        <th className="px-6 py-4 text-center text-xs font-semibold text-gray-900 uppercase tracking-wider">Actions</th>
+                                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
@@ -1100,11 +1103,14 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <span className={`inline-flex items-center px-2 py-1 text-xs font-medium border ${getStatusBadgeStyle(victim.status)}`}>
+                                                    {(victim.status || '').toLowerCase() === 'admis à la luc' || (victim.status || '').toLowerCase() === 'admis a la luc' ? (
+                                                        <BadgeCheck size={14} className="mr-1" />
+                                                    ) : null}
                                                     {victim.status || "Non vérifié"}
                                                 </span>
                                             </td>
-                                            <td className="px-6 py-4 text-center">
-                                                <div className="flex items-center gap-2 justify-center">
+                                            <td className="px-6 py-4 text-left">
+                                                <div className="flex items-center gap-2 justify-start">
                                                     <button
                                                         onClick={() => {
                                                             setSelectedVictim(victim);
@@ -1116,7 +1122,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                                         <Eye size={14} />
                                                         Détails
                                                     </button>
-                                                    {(victim.status == 'A Evaluer' || victim.status?.toLowerCase() === 'evalué' || victim.status?.toLowerCase() === 'évalué' || victim.status?.toLowerCase() === 'contrôlé' || victim.status?.toLowerCase() === 'controle') && (
+                                                    {(victim.status == 'A Evaluer' || victim.status?.toLowerCase() === 'evalué' || victim.status?.toLowerCase() === 'évalué' || victim.status?.toLowerCase() === 'contrôlé' || victim.status?.toLowerCase() === 'controle') ? (
                                                         <button
                                                             onClick={() => {
                                                                 setSelectedVictimForEvaluation(victim);
@@ -1128,6 +1134,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                                             <Stethoscope size={14} />
                                                             Évaluer
                                                         </button>
+                                                    ) : (
+                                                        <span className="px-3 py-1 text-sm font-medium text-gray-400 select-none">-</span>
                                                     )}
                                                 </div>
                                             </td>

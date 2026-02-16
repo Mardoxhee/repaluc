@@ -36,6 +36,8 @@ const ReglagesPage = () => {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState<string | null>(null);
   const [online, setOnline] = useState(true);
+  const [mounted, setMounted] = useState(false);
+  const [lastUpdateTime, setLastUpdateTime] = useState<string>('');
   const [checkingVictimsCache, setCheckingVictimsCache] = useState(false);
   const [victimsStoreExists, setVictimsStoreExists] = useState<boolean | null>(null);
   const [cachedVictimsCount, setCachedVictimsCount] = useState<number>(0);
@@ -43,7 +45,78 @@ const ReglagesPage = () => {
   const [uploadingVictims, setUploadingVictims] = useState(false);
   const [victimsUploadProgress, setVictimsUploadProgress] = useState<{ sent: number; total: number } | null>(null);
 
+  const deleteDatabase = async (dbName: string): Promise<void> => {
+    await new Promise<void>((resolve, reject) => {
+      const req = indexedDB.deleteDatabase(dbName);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+      req.onblocked = () => resolve();
+    });
+  };
+
+  const clearAllCachesAndReload = async () => {
+    const result = await Swal.fire({
+      icon: 'warning',
+      title: 'Vider les caches',
+      text: 'Cette action supprime toutes les bases IndexedDB (toutes les tables) de l\'application. Voulez-vous continuer ?',
+      showCancelButton: true,
+      confirmButtonText: 'Oui, vider',
+      cancelButtonText: 'Annuler',
+      confirmButtonColor: '#dc2626'
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      const knownDbNames = [
+        'VictimsCache',
+        'PlanVieCache',
+        'ContractsDB',
+        'VictimPhotosDB',
+        'VictimDocsDB',
+        'DashboardCache',
+        'plan-vie-questions-db',
+      ];
+
+      const dbNamesToDelete = new Set<string>();
+      const dbApi = indexedDB as any;
+      if (typeof dbApi.databases === 'function') {
+        const dbs: Array<{ name?: string | null }> = await dbApi.databases();
+        for (const db of dbs) {
+          if (db?.name) dbNamesToDelete.add(db.name);
+        }
+      } else {
+        for (const name of knownDbNames) dbNamesToDelete.add(name);
+      }
+
+      for (const name of dbNamesToDelete) {
+        await deleteDatabase(name);
+      }
+
+      await Swal.fire({
+        icon: 'success',
+        title: 'Caches vidés',
+        text: 'Toutes les bases IndexedDB ont été supprimées. Rechargement...',
+        timer: 1200,
+        showConfirmButton: false
+      });
+
+      window.location.reload();
+    } catch (error: any) {
+      console.error('[Reglages] Erreur vidage caches:', error);
+      await Swal.fire({
+        icon: 'error',
+        title: 'Erreur',
+        text: error?.message || 'Impossible de vider les caches',
+        confirmButtonColor: '#901c67'
+      });
+    }
+  };
+
   useEffect(() => {
+    setMounted(true);
+    setLastUpdateTime(new Date().toLocaleTimeString('fr-FR'));
+
     loadPendingForms();
     checkOnlineStatus();
 
@@ -453,8 +526,8 @@ const ReglagesPage = () => {
               </div>
             </div>
             <h3 className="text-xs font-medium text-gray-600 mb-1">Dernière mise à jour</h3>
-            <p className="text-base font-semibold text-purple-600">
-              {new Date().toLocaleTimeString('fr-FR')}
+            <p className="text-base font-semibold text-purple-600" suppressHydrationWarning>
+              {mounted ? lastUpdateTime : ''}
             </p>
           </div>
         </div>
@@ -490,6 +563,16 @@ const ReglagesPage = () => {
               >
                 <Database size={18} className={checkingVictimsCache ? 'animate-spin' : ''} />
                 Vérifier victims
+              </button>
+
+              <button
+                onClick={clearAllCachesAndReload}
+                disabled={loading || uploadingVictims || syncing !== null}
+                className="flex items-center gap-2 px-5 py-2.5 bg-white border border-red-300 text-red-700 rounded-lg hover:bg-red-50 hover:border-red-400 transition-all disabled:opacity-50 font-medium shadow-sm"
+                title="Supprimer toutes les bases IndexedDB et recharger"
+              >
+                <Trash2 size={18} />
+                Vider les caches
               </button>
 
               {victimsStoreExists === true && cachedVictimsCount > 0 && (

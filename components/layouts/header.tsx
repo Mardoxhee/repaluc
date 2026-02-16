@@ -1,21 +1,25 @@
 "use client"
 import React, { useState, useRef, useEffect } from 'react';
 import { FiChevronDown, FiLogOut, FiMail, FiBell, FiSettings, FiUser, FiShield, FiClock, FiDownload } from 'react-icons/fi';
-import Image from 'next/image';
 
-const LOGOUT_URL = process.env.NEXT_PUBLIC_LOGOUT_URL || 'http://10.140.0.106:4201/login';
+const CORE_LOGIN_BASE_URL = process.env.NEXT_PUBLIC_CORE_LOGIN_URL;
+const LOGOUT_URL = CORE_LOGIN_BASE_URL ? `${CORE_LOGIN_BASE_URL}/login` : (process.env.NEXT_PUBLIC_LOGOUT_URL || 'http://10.140.0.106:4201/login');
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
-const user = {
-  name: 'Mardox',
-  email: 'mardox@justice.gov.cd',
-  avatar: '/avatar.jpg',
-  role: 'Administrateur Système',
-  department: 'FONAREV OPERATIONAL'
+type StoredUser = {
+  nom?: string;
+  postnom?: string;
+  prenom?: string;
+  email?: string;
+  photo?: string | null;
+  username?: string;
+  fonction?: { fonction?: string } | null;
+  grade?: { grade?: string } | null;
+  direction?: { direction?: string } | null;
 };
 
 interface HeaderProps {
@@ -28,6 +32,8 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle, isMobile = false }) => {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showInstallButton, setShowInstallButton] = useState(false);
+  const [user, setUser] = useState<StoredUser | null>(null);
+  const [currentTime, setCurrentTime] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
 
@@ -43,6 +49,15 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle, isMobile = false }) => {
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('usr');
+      if (raw) setUser(JSON.parse(raw));
+    } catch {
+      setUser(null);
+    }
   }, []);
 
   // Gérer le prompt d'installation PWA
@@ -92,10 +107,28 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle, isMobile = false }) => {
     { id: 3, title: 'Maintenance programmée', time: '2h', type: 'warning' }
   ];
 
-  const currentTime = new Date().toLocaleTimeString('fr-FR', {
-    hour: '2-digit',
-    minute: '2-digit'
-  });
+  useEffect(() => {
+    const update = () => {
+      try {
+        setCurrentTime(
+          new Date().toLocaleTimeString('fr-FR', {
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+        );
+      } catch {
+        setCurrentTime('');
+      }
+    };
+
+    update();
+    const id = window.setInterval(update, 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const displayName = `${user?.prenom || ''} ${user?.nom || ''}`.trim() || user?.username || 'Utilisateur';
+  const displayRole = user?.fonction?.fonction || user?.grade?.grade || user?.direction?.direction || 'Compte';
+  const displayEmail = user?.email || '';
 
   return (
     <header className={`h-20 bg-white/98 backdrop-blur-md shadow-sm border-b border-gray-200/80 flex items-center justify-between px-8 fixed top-0 right-0 z-20 ${isMobile ? 'left-0' : 'left-64'}`}>
@@ -176,7 +209,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle, isMobile = false }) => {
 
         {/* Bouton d'installation PWA */}
         {showInstallButton && (
-          <button 
+          <button
             onClick={handleInstallClick}
             className="flex items-center gap-2 px-3 py-2 rounded-lg text-white font-medium transition-all hover:shadow-md"
             style={{ backgroundColor: '#901c67' }}
@@ -203,20 +236,16 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle, isMobile = false }) => {
           >
             <div className="relative">
               <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-primary-200 group-hover:border-primary-300 transition-colors">
-                <Image
-                  src={user.avatar}
-                  alt="Avatar"
-                  width={40}
-                  height={40}
-                  className="rounded-full object-cover w-full h-full"
-                />
+                <div className="w-full h-full flex items-center justify-center bg-gray-100">
+                  <FiUser className="text-gray-600" size={18} />
+                </div>
               </div>
               <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></div>
             </div>
 
             <div className="hidden md:block text-left">
-              <div className="text-sm font-semibold text-gray-800">{user.name}</div>
-              <div className="text-xs text-gray-500">{user.role}</div>
+              <div className="text-sm font-semibold text-gray-800">{displayName}</div>
+              <div className="text-xs text-gray-500">{displayRole}</div>
             </div>
 
             <FiChevronDown className={`text-gray-400 group-hover:text-primary-600 transition-all duration-200 ${open ? 'rotate-180' : ''}`} size={16} />
@@ -228,33 +257,19 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle, isMobile = false }) => {
               <div className="px-6 py-4 border-b border-gray-100">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-primary-200">
-                    <Image
-                      src={user.avatar}
-                      alt="Avatar"
-                      width={48}
-                      height={48}
-                      className="rounded-full object-cover w-full h-full"
-                    />
+                    <div className="w-full h-full flex items-center justify-center bg-gray-100">
+                      <FiUser className="text-gray-600" size={20} />
+                    </div>
                   </div>
                   <div className="flex-1">
-                    <div className="font-bold text-gray-800">{user.name}</div>
-                    <div className="text-sm text-gray-600">{user.role}</div>
-                    <div className="flex items-center justify-between h-16 px-4 bg-white shadow-sm">
-                      {/* Bouton de menu pour mobile */}
-                      {isMobile && onMenuToggle && (
-                        <button 
-                          onClick={onMenuToggle}
-                          className="p-2 text-gray-600 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md"
-                          aria-label="Ouvrir le menu"
-                        >
-                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" />
-                          </svg>
-                        </button>
-                      )}
-                      <FiMail size={12} />
-                      {user.email}
-                    </div>
+                    <div className="font-bold text-gray-800">{displayName}</div>
+                    <div className="text-sm text-gray-600">{displayRole}</div>
+                    {displayEmail && (
+                      <div className="mt-2 flex items-center gap-2 text-xs text-gray-600">
+                        <FiMail size={12} />
+                        <span className="truncate">{displayEmail}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
