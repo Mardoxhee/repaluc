@@ -35,10 +35,25 @@ const toHex = (buf: ArrayBuffer) => {
     .join('');
 };
 
+const fallbackHash = (input: string) => {
+  let h1 = 0x811c9dc5;
+  for (let i = 0; i < input.length; i++) {
+    h1 ^= input.charCodeAt(i);
+    h1 = Math.imul(h1, 0x01000193);
+  }
+  return `fallback:${(h1 >>> 0).toString(16).padStart(8, '0')}`;
+};
+
 export const hashPassword = async (username: string, password: string): Promise<string> => {
+  const input = `${username}:${password}`;
+  const subtle = (globalThis as any)?.crypto?.subtle;
+  if (!subtle) {
+    return fallbackHash(input);
+  }
+
   const enc = new TextEncoder();
-  const data = enc.encode(`${username}:${password}`);
-  const digest = await crypto.subtle.digest('SHA-256', data);
+  const data = enc.encode(input);
+  const digest = await subtle.digest('SHA-256', data);
   return toHex(digest);
 };
 
