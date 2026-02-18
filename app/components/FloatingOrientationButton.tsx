@@ -1,18 +1,23 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { FiSmartphone } from 'react-icons/fi';
 
 const FloatingOrientationButton: React.FC = () => {
   const [isLandscape, setIsLandscape] = useState(false);
   const [requestedFullscreen, setRequestedFullscreen] = useState(false);
-
-  const canLock = useMemo(() => {
-    const orientationApi = (screen as any)?.orientation;
-    return Boolean(orientationApi?.lock);
-  }, []);
+  const [canLock, setCanLock] = useState(false);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      const orientationApi = (window.screen as any)?.orientation;
+      setCanLock(Boolean(orientationApi?.lock));
+    } catch {
+      setCanLock(false);
+    }
+
     const mql = window.matchMedia?.('(orientation: landscape)');
     const update = () => {
       if (mql) setIsLandscape(mql.matches);
@@ -32,7 +37,9 @@ const FloatingOrientationButton: React.FC = () => {
   }, []);
 
   const toggleLandscape = async () => {
-    const orientationApi = (screen as any)?.orientation;
+    if (typeof window === 'undefined') return;
+
+    const orientationApi = (window.screen as any)?.orientation;
 
     if (!orientationApi?.lock) {
       alert("La rotation n'est pas supportée sur cet appareil/navigateur.");
