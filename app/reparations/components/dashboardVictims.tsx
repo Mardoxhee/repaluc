@@ -6,6 +6,7 @@ import { FaHospitalSymbol, FaUserCheck, FaBalanceScale } from "react-icons/fa";
 import { BsFillHousesFill } from "react-icons/bs";
 import { useFetch } from '../../context/FetchContext';
 import { saveToCache, getFromCache, isOnline } from '../../utils/dashboardCache';
+import { getVictimsFromCache } from '../../utils/victimsCache';
 
 const COLORS = ["#007fba", "#7f2360", "#0066cc", "#cc3366", "#0080ff", "#ff6b9d", "#4da6ff", "#ff8fab", "#80bfff", "#ffb3d1"];
 
@@ -47,12 +48,92 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color, subtitle
   </div>
 );
 
+interface ProgressCardProps {
+  title: string;
+  current: number;
+  total: number;
+  icon: React.ReactNode;
+  color: string;
+  subtitle?: string;
+  loading?: boolean;
+}
+
+const ProgressCard: React.FC<ProgressCardProps> = ({
+  title,
+  current,
+  total,
+  icon,
+  color,
+  subtitle,
+  loading,
+}) => {
+  const safeTotal = Number.isFinite(total) && total > 0 ? total : 0;
+  const safeCurrent = Number.isFinite(current) && current > 0 ? Math.min(current, safeTotal || current) : 0;
+  const percent = safeTotal > 0 ? Math.round((safeCurrent / safeTotal) * 100) : 0;
+
+  return (
+    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-all duration-300 group">
+      <div className="flex items-start justify-between">
+        <div className="flex-1">
+          <div className="flex items-center gap-3 mb-3">
+            <div className={`p-3 rounded-xl ${color} shadow-md group-hover:scale-110 transition-transform duration-300`}>
+              {icon}
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">{title}</h3>
+              {subtitle && <p className="text-xs text-gray-500 mt-1">{subtitle}</p>}
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                {loading ? (
+                  <div className="h-8 w-24 bg-gray-200 animate-pulse rounded" />
+                ) : (
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-3xl font-bold text-gray-900">{safeCurrent.toLocaleString()}</span>
+                    <span className="text-sm text-gray-500 font-medium">/ {safeTotal.toLocaleString()}</span>
+                  </div>
+                )}
+                <div className="mt-2 text-xs text-gray-600">
+                  {loading ? (
+                    <div className="h-3 w-28 bg-gray-200 animate-pulse rounded" />
+                  ) : percent > 0 ? (
+                    <>
+                      <span className="font-semibold text-gray-900">{percent}%</span>
+                      <span className="text-gray-500"> de couverture</span>
+                    </>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="text-right">
+                <div className="text-xs font-semibold text-gray-500">Progression</div>
+              </div>
+            </div>
+
+            <div className="mt-4 h-2.5 w-full bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-blue-500 to-purple-600 transition-all duration-700"
+                style={{ width: `${percent}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const DashboardVictims = () => {
   const { fetcher } = useFetch();
   const [loading, setLoading] = useState(true);
+  const [loadingRecontact, setLoadingRecontact] = useState(true);
   const [isOffline, setIsOffline] = useState(false);
   const [usingCache, setUsingCache] = useState(false);
   const [showOfflineIndicator, setShowOfflineIndicator] = useState(true);
+  const [victimesRecontactees, setVictimesRecontactees] = useState(0);
   type SexeStat = { sexe: string; total: number };
   const [stats, setStats] = useState<{
     sexe: SexeStat[];
@@ -79,6 +160,7 @@ const DashboardVictims = () => {
   useEffect(() => {
     const fetchAllStats = async () => {
       setLoading(true);
+      setLoadingRecontact(true);
       setIsOffline(!isOnline());
       setUsingCache(false);
 
@@ -181,6 +263,36 @@ const DashboardVictims = () => {
       window.removeEventListener('offline', handleOffline);
     };
   }, [fetcher]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadRecontactStats = async () => {
+      try {
+        setLoadingRecontact(true);
+        const cached = await getVictimsFromCache('all-victims-cache');
+        const list = cached?.data;
+        if (!Array.isArray(list)) {
+          if (!cancelled) setVictimesRecontactees(0);
+          return;
+        }
+
+        const recontactees = list.reduce((acc: number, v: any) => {
+          return v?.photo != null ? acc + 1 : acc;
+        }, 0);
+        if (!cancelled) setVictimesRecontactees(recontactees);
+      } catch {
+        if (!cancelled) setVictimesRecontactees(0);
+      } finally {
+        if (!cancelled) setLoadingRecontact(false);
+      }
+    };
+
+    loadRecontactStats();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Calculs des totaux
   const totalVictimes = stats?.sexe?.reduce((acc, item: any) => acc + parseInt(item.total), 0);
@@ -290,6 +402,8 @@ const DashboardVictims = () => {
 
       {/* Cartes de statistiques principales */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+
+
         <StatCard
           title="Total Victimes"
           value={loading ? "..." : totalVictimes.toLocaleString()}
@@ -316,7 +430,6 @@ const DashboardVictims = () => {
           subtitle="Zones géographiques"
           loading={loading}
         />
-
         <StatCard
           title="Territoires"
           value={loading ? "..." : totalTerritoires}
@@ -324,6 +437,19 @@ const DashboardVictims = () => {
           color="bg-gradient-to-br from-pink-500 to-pink-600"
           subtitle="Territoires actifs"
           loading={loading}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+
+        <ProgressCard
+          title="Victimes recontactées"
+          current={victimesRecontactees}
+          total={totalVictimes || 0}
+          icon={<FiCheckCircle className="text-white text-xl" />}
+          color="bg-gradient-to-br from-indigo-500 to-indigo-600"
+          subtitle=""
+          loading={loading || loadingRecontact}
         />
       </div>
 

@@ -6,6 +6,10 @@ import SideBar from './sideBar';
 import Header from './header';
 import HamburgerMenu from '../HamburgerMenu';
 
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+const LAST_ACTIVITY_KEY = 'repaluc_last_activity';
+const AUTH_KEY = 'repaluc_auth';
+
 interface MainLayoutProps {
   children: React.ReactNode;
   noZoom?: boolean;
@@ -50,6 +54,85 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, noZoom }) => {
     } finally {
       setAuthChecked(true);
     }
+  }, [pathname, router]);
+
+  useEffect(() => {
+    if (pathname === '/login') return;
+
+    const markActivity = () => {
+      try {
+        localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+      } catch {
+        // ignore
+      }
+    };
+
+    const getLastActivity = () => {
+      try {
+        const raw = localStorage.getItem(LAST_ACTIVITY_KEY);
+        const n = raw ? Number(raw) : NaN;
+        return Number.isFinite(n) ? n : Date.now();
+      } catch {
+        return Date.now();
+      }
+    };
+
+    const clearAuth = () => {
+      try {
+        localStorage.removeItem(AUTH_KEY);
+        localStorage.removeItem('token');
+        localStorage.removeItem('usr');
+        localStorage.removeItem('auth');
+        localStorage.removeItem('apps');
+      } catch {
+        // ignore
+      }
+    };
+
+    const logoutIfIdle = () => {
+      const last = getLastActivity();
+      if (Date.now() - last < IDLE_TIMEOUT_MS) return;
+
+      clearAuth();
+      router.replace('/login');
+    };
+
+    markActivity();
+
+    const activityEvents: Array<keyof WindowEventMap> = [
+      'mousemove',
+      'mousedown',
+      'keydown',
+      'touchstart',
+      'scroll',
+      'wheel',
+      'focus',
+    ];
+
+    activityEvents.forEach((evt) => window.addEventListener(evt, markActivity, { passive: true }));
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        logoutIfIdle();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === AUTH_KEY && e.newValue == null) {
+        router.replace('/login');
+      }
+    };
+    window.addEventListener('storage', onStorage);
+
+    const intervalId = window.setInterval(logoutIfIdle, 15_000);
+
+    return () => {
+      activityEvents.forEach((evt) => window.removeEventListener(evt, markActivity as any));
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('storage', onStorage);
+      window.clearInterval(intervalId);
+    };
   }, [pathname, router]);
 
   const toggleMenu = () => {
