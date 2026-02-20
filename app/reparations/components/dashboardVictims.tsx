@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, LineChart, Line, CartesianGrid, AreaChart, Area } from 'recharts';
-import { FiUsers, FiShield, FiMapPin, FiAward, FiDollarSign, FiTrendingUp, FiAlertTriangle, FiCheckCircle, FiWifi, FiWifiOff } from 'react-icons/fi';
+import { FiUsers, FiShield, FiMapPin, FiAward, FiDollarSign, FiTrendingUp, FiAlertTriangle, FiCheckCircle, FiWifi, FiWifiOff, FiFileText, FiCreditCard } from 'react-icons/fi';
 import { FaHospitalSymbol, FaUserCheck, FaBalanceScale } from "react-icons/fa";
 import { BsFillHousesFill } from "react-icons/bs";
 import { useFetch } from '../../context/FetchContext';
@@ -131,6 +131,10 @@ const DashboardVictims = () => {
   const [isOffline, setIsOffline] = useState(false);
   const [showOfflineIndicator, setShowOfflineIndicator] = useState(true);
   const [victimesRecontactees, setVictimesRecontactees] = useState(0);
+  const [victimesAvecContratSigne, setVictimesAvecContratSigne] = useState(0);
+  const [victimesIndemnisationCommencee, setVictimesIndemnisationCommencee] = useState(0);
+  const [montantIndemnisationsDejaVersees, setMontantIndemnisationsDejaVersees] = useState(0);
+  const [totalVictimesGlobal, setTotalVictimesGlobal] = useState<number | null>(null);
   type SexeStat = { sexe: string; total: number };
   const [stats, setStats] = useState<{
     sexe: SexeStat[];
@@ -161,6 +165,19 @@ const DashboardVictims = () => {
       setIsOffline(typeof navigator !== 'undefined' ? !navigator.onLine : false);
 
       try {
+        const globalProgressResp = await fetcher('/victime/stats/reparation/globalProgress');
+        const globalData = globalProgressResp?.data;
+        const totalFromGlobal = typeof globalData?.total === 'number' ? globalData.total : null;
+        const withPhoto = typeof globalData?.photo?.withPhoto === 'number' ? globalData.photo.withPhoto : 0;
+        const withContrat = typeof globalData?.contrat?.withContrat === 'number' ? globalData.contrat.withContrat : 0;
+        const indemnCommencee = typeof globalData?.indemnisation?.commencee === 'number' ? globalData.indemnisation.commencee : 0;
+
+        setTotalVictimesGlobal(totalFromGlobal);
+        setVictimesRecontactees(withPhoto);
+        setVictimesAvecContratSigne(withContrat);
+        setVictimesIndemnisationCommencee(indemnCommencee);
+        setLoadingRecontact(false);
+
         const [
           sexeData,
           trancheAgeData,
@@ -198,8 +215,14 @@ const DashboardVictims = () => {
         setStats(newStats);
       } catch (error) {
         console.log('[Dashboard] Erreur chargement serveur:', error);
+        setTotalVictimesGlobal(null);
+        setVictimesRecontactees(0);
+        setVictimesAvecContratSigne(0);
+        setVictimesIndemnisationCommencee(0);
+        setMontantIndemnisationsDejaVersees(0);
       } finally {
         setLoading(false);
+        setLoadingRecontact(false);
       }
     };
 
@@ -221,58 +244,8 @@ const DashboardVictims = () => {
     };
   }, [fetcher]);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadRecontactStats = async () => {
-      try {
-        setLoadingRecontact(true);
-
-        const limit = 200;
-        let page = 1;
-        let totalPages = 1;
-        let count = 0;
-        let safeguard = 0;
-
-        while (page <= totalPages && safeguard < 200) {
-          safeguard++;
-          const resp = await fetcher(`/victime/paginate/filtered?page=${page}&limit=${limit}`);
-          const list = resp?.data;
-
-          if (!Array.isArray(list)) {
-            break;
-          }
-
-          for (const v of list) {
-            if (v?.photo != null) count++;
-          }
-
-          const metaTotalPages = resp?.meta?.totalPages;
-          if (typeof metaTotalPages === 'number' && metaTotalPages > 0) {
-            totalPages = metaTotalPages;
-          } else {
-            break;
-          }
-
-          page++;
-        }
-
-        if (!cancelled) setVictimesRecontactees(count);
-      } catch {
-        if (!cancelled) setVictimesRecontactees(0);
-      } finally {
-        if (!cancelled) setLoadingRecontact(false);
-      }
-    };
-
-    loadRecontactStats();
-    return () => {
-      cancelled = true;
-    };
-  }, [fetcher]);
-
   // Calculs des totaux
-  const totalVictimes = stats?.sexe?.reduce((acc, item: any) => acc + parseInt(item.total), 0);
+  const totalVictimes = totalVictimesGlobal ?? stats?.sexe?.reduce((acc, item: any) => acc + parseInt(item.total), 0);
   const totalFemmes = stats?.sexe?.find((item: any) => item.sexe === 'Femme')?.total || 0;
   const totalHommes = stats?.sexe?.find((item: any) => item.sexe === 'Homme')?.total || 0;
   const totalProvinces = stats?.province?.length;
@@ -425,6 +398,35 @@ const DashboardVictims = () => {
           total={totalVictimes || 0}
           icon={<FiCheckCircle className="text-white text-xl" />}
           color="bg-gradient-to-br from-indigo-500 to-indigo-600"
+          subtitle=""
+          loading={loading || loadingRecontact}
+        />
+
+        <ProgressCard
+          title="Contrats signés"
+          current={victimesAvecContratSigne}
+          total={totalVictimes || 0}
+          icon={<FiFileText className="text-white text-xl" />}
+          color="bg-gradient-to-br from-emerald-500 to-emerald-600"
+          subtitle=""
+          loading={loading || loadingRecontact}
+        />
+
+        <ProgressCard
+          title="Indemnisation commencée"
+          current={victimesIndemnisationCommencee}
+          total={totalVictimes || 0}
+          icon={<FiTrendingUp className="text-white text-xl" />}
+          color="bg-gradient-to-br from-amber-500 to-amber-600"
+          subtitle=""
+          loading={loading || loadingRecontact}
+        />
+
+        <StatCard
+          title="Indemnisations déjà versées"
+          value={loading || loadingRecontact ? "..." : `${montantIndemnisationsDejaVersees.toLocaleString()} USD`}
+          icon={<FiCreditCard className="text-white text-xl" />}
+          color="bg-gradient-to-br from-cyan-500 to-cyan-600"
           subtitle=""
           loading={loading || loadingRecontact}
         />
