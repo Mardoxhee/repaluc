@@ -3,12 +3,13 @@ import React, { useState, useEffect, useContext, useCallback, useMemo } from "re
 import { FetchContext } from "../../context/FetchContext";
 import Swal from 'sweetalert2';
 import VictimDetailModal from "./VictimDetailModal"
-import { Search, Filter, Eye, Users, ChevronLeft, ChevronRight, X, Plus, Check, Stethoscope, FileText, Wifi, WifiOff, AlertCircle, BadgeCheck } from 'lucide-react';
+import { Search, Filter, Eye, Users, ChevronLeft, ChevronRight, X, Plus, Check, Stethoscope, FileText, Wifi, WifiOff, AlertCircle, BadgeCheck, Download } from 'lucide-react';
 import EvaluationModal from "./EvaluationModal";
 import ViewEvaluationModal from "./ViewEvaluationModal";
 import { saveVictimsToCache, getVictimsFromCache, isOnline, saveProgress, getProgress } from '../../utils/victimsCache';
 import { saveQuestions, isCacheValid } from '../../utils/planVieQuestionsCache';
 import { deletePendingVictimPhotosForVictim } from '@/app/utils/victimPhotosCache';
+import * as XLSX from 'xlsx';
 
 const API_PLANVIE_URL = process.env.NEXT_PUBLIC_API_PLANVIE_URL;
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
@@ -180,6 +181,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
     const [backgroundLoading, setBackgroundLoading] = useState(false);
     const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false);
     const [incompleteLoadingMessage, setIncompleteLoadingMessage] = useState<string>("");
+    const [exporting, setExporting] = useState(false);
     const [meta, setMeta] = useState({
         total: 0,
         page: 1,
@@ -548,6 +550,89 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
 
         return new URLSearchParams(params).toString();
     }, [meta.page, meta.limit, searchTerm, filterRules]);
+
+    const buildExportQueryParams = useCallback(() => {
+        const params: Record<string, string> = {
+            page: '1',
+            limit: '10000',
+        };
+
+        if (searchTerm) params.nom = searchTerm;
+
+        filterRules.forEach((rule) => {
+            if (rule.value) params[rule.field] = rule.value;
+        });
+
+        return new URLSearchParams(params).toString();
+    }, [searchTerm, filterRules]);
+
+    const handleExportExcel = useCallback(async () => {
+        if (!fetchCtx?.fetcher) return;
+        if (!isOnline()) {
+            await Swal.fire({
+                icon: 'warning',
+                title: 'Hors ligne',
+                text: 'Export impossible hors ligne.',
+                confirmButtonColor: '#901c67'
+            });
+            return;
+        }
+
+        setExporting(true);
+        try {
+            const queryParams = buildExportQueryParams();
+            const response = await fetchCtx.fetcher(`/victime/paginate/filtered?${queryParams}`);
+            const rows = Array.isArray(response?.data) ? response.data : [];
+
+            if (rows.length === 0) {
+                await Swal.fire({
+                    icon: 'info',
+                    title: 'Aucune donnée',
+                    text: 'Aucune victime à exporter avec ces filtres.',
+                    confirmButtonColor: '#901c67'
+                });
+                return;
+            }
+
+            const exportData = rows.map((v: any, idx: number) => ({
+                'N°': idx + 1,
+                'ID': v?.id ?? '',
+                'Référence': v?.reference ?? '',
+                'Nom': v?.nom ?? '',
+                'Prénom': v?.prenom ?? '',
+                'Sexe': v?.sexe ?? '',
+                'Âge': v?.age ?? '',
+                'Catégorie': v?.categorie ?? '',
+                'Province': v?.province ?? '',
+                'Territoire': v?.territoire ?? '',
+                'Commune': v?.commune ?? '',
+                'Statut': v?.status ?? '',
+                'Dossier': v?.dossier ?? '',
+                'Préjudice final': v?.prejudiceFinal ?? '',
+                'Programme': v?.programme ?? '',
+                'Type de violation': v?.typeViolation ?? '',
+                'Date incident': v?.dateIncident ?? '',
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(exportData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Victimes');
+
+            const date = new Date();
+            const pad = (n: number) => String(n).padStart(2, '0');
+            const fileName = `victimes_export_${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}_${pad(date.getHours())}${pad(date.getMinutes())}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+        } catch (e) {
+            await Swal.fire({
+                icon: 'error',
+                title: 'Export échoué',
+                text: 'Impossible de générer le fichier Excel.',
+                confirmButtonColor: '#901c67'
+            });
+        } finally {
+            setExporting(false);
+        }
+    }, [buildExportQueryParams, fetchCtx?.fetcher]);
 
     // Function to check if a specific victim has an evaluation and view it
     const handleViewEvaluation = async (victim: any) => {
@@ -1137,6 +1222,18 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                             </span>
                                         );
                                     })}
+
+                                    <div className="flex-1" />
+                                    <button
+                                        type="button"
+                                        onClick={handleExportExcel}
+                                        disabled={exporting}
+                                        className="px-4 py-2 bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors flex items-center gap-2"
+                                        title="Exporter en Excel"
+                                    >
+                                        <Download size={16} />
+                                        {exporting ? 'Export...' : 'Exporter Excel'}
+                                    </button>
                                 </div>
                             )}
                         </div>
