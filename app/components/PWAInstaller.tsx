@@ -14,16 +14,31 @@ const PWAInstaller: React.FC = () => {
   const [isInstalled, setIsInstalled] = useState(false);
 
   useEffect(() => {
+    const checkInstalled = () => {
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+      const isIosStandalone = (navigator as any)?.standalone === true;
+      return isStandalone || isIosStandalone;
+    };
+
     // Vérifier si l'app est déjà installée
-    if (window.matchMedia('(display-mode: standalone)').matches) {
+    if (checkInstalled()) {
       setIsInstalled(true);
+      setShowInstallButton(false);
+      setDeferredPrompt(null);
       console.log('[PWA] Application déjà installée');
-      return;
     }
 
     // Capturer l'événement beforeinstallprompt
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
+
+      if (checkInstalled()) {
+        setIsInstalled(true);
+        setShowInstallButton(false);
+        setDeferredPrompt(null);
+        return;
+      }
+
       const promptEvent = e as BeforeInstallPromptEvent;
       setDeferredPrompt(promptEvent);
       setShowInstallButton(true);
@@ -33,25 +48,27 @@ const PWAInstaller: React.FC = () => {
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
     // Détecter si l'app a été installée
-    window.addEventListener('appinstalled', () => {
+    const handleAppInstalled = () => {
       console.log('[PWA] Application installée avec succès');
       setShowInstallButton(false);
       setIsInstalled(true);
       setDeferredPrompt(null);
-    });
+    };
+
+    window.addEventListener('appinstalled', handleAppInstalled);
 
     // Service Worker et cache
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.ready.then((registration) => {
           console.log('[PWA] Service Worker prêt');
-          
+
           const pagesToCache = [
             '/',
             '/reparations',
             '/luc',
           ];
-          
+
           caches.open('manual-precache-v1').then((cache) => {
             pagesToCache.forEach((url) => {
               fetch(url)
@@ -67,7 +84,7 @@ const PWAInstaller: React.FC = () => {
             });
           });
         });
-        
+
         navigator.serviceWorker.addEventListener('controllerchange', () => {
           console.log('[PWA] Service Worker mis à jour');
         });
@@ -76,6 +93,7 @@ const PWAInstaller: React.FC = () => {
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
     };
   }, []);
 

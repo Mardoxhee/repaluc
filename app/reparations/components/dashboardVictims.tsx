@@ -5,8 +5,6 @@ import { FiUsers, FiShield, FiMapPin, FiAward, FiDollarSign, FiTrendingUp, FiAle
 import { FaHospitalSymbol, FaUserCheck, FaBalanceScale } from "react-icons/fa";
 import { BsFillHousesFill } from "react-icons/bs";
 import { useFetch } from '../../context/FetchContext';
-import { saveToCache, getFromCache, isOnline } from '../../utils/dashboardCache';
-import { getVictimsFromCache } from '../../utils/victimsCache';
 
 const COLORS = ["#007fba", "#7f2360", "#0066cc", "#cc3366", "#0080ff", "#ff6b9d", "#4da6ff", "#ff8fab", "#80bfff", "#ffb3d1"];
 
@@ -131,7 +129,6 @@ const DashboardVictims = () => {
   const [loading, setLoading] = useState(true);
   const [loadingRecontact, setLoadingRecontact] = useState(true);
   const [isOffline, setIsOffline] = useState(false);
-  const [usingCache, setUsingCache] = useState(false);
   const [showOfflineIndicator, setShowOfflineIndicator] = useState(true);
   const [victimesRecontactees, setVictimesRecontactees] = useState(0);
   type SexeStat = { sexe: string; total: number };
@@ -161,88 +158,48 @@ const DashboardVictims = () => {
     const fetchAllStats = async () => {
       setLoading(true);
       setLoadingRecontact(true);
-      setIsOffline(!isOnline());
-      setUsingCache(false);
+      setIsOffline(typeof navigator !== 'undefined' ? !navigator.onLine : false);
 
-      // Essayer de charger depuis le cache d'abord
-      const cacheKey = 'dashboard-stats';
-      const cachedData = await getFromCache(cacheKey);
+      try {
+        const [
+          sexeData,
+          trancheAgeData,
+          provinceData,
+          programmeData,
+          territoireData,
+          prejudiceFinalData,
+          totalIndemnisationData,
+          categorieData,
+          prejudiceData
+        ] = await Promise.all([
+          fetcher('/victime/stats/sexe'),
+          fetcher('/victime/stats/tranche-age'),
+          fetcher('/victime/stats/province'),
+          fetcher('/victime/stats/programme'),
+          fetcher('/victime/stats/territoire'),
+          fetcher('/victime/stats/prejudice-final'),
+          fetcher('/victime/stats/total-indemnisation'),
+          fetcher('/victime/stats/categorie'),
+          fetcher('/victime/stats/prejudice')
+        ]);
 
-      if (cachedData && !isOnline()) {
-        // Utiliser le cache si offline
-        console.log('[Dashboard] Mode offline - Utilisation du cache');
-        setStats(cachedData);
-        setUsingCache(true);
+        const newStats = {
+          sexe: sexeData || [],
+          trancheAge: trancheAgeData || [],
+          province: provinceData || [],
+          programme: programmeData || [],
+          territoire: territoireData || [],
+          prejudiceFinal: prejudiceFinalData || [],
+          totalIndemnisation: totalIndemnisationData?.totalIndemnisation || 0,
+          categorie: categorieData || [],
+          prejudice: prejudiceData || []
+        };
+
+        setStats(newStats);
+      } catch (error) {
+        console.log('[Dashboard] Erreur chargement serveur:', error);
+      } finally {
         setLoading(false);
-        return;
-      }
-
-      if (cachedData && isOnline()) {
-        // Afficher le cache immédiatement puis rafraîchir en arrière-plan
-        console.log('[Dashboard] Affichage du cache puis rafraîchissement');
-        setStats(cachedData);
-        setUsingCache(true);
-        setLoading(false);
-      }
-
-      // Essayer de charger depuis le serveur
-      if (isOnline()) {
-        try {
-          const [
-            sexeData,
-            trancheAgeData,
-            provinceData,
-            programmeData,
-            territoireData,
-            prejudiceFinalData,
-            totalIndemnisationData,
-            categorieData,
-            prejudiceData
-          ] = await Promise.all([
-            fetcher('/victime/stats/sexe'),
-            fetcher('/victime/stats/tranche-age'),
-            fetcher('/victime/stats/province'),
-            fetcher('/victime/stats/programme'),
-            fetcher('/victime/stats/territoire'),
-            fetcher('/victime/stats/prejudice-final'),
-            fetcher('/victime/stats/total-indemnisation'),
-            fetcher('/victime/stats/categorie'),
-            fetcher('/victime/stats/prejudice')
-          ]);
-
-          const newStats = {
-            sexe: sexeData || [],
-            trancheAge: trancheAgeData || [],
-            province: provinceData || [],
-            programme: programmeData || [],
-            territoire: territoireData || [],
-            prejudiceFinal: prejudiceFinalData || [],
-            totalIndemnisation: totalIndemnisationData?.totalIndemnisation || 0,
-            categorie: categorieData || [],
-            prejudice: prejudiceData || []
-          };
-
-          setStats(newStats);
-          setUsingCache(false);
-
-          // Sauvegarder dans le cache
-          await saveToCache(cacheKey, newStats);
-          console.log('[Dashboard] Données sauvegardées dans le cache');
-        } catch (error) {
-          console.log('[Dashboard] Erreur chargement serveur:', error);
-
-          // Si erreur et pas de cache, essayer de charger le cache expiré
-          if (!cachedData) {
-            const expiredCache = await getFromCache(cacheKey);
-            if (expiredCache) {
-              console.log('[Dashboard] Utilisation du cache expiré');
-              setStats(expiredCache);
-              setUsingCache(true);
-            }
-          }
-        } finally {
-          setLoading(false);
-        }
       }
     };
 
@@ -270,17 +227,37 @@ const DashboardVictims = () => {
     const loadRecontactStats = async () => {
       try {
         setLoadingRecontact(true);
-        const cached = await getVictimsFromCache('all-victims-cache');
-        const list = cached?.data;
-        if (!Array.isArray(list)) {
-          if (!cancelled) setVictimesRecontactees(0);
-          return;
+
+        const limit = 200;
+        let page = 1;
+        let totalPages = 1;
+        let count = 0;
+        let safeguard = 0;
+
+        while (page <= totalPages && safeguard < 200) {
+          safeguard++;
+          const resp = await fetcher(`/victime/paginate/filtered?page=${page}&limit=${limit}`);
+          const list = resp?.data;
+
+          if (!Array.isArray(list)) {
+            break;
+          }
+
+          for (const v of list) {
+            if (v?.photo != null) count++;
+          }
+
+          const metaTotalPages = resp?.meta?.totalPages;
+          if (typeof metaTotalPages === 'number' && metaTotalPages > 0) {
+            totalPages = metaTotalPages;
+          } else {
+            break;
+          }
+
+          page++;
         }
 
-        const recontactees = list.reduce((acc: number, v: any) => {
-          return v?.photo != null ? acc + 1 : acc;
-        }, 0);
-        if (!cancelled) setVictimesRecontactees(recontactees);
+        if (!cancelled) setVictimesRecontactees(count);
       } catch {
         if (!cancelled) setVictimesRecontactees(0);
       } finally {
@@ -292,7 +269,7 @@ const DashboardVictims = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [fetcher]);
 
   // Calculs des totaux
   const totalVictimes = stats?.sexe?.reduce((acc, item: any) => acc + parseInt(item.total), 0);
@@ -354,7 +331,7 @@ const DashboardVictims = () => {
           </div>
 
           {/* Indicateur de statut */}
-          {(isOffline || usingCache) && showOfflineIndicator && (
+          {isOffline && showOfflineIndicator && (
             <div className={`flex items-center gap-3 px-4 py-2 rounded-lg border ${isOffline
               ? 'bg-orange-50 text-orange-800 border-orange-200'
               : 'bg-blue-50 text-blue-800 border-blue-200'
@@ -385,7 +362,7 @@ const DashboardVictims = () => {
       </div>
 
       {/* Notification discrète si l'indicateur est fermé */}
-      {(isOffline || usingCache) && !showOfflineIndicator && (
+      {isOffline && !showOfflineIndicator && (
         <div className="fixed bottom-4 right-4 z-50">
           <button
             onClick={() => setShowOfflineIndicator(true)}
