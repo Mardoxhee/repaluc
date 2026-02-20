@@ -32,6 +32,10 @@ interface Victim {
   photo?: string | null;
   comment?: string;
   commentaire?: string;
+  progression?: {
+    done: number;
+    total: number;
+  };
   prejudices?: Array<{
     id: number;
     label: string;

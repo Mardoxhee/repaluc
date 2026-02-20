@@ -26,6 +26,26 @@ const provincesRDC = [
     "Haut-Lomami", "Lualaba", "Haut-Katanga",
 ];
 
+const ProgressionCells: React.FC<{ done?: number; total?: number }> = ({ done, total }) => {
+    const safeTotal = Number.isFinite(total) && (total as number) > 0 ? (total as number) : 5;
+    const safeDoneRaw = Number.isFinite(done) && (done as number) > 0 ? (done as number) : 0;
+    const safeDone = Math.min(safeDoneRaw, safeTotal);
+
+    return (
+        <div className="flex items-center gap-1">
+            {Array.from({ length: safeTotal }).map((_, i) => {
+                const filled = i < safeDone;
+                return (
+                    <span
+                        key={i}
+                        className={`h-2.5 w-2.5 border border-gray-300 ${filled ? 'bg-blue-600 border-blue-600' : 'bg-gray-200'} `}
+                    />
+                );
+            })}
+        </div>
+    );
+};
+
 const statusOptions = [
     "Confirmé", "Non confirmé", "En traitement", "Décédé", "En attente", "A evaluer", "Evalué", "Contrôlé"
 ];
@@ -1049,6 +1069,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                         <th className="px-6 py-4 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">Province</th>
                                         <th className="px-6 py-4 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">Sexe</th>
                                         <th className="px-6 py-4 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">Statut</th>
+                                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">Progression</th>
                                         <th className="px-6 py-4 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">Actions</th>
                                     </tr>
                                 </thead>
@@ -1108,6 +1129,12 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                                     ) : null}
                                                     {victim.status || "Non vérifié"}
                                                 </span>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <ProgressionCells
+                                                    done={victim?.progression?.done ?? (victim?.photo != null ? 1 : 0)}
+                                                    total={victim?.progression?.total ?? 5}
+                                                />
                                             </td>
                                             <td className="px-6 py-4 text-left">
                                                 <div className="flex items-center gap-2 justify-start">
