@@ -107,3 +107,37 @@ export const hasPendingVictimPhotosToSync = async (): Promise<boolean> => {
     return false;
   }
 };
+
+export const deletePendingVictimPhotoById = async (id: number): Promise<void> => {
+  const db = await openDB();
+  const tx = db.transaction([STORE_NAME], 'readwrite');
+  const store = tx.objectStore(STORE_NAME);
+
+  store.delete(id);
+
+  await new Promise<void>((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+};
+
+export const deletePendingVictimPhotosForVictim = async (victimId: number): Promise<number> => {
+  const all = await getAllPendingVictimPhotos();
+  const idsToDelete = all.filter((x) => x.victimId === victimId && typeof x.id === 'number').map((x) => x.id as number);
+  if (idsToDelete.length === 0) return 0;
+
+  const db = await openDB();
+  const tx = db.transaction([STORE_NAME], 'readwrite');
+  const store = tx.objectStore(STORE_NAME);
+
+  for (const id of idsToDelete) {
+    store.delete(id);
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+
+  return idsToDelete.length;
+};

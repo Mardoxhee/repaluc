@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Camera, DollarSign, FileText, User, MapPin, Calendar, Shield, Check, UserCircle, FolderOpen, Loader2, RefreshCw, X } from 'lucide-react';
+import { Camera, DollarSign, FileText, User, MapPin, Calendar, Shield, Check, UserCircle, FolderOpen, Loader2, RefreshCw, X, Trash } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { isOnline } from '@/app/utils/victimsCache';
 import { savePendingVictimPhoto, getLatestVictimPhoto } from '@/app/utils/victimPhotosCache';
@@ -55,9 +55,10 @@ interface InfosVictimProps {
             [key: string]: string | undefined;
         };
     };
+    onDeletePhoto?: () => void;
 }
 
-const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
+const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
     const {
         id,
         nom,
@@ -369,6 +370,23 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                                     onLoad={() => setIsImageLoaded(true)}
                                     onError={() => setIsImageLoaded(true)}
                                 />
+                                {onDeletePhoto && (
+                                    <div className="absolute bottom-0 left-0 right-0 px-1 pb-1">
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                onDeletePhoto();
+                                            }}
+                                            className="w-full flex items-center justify-center gap-2 px-2 py-1 text-xs rounded-md bg-black/60 text-white hover:bg-black/70 transition-colors"
+                                            title="Supprimer la photo"
+                                        >
+                                            <Trash size={14} />
+                                            Supprimer
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         ) : (
                             <div className="w-32 h-32 mx-auto flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 border border-gray-400 rounded-lg">

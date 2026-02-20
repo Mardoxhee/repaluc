@@ -8,8 +8,10 @@ import EvaluationModal from "./EvaluationModal";
 import ViewEvaluationModal from "./ViewEvaluationModal";
 import { saveVictimsToCache, getVictimsFromCache, isOnline, saveProgress, getProgress } from '../../utils/victimsCache';
 import { saveQuestions, isCacheValid } from '../../utils/planVieQuestionsCache';
+import { deletePendingVictimPhotosForVictim } from '@/app/utils/victimPhotosCache';
 
 const API_PLANVIE_URL = process.env.NEXT_PUBLIC_API_PLANVIE_URL;
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
 
 interface ReglagesProps {
     mockPrejudices: { id: number; nom: string }[];
@@ -188,6 +190,110 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
     });
     const [showVictimModal, setShowVictimModal] = useState(false);
     const [selectedVictim, setSelectedVictim] = useState<any>(null);
+
+    const handleDeletePhoto = useCallback(async (victimToUpdate: any) => {
+        if (!victimToUpdate?.id) return;
+
+        const res = await Swal.fire({
+            icon: 'warning',
+            title: 'Supprimer la photo ? ',
+            text: 'La photo sera retirée du dossier (action locale pour le moment).',
+            showCancelButton: true,
+            confirmButtonText: 'Supprimer',
+            cancelButtonText: 'Annuler',
+            confirmButtonColor: '#dc2626',
+        });
+
+        if (!res.isConfirmed) return;
+
+        try {
+            await deletePendingVictimPhotosForVictim(victimToUpdate.id);
+        } catch {
+        }
+
+        const updatedVictim = { ...victimToUpdate, photo: null };
+
+        setVictims((prev) => prev.map((v) => (v.id === victimToUpdate.id ? updatedVictim : v)));
+        setSelectedVictim((prev: any) => (prev?.id === victimToUpdate.id ? updatedVictim : prev));
+
+        if (isOnline()) {
+            try {
+                const doPatch = async (payload: any) => {
+                    const response = await fetch(`${API_BASE_URL}/victime/${victimToUpdate.id}`, {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(payload),
+                    });
+
+                    const rawText = await response.text().catch(() => '');
+                    let parsed: any = null;
+                    try {
+                        parsed = rawText ? JSON.parse(rawText) : null;
+                    } catch {
+                        parsed = rawText;
+                    }
+
+                    console.log('[handleDeletePhoto] PATCH /victime response', {
+                        status: response.status,
+                        ok: response.ok,
+                        payload,
+                        body: parsed,
+                    });
+
+                    return { response, parsed };
+                };
+
+                const first = await doPatch({ photo: null });
+
+                if (!first.response.ok) {
+                    await Swal.fire({
+                        icon: 'error',
+                        title: 'Suppression non enregistrée',
+                        text: 'La photo a été retirée localement mais la mise à jour serveur a échoué.',
+                        confirmButtonColor: '#901c67'
+                    });
+                } else {
+                    const candidate = (first.parsed && typeof first.parsed === 'object')
+                        ? (first.parsed.data ?? first.parsed)
+                        : null;
+
+                    if (candidate && typeof candidate === 'object' && 'id' in candidate) {
+                        setVictims((prev) => prev.map((v) => (v.id === victimToUpdate.id ? candidate : v)));
+                        setSelectedVictim((prev: any) => (prev?.id === victimToUpdate.id ? candidate : prev));
+                    }
+
+                    const serverPhoto = candidate?.photo;
+                    if (serverPhoto != null) {
+                        await Swal.fire({
+                            icon: 'warning',
+                            title: 'Serveur non mis à jour',
+                            text: 'La photo est supprimée localement, mais le serveur renvoie encore une valeur pour "photo" après envoi de null. Il faut corriger côté backend pour accepter photo=null (ne pas utiliser une chaîne vide, cela biaise les statistiques).',
+                            confirmButtonColor: '#901c67'
+                        });
+                    }
+                }
+            } catch {
+                await Swal.fire({
+                    icon: 'error',
+                    title: 'Suppression non enregistrée',
+                    text: 'La photo a été retirée localement mais la mise à jour serveur a échoué.',
+                    confirmButtonColor: '#901c67'
+                });
+            }
+        }
+
+        try {
+            const cacheKey = 'all-victims-cache';
+            const cached = await getVictimsFromCache(cacheKey);
+            if (cached?.data && Array.isArray(cached.data)) {
+                const nextData = cached.data.map((v: any) => (v.id === victimToUpdate.id ? { ...v, photo: null } : v));
+                await saveVictimsToCache(cacheKey, nextData, cached.meta);
+            }
+        } catch {
+        }
+    }, []);
 
     // Fonction pour afficher les détails d'une victime
     const handleViewVictim = useCallback((victim: any) => {
@@ -1132,7 +1238,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <ProgressionCells
-                                                    done={victim?.progression?.done ?? (victim?.photo != null ? 1 : 0)}
+                                                    done={victim?.progression?.done ?? (typeof victim?.photo === 'string' && victim.photo.trim().length > 0 ? 1 : 0)}
                                                     total={victim?.progression?.total ?? 5}
                                                 />
                                             </td>
@@ -1215,6 +1321,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                     onVictimUpdate={(updatedVictim) => {
                         setVictims((prevVictims) => prevVictims.map(v => v.id === updatedVictim.id ? updatedVictim : v));
                     }}
+                    onDeletePhoto={handleDeletePhoto}
                     onViewEvaluation={handleViewEvaluation}
                 />
             )}

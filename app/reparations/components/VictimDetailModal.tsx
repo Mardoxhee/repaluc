@@ -102,10 +102,11 @@ interface VictimDetailModalProps {
   victim: Victim;
   onClose: () => void;
   onVictimUpdate?: (updatedVictim: Victim) => void;
+  onDeletePhoto?: (victim: Victim) => void;
   onViewEvaluation?: (victim: Victim) => void;
 }
 
-const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, onVictimUpdate, onViewEvaluation }) => {
+const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, onVictimUpdate, onDeletePhoto, onViewEvaluation }) => {
   const fetchCtx = useContext(FetchContext);
   const [tab, setTab] = useState<'info' | 'dossier' | 'progression' | 'reglages' | 'formulaires' | 'contrat' | 'paiement'>('info');
   const [hasContrat, setHasContrat] = useState(false);
@@ -140,6 +141,10 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
   const [docPreviewUrl, setDocPreviewUrl] = useState<string | null>(null);
   const [docPreviewTitle, setDocPreviewTitle] = useState<string>('Document');
   const [docPreviewIsObjectUrl, setDocPreviewIsObjectUrl] = useState(false);
+
+  useEffect(() => {
+    setCurrentVictim(victim);
+  }, [victim]);
 
   const stopDocStream = (s: MediaStream | null) => {
     if (!s) return;
@@ -531,7 +536,14 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
 
           {tab === 'info' && (
             <div>
-              <InfosVictim victim={currentVictim} />
+              <InfosVictim
+                victim={currentVictim}
+                onDeletePhoto={() => {
+                  if (!currentVictim) return;
+                  onDeletePhoto?.(currentVictim);
+                  setCurrentVictim({ ...currentVictim, photo: null });
+                }}
+              />
 
               {/* Bouton pour voir l'évaluation médicale */}
               {(currentVictim.status?.toLowerCase() === 'evalué' || currentVictim.status?.toLowerCase() === 'évalué' || currentVictim.status?.toLowerCase() === 'contrôlé' || currentVictim.status?.toLowerCase() === 'controle') && (
@@ -1037,9 +1049,128 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
           )}
 
           {tab === 'progression' && (
-            <div className="text-center py-8 !bg-white !text-gray-900">
-              <BarChart2 className="mx-auto !text-gray-400 mb-4" size={48} />
-              <div className="!text-gray-500">Progression du dossier (à implémenter)</div>
+            <div className="!bg-white !text-gray-900">
+              <div className="flex items-start justify-between gap-4 mb-5">
+                <div>
+                  <h3 className="text-lg font-semibold !text-gray-900">Progression du dossier</h3>
+                  <div className="text-sm !text-gray-600">Suivi administratif des étapes clés</div>
+                </div>
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50">
+                  <BarChart2 className="!text-gray-500" size={18} />
+                  <span className="text-xs font-semibold !text-gray-600 uppercase tracking-wide">Avancement</span>
+                </div>
+              </div>
+
+              {(() => {
+                const step1 = typeof currentVictim?.photo === 'string'
+                  ? currentVictim.photo.trim().length > 0
+                  : false;
+                const step2 = !!hasContrat;
+                const step3 = false;
+                const step4 = false;
+                const step5 = false;
+                const steps = [step1, step2, step3, step4, step5];
+                const doneCount = steps.filter(Boolean).length;
+                const totalCount = steps.length;
+
+                return (
+                  <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                    <div className="px-5 py-4 bg-gradient-to-r from-gray-50 to-white border-b border-gray-200">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <div className="text-sm font-semibold !text-gray-900">Synthèse</div>
+                          <div className="text-xs !text-gray-600">{doneCount} / {totalCount} étapes validées</div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {steps.map((ok, i) => (
+                            <span
+                              key={i}
+                              className={`h-3 w-3 border ${ok ? 'bg-blue-600 border-blue-600' : 'bg-gray-200 border-gray-300'}`}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-5">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="rounded-xl border border-gray-200 bg-white">
+                          <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+                            <div className="text-sm font-semibold !text-gray-900">Étapes</div>
+                          </div>
+                          <div className="divide-y divide-gray-200">
+                            {[{
+                              idx: 1,
+                              label: 'A été recontacté',
+                              ok: step1,
+                              hint: 'Photo enregistrée'
+                            }, {
+                              idx: 2,
+                              label: 'A signé le contrat',
+                              ok: step2,
+                              hint: 'Contrat disponible'
+                            }, {
+                              idx: 3,
+                              label: 'A débuté l\'indemnisation',
+                              ok: step3,
+                              hint: 'À renseigner'
+                            }, {
+                              idx: 4,
+                              label: 'Étape 4',
+                              ok: step4,
+                              hint: 'À définir'
+                            }, {
+                              idx: 5,
+                              label: 'Étape 5',
+                              ok: step5,
+                              hint: 'À définir'
+                            }].map((s) => (
+                              <div key={s.idx} className="px-4 py-3 flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-3">
+                                  <span className={`h-3 w-3 border ${s.ok ? 'bg-blue-600 border-blue-600' : 'bg-gray-200 border-gray-300'}`} />
+                                  <div>
+                                    <div className="text-sm font-medium !text-gray-900">{s.idx}. {s.label}</div>
+                                    <div className="text-xs !text-gray-500">{s.hint}</div>
+                                  </div>
+                                </div>
+                                <span className={`text-xs font-semibold px-2 py-1 rounded-full border ${s.ok ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                                  {s.ok ? 'Validé' : 'En attente'}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="rounded-xl border border-gray-200 bg-white">
+                          <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+                            <div className="text-sm font-semibold !text-gray-900">Contrôles</div>
+                          </div>
+                          <div className="p-4 space-y-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="text-sm !text-gray-700">Photo (recontact)</div>
+                              <span className={`text-xs font-semibold px-2 py-1 rounded border ${step1 ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                                {step1 ? 'Présente' : 'Absente'}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="text-sm !text-gray-700">Contrat</div>
+                              <span className={`text-xs font-semibold px-2 py-1 rounded border ${step2 ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                                {step2 ? 'Disponible' : 'Non disponible'}
+                              </span>
+                            </div>
+                            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                              <div className="text-xs font-semibold !text-gray-700 mb-1 uppercase tracking-wide">Note</div>
+                              <div className="text-xs !text-gray-600">
+                                Les étapes 3 à 5 sont réservées pour la suite (logique à intégrer).
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
