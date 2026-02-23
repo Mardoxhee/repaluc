@@ -51,9 +51,17 @@ const TAB_LIST = [
 const ReparationsTabs = () => {
   const [activeTab, setActiveTab] = React.useState(TAB_LIST[0].key);
   const [selectedAgentReparation, setSelectedAgentReparation] = useState<string>('');
+  const [photoNotNull, setPhotoNotNull] = useState<boolean>(false);
 
   const handleSelectAgent = (fullName: string) => {
     setSelectedAgentReparation(fullName);
+    setPhotoNotNull(false);
+    setActiveTab('victimes');
+  };
+
+  const handleShowRecontactedVictims = () => {
+    setSelectedAgentReparation('');
+    setPhotoNotNull(true);
     setActiveTab('victimes');
   };
 
@@ -93,6 +101,7 @@ const ReparationsTabs = () => {
             {activeTab === "dashboard" && (
               <DashboardVictims
                 onSelectAgentReparation={handleSelectAgent}
+                onShowRecontactedVictims={handleShowRecontactedVictims}
               />
             )}
             {activeTab === "victimes" && (
@@ -104,6 +113,7 @@ const ReparationsTabs = () => {
                   mockProgrammes={mockProgrammes}
                   mockCategories={mockCategories}
                   agentReparation={selectedAgentReparation}
+                  photoNotNull={photoNotNull}
                 />
               </>
             )}

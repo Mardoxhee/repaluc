@@ -54,6 +54,7 @@ interface ProgressCardProps {
   color: string;
   subtitle?: string;
   loading?: boolean;
+  onClick?: () => void;
 }
 
 const ProgressCard: React.FC<ProgressCardProps> = ({
@@ -64,13 +65,23 @@ const ProgressCard: React.FC<ProgressCardProps> = ({
   color,
   subtitle,
   loading,
+  onClick,
 }) => {
   const safeTotal = Number.isFinite(total) && total > 0 ? total : 0;
   const safeCurrent = Number.isFinite(current) && current > 0 ? Math.min(current, safeTotal || current) : 0;
   const percent = safeTotal > 0 ? Math.round((safeCurrent / safeTotal) * 100) : 0;
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-all duration-300 group">
+    <div
+      className={`bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-all duration-300 group ${onClick ? 'cursor-pointer' : ''}`}
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={(e) => {
+        if (!onClick) return;
+        if (e.key === 'Enter' || e.key === ' ') onClick();
+      }}
+    >
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <div className="flex items-center gap-3 mb-3">
@@ -185,9 +196,10 @@ const isReparationsAgent = (a: AgentCore): boolean | null => {
 
 interface DashboardVictimsProps {
   onSelectAgentReparation?: (fullName: string) => void;
+  onShowRecontactedVictims?: () => void;
 }
 
-const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentReparation }) => {
+const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentReparation, onShowRecontactedVictims }) => {
   const { fetcher } = useFetch();
   const [loading, setLoading] = useState(true);
   const [loadingRecontact, setLoadingRecontact] = useState(true);
@@ -502,6 +514,7 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
           color="bg-gradient-to-br from-indigo-500 to-indigo-600"
           subtitle=""
           loading={loading || loadingRecontact}
+          onClick={onShowRecontactedVictims}
         />
 
         <ProgressCard

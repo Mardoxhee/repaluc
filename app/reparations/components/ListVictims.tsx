@@ -7,7 +7,7 @@ import { Search, Filter, Eye, Users, ChevronLeft, ChevronRight, X, Plus, Check, 
 import EvaluationModal from "./EvaluationModal";
 import ViewEvaluationModal from "./ViewEvaluationModal";
 import { saveVictimsToCache, getVictimsFromCache, isOnline, saveProgress, getProgress } from '../../utils/victimsCache';
-import { saveQuestions, isCacheValid } from '../../utils/planVieQuestionsCache';
+import { saveQuestions, isCacheValid, getQuestions } from '../../utils/planVieQuestionsCache';
 import { deletePendingVictimPhotosForVictim } from '@/app/utils/victimPhotosCache';
 import * as XLSX from 'xlsx';
 
@@ -20,6 +20,7 @@ interface ReglagesProps {
     mockProgrammes: { id: number; nom: string }[];
     mockCategories: { id: number; nom: string }[];
     agentReparation?: string;
+    photoNotNull?: boolean;
 }
 
 const provincesRDC = [
@@ -109,15 +110,22 @@ const operators = [
     { key: 'between', label: 'Entre', types: ['number', 'date'] },
 ];
 
-const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation }) => {
+const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation, photoNotNull }) => {
     // Charger les questions du formulaire plan de vie au démarrage
     useEffect(() => {
         const loadQuestions = async () => {
             try {
+                const cached = await getQuestions();
+                if (cached) return;
+
                 // Vérifier si le cache est toujours valide (1 jour de cache)
                 const cacheValid = await isCacheValid(24 * 60 * 60 * 1000);
 
-                if (!cacheValid && isOnline()) {
+                if (cacheValid) return;
+                if (!isOnline()) return;
+                if (!API_PLANVIE_URL) return;
+
+                if (!cacheValid) {
                     const response = await fetch(`${API_PLANVIE_URL}/question/type/plandevie`);
                     if (!response.ok) {
                         throw new Error('Erreur lors du chargement des questions');
@@ -127,7 +135,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation 
                     console.log('Questions du formulaire plan de vie mises en cache');
                 }
             } catch (error) {
-                console.error('Erreur lors du chargement des questions:', error);
+                console.log('Erreur lors du chargement des questions:', error);
             }
         };
 
@@ -446,7 +454,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation 
 
         try {
             // Charger la première page pour connaître le total
-            const firstPage = await fetchCtx.fetcher(`/victime/paginate/filtered?page=1&limit=20`);
+            const firstEndpoint = photoNotNull ? '/victime/paginate/photo-not-null' : '/victime/paginate/filtered';
+            const firstPage = await fetchCtx.fetcher(`${firstEndpoint}?page=1&limit=20`);
             if (!firstPage?.data) {
                 setInitialLoading(false);
                 return;
@@ -486,7 +495,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation 
             // Charger les pages restantes en arrière-plan
             for (let page = Math.max(2, startPage); page <= totalPages; page++) {
                 try {
-                    const response = await fetchCtx.fetcher(`/victime/paginate/filtered?page=${page}&limit=20`);
+                    const endpoint = photoNotNull ? '/victime/paginate/photo-not-null' : '/victime/paginate/filtered';
+                    const response = await fetchCtx.fetcher(`${endpoint}?page=${page}&limit=20`);
                     if (response?.data) {
                         // Ajouter les nouvelles données
                         const startIndex = (page - 1) * 20;
@@ -559,7 +569,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation 
         });
 
         return new URLSearchParams(params).toString();
-    }, [meta.page, meta.limit, searchTerm, filterRules, agentReparation]);
+    }, [meta.page, meta.limit, searchTerm, filterRules, agentReparation, photoNotNull]);
 
     const buildExportQueryParams = useCallback(() => {
         const params: Record<string, string> = {
@@ -575,7 +585,11 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation 
         });
 
         return new URLSearchParams(params).toString();
-    }, [searchTerm, filterRules, agentReparation]);
+    }, [searchTerm, filterRules, agentReparation, photoNotNull]);
+
+    useEffect(() => {
+        setMeta(prev => ({ ...prev, page: 1 }));
+    }, [agentReparation, photoNotNull]);
 
     const handleExportExcel = useCallback(async () => {
         if (!fetchCtx?.fetcher) return;
@@ -592,7 +606,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation 
         setExporting(true);
         try {
             const queryParams = buildExportQueryParams();
-            const response = await fetchCtx.fetcher(`/victime/paginate/filtered?${queryParams}`);
+            const endpoint = photoNotNull ? '/victime/paginate/photo-not-null' : '/victime/paginate/filtered';
+            const response = await fetchCtx.fetcher(`${endpoint}?${queryParams}`);
             const rows = Array.isArray(response?.data) ? response.data : [];
 
             if (rows.length === 0) {
@@ -643,7 +658,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation 
         } finally {
             setExporting(false);
         }
-    }, [buildExportQueryParams, fetchCtx?.fetcher]);
+    }, [buildExportQueryParams, fetchCtx?.fetcher, photoNotNull]);
 
     // Function to check if a specific victim has an evaluation and view it
     const handleViewEvaluation = async (victim: any) => {
@@ -736,7 +751,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation 
         // 2. Si on est en ligne, on utilise l'API
         try {
             const queryParams = buildQueryParams();
-            const response = await fetchCtx.fetcher(`/victime/paginate/filtered?${queryParams}`);
+            const endpoint = photoNotNull ? '/victime/paginate/photo-not-null' : '/victime/paginate/filtered';
+            const response = await fetchCtx.fetcher(`${endpoint}?${queryParams}`);
 
             if (response?.data) {
                 // En mode en ligne, on affiche directement les données de l'API
