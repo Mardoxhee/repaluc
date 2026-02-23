@@ -19,6 +19,7 @@ interface ReglagesProps {
     mockMesures: { id: number; nom: string }[];
     mockProgrammes: { id: number; nom: string }[];
     mockCategories: { id: number; nom: string }[];
+    agentReparation?: string;
 }
 
 const provincesRDC = [
@@ -47,6 +48,14 @@ const ProgressionCells: React.FC<{ done?: number; total?: number }> = ({ done, t
             })}
         </div>
     );
+};
+
+const getProgressionDone = (victim: any): number => {
+    const hasPhoto = typeof victim?.photo === 'string' && victim.photo.trim().length > 0;
+    const hasPieceIdentite = victim?.progression?.hasPieceIdentite === true;
+    const computed = (hasPhoto ? 1 : 0) + (hasPieceIdentite ? 1 : 0);
+    const existing = typeof victim?.progression?.done === 'number' ? victim.progression.done : 0;
+    return Math.max(existing, computed);
 };
 
 const statusOptions = [
@@ -100,7 +109,7 @@ const operators = [
     { key: 'between', label: 'Entre', types: ['number', 'date'] },
 ];
 
-const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
+const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation }) => {
     // Charger les questions du formulaire plan de vie au démarrage
     useEffect(() => {
         const loadQuestions = async () => {
@@ -169,7 +178,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
 
             return matchesSearch && matchesRules;
         });
-    }, [searchTerm, filterRules]);
+    }, [searchTerm, filterRules, agentReparation]);
     const [victims, setVictims] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string>("");
@@ -542,6 +551,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
         };
 
         if (searchTerm) params.nom = searchTerm;
+        if (agentReparation && agentReparation.trim().length > 0) params.agentReparation = agentReparation.trim();
 
         // Build filters from rules
         filterRules.forEach((rule) => {
@@ -549,7 +559,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
         });
 
         return new URLSearchParams(params).toString();
-    }, [meta.page, meta.limit, searchTerm, filterRules]);
+    }, [meta.page, meta.limit, searchTerm, filterRules, agentReparation]);
 
     const buildExportQueryParams = useCallback(() => {
         const params: Record<string, string> = {
@@ -558,13 +568,14 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
         };
 
         if (searchTerm) params.nom = searchTerm;
+        if (agentReparation && agentReparation.trim().length > 0) params.agentReparation = agentReparation.trim();
 
         filterRules.forEach((rule) => {
             if (rule.value) params[rule.field] = rule.value;
         });
 
         return new URLSearchParams(params).toString();
-    }, [searchTerm, filterRules]);
+    }, [searchTerm, filterRules, agentReparation]);
 
     const handleExportExcel = useCallback(async () => {
         if (!fetchCtx?.fetcher) return;
@@ -1335,7 +1346,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <ProgressionCells
-                                                    done={victim?.progression?.done ?? (typeof victim?.photo === 'string' && victim.photo.trim().length > 0 ? 1 : 0)}
+                                                    done={getProgressionDone(victim)}
                                                     total={victim?.progression?.total ?? 5}
                                                 />
                                             </td>

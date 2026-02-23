@@ -50,33 +50,39 @@ const TAB_LIST = [
 
 const ReparationsTabs = () => {
   const [activeTab, setActiveTab] = React.useState(TAB_LIST[0].key);
+  const [selectedAgentReparation, setSelectedAgentReparation] = useState<string>('');
+
+  const handleSelectAgent = (fullName: string) => {
+    setSelectedAgentReparation(fullName);
+    setActiveTab('victimes');
+  };
 
   return (
     <div className="w-full pt-20">
       {/* Onglets */}
       <div className="bg-white border-b-4 border-primary-500 shadow-sm">
         <div className="flex">
-        {TAB_LIST.map((tab, idx) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`
+          {TAB_LIST.map((tab, idx) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`
               relative px-8 py-4 font-semibold text-sm uppercase tracking-wide transition-all duration-300 border-r border-gray-200 last:border-r-0
               ${activeTab === tab.key
-                ? "bg-primary-500 text-white shadow-lg"
-                : "bg-gray-50 text-gray-600 hover:bg-primary-50 hover:text-primary-700"
-              }
+                  ? "bg-primary-500 text-white shadow-lg"
+                  : "bg-gray-50 text-gray-600 hover:bg-primary-50 hover:text-primary-700"
+                }
             `}
-          >
-            <span className="flex items-center gap-2">
-              {tab.icon}
-              {tab.label}
-            </span>
-            {activeTab === tab.key && (
-              <div className="absolute bottom-0 left-0 right-0 h-1 bg-secondary-500"></div>
-            )}
-          </button>
-        ))}
+            >
+              <span className="flex items-center gap-2">
+                {tab.icon}
+                {tab.label}
+              </span>
+              {activeTab === tab.key && (
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-secondary-500"></div>
+              )}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -84,24 +90,29 @@ const ReparationsTabs = () => {
       <div className="bg-gray-50 w-full min-h-[calc(100vh-200px)]">
         <div className="bg-white shadow-sm border-l-4 border-primary-500 mx-4 mt-4">
           <div className="p-6">
-        {activeTab === "dashboard" && <DashboardVictims />}
-        {activeTab === "victimes" && (
-          <>
+            {activeTab === "dashboard" && (
+              <DashboardVictims
+                onSelectAgentReparation={handleSelectAgent}
+              />
+            )}
+            {activeTab === "victimes" && (
+              <>
 
-            <ListVictims
-              mockPrejudices={mockPrejudices}
-              mockMesures={mockMesures}
-              mockProgrammes={mockProgrammes}
-              mockCategories={mockCategories}
-            />
-          </>
-        )}
-        {activeTab === "programme" && <div>Contenu programme de réparations</div>}
-        {activeTab === "indemnisation" && <div>Contenu demandes d’indemnisation</div>}
-        {activeTab === "stats" && <div>Contenu statistiques & rapports</div>}
-        {activeTab === "reglage" && <ReglagesPanel mockPrejudices={mockPrejudices} mockMesures={mockMesures} mockProgrammes={mockProgrammes} mockCategories={mockCategories} />}
-      </div>
-    </div>
+                <ListVictims
+                  mockPrejudices={mockPrejudices}
+                  mockMesures={mockMesures}
+                  mockProgrammes={mockProgrammes}
+                  mockCategories={mockCategories}
+                  agentReparation={selectedAgentReparation}
+                />
+              </>
+            )}
+            {activeTab === "programme" && <div>Contenu programme de réparations</div>}
+            {activeTab === "indemnisation" && <div>Contenu demandes d’indemnisation</div>}
+            {activeTab === "stats" && <div>Contenu statistiques & rapports</div>}
+            {activeTab === "reglage" && <ReglagesPanel mockPrejudices={mockPrejudices} mockMesures={mockMesures} mockProgrammes={mockProgrammes} mockCategories={mockCategories} />}
+          </div>
+        </div>
       </div>
     </div>
   );

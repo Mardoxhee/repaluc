@@ -124,12 +124,77 @@ const ProgressCard: React.FC<ProgressCardProps> = ({
   );
 };
 
-const DashboardVictims = () => {
+type AgentCore = {
+  id: number;
+  nom?: string;
+  postnom?: string;
+  prenom?: string;
+  username?: string;
+  email?: string;
+  lieu_affectation?: string;
+  status?: boolean;
+  isConnected?: boolean;
+  direction?: { id?: number; direction?: string } | string;
+  service?: string;
+  departement?: string;
+  department?: string;
+  division?: { nom?: string };
+  directionNom?: string;
+  serviceNom?: string;
+};
+
+const getAgentFullName = (a: AgentCore): string => {
+  const parts = [a?.prenom, a?.postnom, a?.nom]
+    .filter((x) => typeof x === 'string' && x.trim().length > 0)
+    .map((x) => (x as string).trim());
+  if (parts.length > 0) return parts.join(' ');
+  const fallback = a?.username ?? a?.email ?? String(a?.id ?? '');
+  return String(fallback);
+};
+
+const isReparationsAgent = (a: AgentCore): boolean | null => {
+  const objDirection = typeof (a as any)?.direction === 'object' && (a as any)?.direction !== null
+    ? (a as any)?.direction?.direction
+    : undefined;
+
+  const candidates: Array<unknown> = [
+    objDirection,
+    (a as any)?.direction,
+    (a as any)?.directionNom,
+    (a as any)?.service,
+    (a as any)?.serviceNom,
+    (a as any)?.departement,
+    (a as any)?.department,
+    (a as any)?.division?.nom,
+  ];
+
+  const normalized = candidates
+    .filter((x) => typeof x === 'string')
+    .map((x) => (x as string).trim().toUpperCase())
+    .filter((s) => s.length > 0);
+
+  if (normalized.length === 0) return null;
+
+  // Filtre strict demandé: direction.direction doit être REPARATIONS.
+  if (typeof objDirection === 'string' && objDirection.trim().length > 0) {
+    return objDirection.trim().toUpperCase() === 'REPARATIONS';
+  }
+
+  return normalized.some((s) => s === 'REPARATIONS' || s.includes('REPARATIONS'));
+};
+
+interface DashboardVictimsProps {
+  onSelectAgentReparation?: (fullName: string) => void;
+}
+
+const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentReparation }) => {
   const { fetcher } = useFetch();
   const [loading, setLoading] = useState(true);
   const [loadingRecontact, setLoadingRecontact] = useState(true);
   const [isOffline, setIsOffline] = useState(false);
   const [showOfflineIndicator, setShowOfflineIndicator] = useState(true);
+  const [agents, setAgents] = useState<AgentCore[]>([]);
+  const [agentsLoading, setAgentsLoading] = useState(false);
   const [victimesRecontactees, setVictimesRecontactees] = useState(0);
   const [victimesAvecContratSigne, setVictimesAvecContratSigne] = useState(0);
   const [victimesIndemnisationCommencee, setVictimesIndemnisationCommencee] = useState(0);
@@ -243,6 +308,43 @@ const DashboardVictims = () => {
       window.removeEventListener('offline', handleOffline);
     };
   }, [fetcher]);
+
+  useEffect(() => {
+    const fetchAgents = async () => {
+      const coreBaseUrl = process.env.NEXT_PUBLIC_CORE_BASE_URL || '';
+      if (!coreBaseUrl) return;
+
+      setAgentsLoading(true);
+      try {
+        let authHeader: Record<string, string> = {};
+        try {
+          const t = localStorage.getItem('token');
+          if (t && t.trim().length > 0) {
+            authHeader = { Authorization: `Bearer ${t}` };
+          }
+        } catch {
+          // ignore
+        }
+
+        const res = await fetch(`${coreBaseUrl}/user`, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json', ...authHeader },
+        });
+        const payload = await res.json().catch(() => null);
+        const rows = payload?.data;
+        const list = Array.isArray(rows) ? (rows as AgentCore[]) : [];
+        const decision = list.length > 0 ? isReparationsAgent(list[0]) : null;
+        const filtered = decision === null ? list : list.filter((u) => isReparationsAgent(u) === true);
+        setAgents(filtered);
+      } catch {
+        setAgents([]);
+      } finally {
+        setAgentsLoading(false);
+      }
+    };
+
+    fetchAgents();
+  }, []);
 
   // Calculs des totaux
   const totalVictimes = totalVictimesGlobal ?? stats?.sexe?.reduce((acc, item: any) => acc + parseInt(item.total), 0);
@@ -660,6 +762,52 @@ const DashboardVictims = () => {
             </div>
           )}
         </div>
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 mb-8 mt-8">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h3 className="text-lg font-bold text-gray-900">Agents</h3>
+            <p className="text-sm text-gray-500">Clique sur un agent pour filtrer les victimes par agentReparation</p>
+          </div>
+          {agentsLoading ? (
+            <div className="h-6 w-24 bg-gray-200 animate-pulse rounded" />
+          ) : (
+            <div className="text-sm text-gray-500">{agents.length} agent(s)</div>
+          )}
+        </div>
+
+        {agentsLoading ? (
+          <div className="space-y-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="h-10 bg-gray-100 rounded-lg animate-pulse" />
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-3 max-h-80 overflow-y-auto">
+            {agents.map((a: AgentCore) => {
+              const fullName = getAgentFullName(a);
+              const count = a?.isConnected ? 1 : 0;
+
+              return (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => onSelectAgentReparation?.(fullName)}
+                  className="w-full flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-2.5 h-2.5 rounded-full bg-primary-500 flex-shrink-0" />
+                    <span className="font-medium text-gray-800 truncate">{fullName}</span>
+                  </div>
+                  <span className="bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full text-sm font-semibold">
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Section de résumé */}

@@ -323,6 +323,24 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
         }));
 
         setFiles(mappedFiles);
+
+        const hasPieceIdentite = Array.isArray(documents)
+          ? documents.some((d: any) => {
+            const label = typeof d?.label === 'string' ? d.label.trim().toLowerCase() : '';
+            return label === "pièce d'identité" || label === "piece d'identite";
+          })
+          : false;
+
+        const nextVictim: any = {
+          ...currentVictim,
+          progression: {
+            ...(currentVictim as any)?.progression,
+            hasPieceIdentite,
+          },
+        };
+
+        setCurrentVictim(nextVictim);
+        onVictimUpdate?.(nextVictim);
       } catch (e) {
         console.log('Erreur lors du chargement des documents:', e);
         setFiles([]);
