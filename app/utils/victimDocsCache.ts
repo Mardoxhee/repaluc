@@ -33,6 +33,19 @@ const openDB = (): Promise<IDBDatabase> => {
   });
 };
 
+export const deletePendingVictimDocById = async (id: number): Promise<void> => {
+  const db = await openDB();
+  const tx = db.transaction([STORE_NAME], 'readwrite');
+  const store = tx.objectStore(STORE_NAME);
+
+  store.delete(id);
+
+  await new Promise<void>((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+};
+
 export const savePendingVictimDoc = async (params: {
   victimId: number;
   label: string;
