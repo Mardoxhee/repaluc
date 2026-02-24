@@ -53,7 +53,14 @@ const ProgressionCells: React.FC<{ done?: number; total?: number }> = ({ done, t
 
 const getProgressionDone = (victim: any): number => {
     const hasPhoto = typeof victim?.photo === 'string' && victim.photo.trim().length > 0;
-    const hasPieceIdentite = victim?.progression?.hasPieceIdentite === true;
+    const hasPieceIdentiteFromProgress = victim?.progression?.hasPieceIdentite === true;
+    const hasPieceIdentiteFromDocs = Array.isArray(victim?.documentVictime)
+        ? victim.documentVictime.some((d: any) => {
+            const label = typeof d?.label === 'string' ? d.label.trim().toLowerCase() : '';
+            return label === "pièce d'identité" || label === "piece d'identite";
+        })
+        : false;
+    const hasPieceIdentite = hasPieceIdentiteFromProgress || hasPieceIdentiteFromDocs;
     const computed = (hasPhoto ? 1 : 0) + (hasPieceIdentite ? 1 : 0);
     const existing = typeof victim?.progression?.done === 'number' ? victim.progression.done : 0;
     return Math.max(existing, computed);
