@@ -9,6 +9,7 @@ import HamburgerMenu from '../HamburgerMenu';
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 const LAST_ACTIVITY_KEY = 'repaluc_last_activity';
 const AUTH_KEY = 'repaluc_auth';
+const SESSION_LOCK_KEY = 'repaluc_session_locked';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -51,6 +52,12 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, noZoom }) => {
         router.replace('/login');
         return;
       }
+
+      const locked = localStorage.getItem(SESSION_LOCK_KEY);
+      if (locked === 'true') {
+        router.replace('/login');
+        return;
+      }
     } finally {
       setAuthChecked(true);
     }
@@ -77,13 +84,9 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, noZoom }) => {
       }
     };
 
-    const clearAuth = () => {
+    const lockSession = () => {
       try {
-        localStorage.removeItem(AUTH_KEY);
-        localStorage.removeItem('token');
-        localStorage.removeItem('usr');
-        localStorage.removeItem('auth');
-        localStorage.removeItem('apps');
+        localStorage.setItem(SESSION_LOCK_KEY, 'true');
       } catch {
         // ignore
       }
@@ -93,7 +96,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, noZoom }) => {
       const last = getLastActivity();
       if (Date.now() - last < IDLE_TIMEOUT_MS) return;
 
-      clearAuth();
+      lockSession();
       router.replace('/login');
     };
 
@@ -120,6 +123,10 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, noZoom }) => {
 
     const onStorage = (e: StorageEvent) => {
       if (e.key === AUTH_KEY && e.newValue == null) {
+        router.replace('/login');
+      }
+
+      if (e.key === SESSION_LOCK_KEY && e.newValue === 'true') {
         router.replace('/login');
       }
     };
