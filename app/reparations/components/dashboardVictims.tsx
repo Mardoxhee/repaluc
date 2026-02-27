@@ -163,6 +163,14 @@ const getAgentFullName = (a: AgentCore): string => {
   return String(fallback);
 };
 
+const getAgentPrenomNom = (a: AgentCore): string => {
+  const parts = [a?.prenom, a?.nom]
+    .filter((x) => typeof x === 'string' && x.trim().length > 0)
+    .map((x) => (x as string).trim());
+  if (parts.length > 0) return parts.join(' ');
+  return getAgentFullName(a);
+};
+
 const isReparationsAgent = (a: AgentCore): boolean | null => {
   const objDirection = typeof (a as any)?.direction === 'object' && (a as any)?.direction !== null
     ? (a as any)?.direction?.direction
@@ -207,6 +215,8 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
   const [showOfflineIndicator, setShowOfflineIndicator] = useState(true);
   const [agents, setAgents] = useState<AgentCore[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
+  const [victimsByAgentTotal, setVictimsByAgentTotal] = useState<Record<string, number>>({});
+  const [victimsByAgentLoading, setVictimsByAgentLoading] = useState(false);
   const [victimesRecontactees, setVictimesRecontactees] = useState(0);
   const [victimesAvecContratSigne, setVictimesAvecContratSigne] = useState(0);
   const [victimesIndemnisationCommencee, setVictimesIndemnisationCommencee] = useState(0);
@@ -357,6 +367,43 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
 
     fetchAgents();
   }, []);
+
+  useEffect(() => {
+    const loadVictimsTotalsByAgent = async () => {
+      if (!fetcher) return;
+      if (!agents || agents.length === 0) {
+        setVictimsByAgentTotal({});
+        return;
+      }
+
+      const offline = typeof navigator !== 'undefined' ? !navigator.onLine : false;
+      if (offline) {
+        setVictimsByAgentTotal({});
+        return;
+      }
+
+      setVictimsByAgentLoading(true);
+      try {
+        const entries = await Promise.all(
+          agents.map(async (a) => {
+            const agentReparation = getAgentPrenomNom(a);
+            const encoded = encodeURIComponent(agentReparation);
+            const resp = await fetcher(`/victime/agent-reparation/${encoded}?page=1&limit=1`);
+            const total = typeof resp?.meta?.total === 'number' ? resp.meta.total : 0;
+            return [String(a.id), total] as const;
+          })
+        );
+
+        setVictimsByAgentTotal(Object.fromEntries(entries));
+      } catch {
+        setVictimsByAgentTotal({});
+      } finally {
+        setVictimsByAgentLoading(false);
+      }
+    };
+
+    loadVictimsTotalsByAgent();
+  }, [agents, fetcher]);
 
   // Calculs des totaux
   const totalVictimes = totalVictimesGlobal ?? stats?.sexe?.reduce((acc, item: any) => acc + parseInt(item.total), 0);
@@ -800,13 +847,14 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
           <div className="space-y-3 max-h-80 overflow-y-auto">
             {agents.map((a: AgentCore) => {
               const fullName = getAgentFullName(a);
-              const count = a?.isConnected ? 1 : 0;
+              const agentReparation = getAgentPrenomNom(a);
+              const count = victimsByAgentTotal[String(a.id)] ?? 0;
 
               return (
                 <button
                   key={a.id}
                   type="button"
-                  onClick={() => onSelectAgentReparation?.(fullName)}
+                  onClick={() => onSelectAgentReparation?.(agentReparation)}
                   className="w-full flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
                 >
                   <div className="flex items-center gap-3 min-w-0">
@@ -814,7 +862,7 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
                     <span className="font-medium text-gray-800 truncate">{fullName}</span>
                   </div>
                   <span className="bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full text-sm font-semibold">
-                    {count}
+                    {victimsByAgentLoading ? '...' : count}
                   </span>
                 </button>
               );

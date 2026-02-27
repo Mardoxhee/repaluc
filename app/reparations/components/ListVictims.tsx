@@ -461,7 +461,11 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
 
         try {
             // Charger la première page pour connaître le total
-            const firstEndpoint = photoNotNull ? '/victime/paginate/photo-not-null' : '/victime/paginate/filtered';
+            const firstEndpoint = photoNotNull
+                ? '/victime/paginate/photo-not-null'
+                : agentReparation
+                    ? `/victime/agent-reparation/${encodeURIComponent(agentReparation.trim())}`
+                    : '/victime/paginate/filtered';
             const firstPage = await fetchCtx.fetcher(`${firstEndpoint}?page=1&limit=20`);
             if (!firstPage?.data) {
                 setInitialLoading(false);
@@ -502,7 +506,11 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
             // Charger les pages restantes en arrière-plan
             for (let page = Math.max(2, startPage); page <= totalPages; page++) {
                 try {
-                    const endpoint = photoNotNull ? '/victime/paginate/photo-not-null' : '/victime/paginate/filtered';
+                    const endpoint = photoNotNull
+                        ? '/victime/paginate/photo-not-null'
+                        : agentReparation
+                            ? `/victime/agent-reparation/${encodeURIComponent(agentReparation.trim())}`
+                            : '/victime/paginate/filtered';
                     const response = await fetchCtx.fetcher(`${endpoint}?page=${page}&limit=20`);
                     if (response?.data) {
                         // Ajouter les nouvelles données
@@ -568,7 +576,6 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
         };
 
         if (searchTerm) params.nom = searchTerm;
-        if (agentReparation && agentReparation.trim().length > 0) params.agentReparation = agentReparation.trim();
 
         // Build filters from rules
         filterRules.forEach((rule) => {
@@ -585,7 +592,6 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
         };
 
         if (searchTerm) params.nom = searchTerm;
-        if (agentReparation && agentReparation.trim().length > 0) params.agentReparation = agentReparation.trim();
 
         filterRules.forEach((rule) => {
             if (rule.value) params[rule.field] = rule.value;
@@ -613,7 +619,11 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
         setExporting(true);
         try {
             const queryParams = buildExportQueryParams();
-            const endpoint = photoNotNull ? '/victime/paginate/photo-not-null' : '/victime/paginate/filtered';
+            const endpoint = photoNotNull
+                ? '/victime/paginate/photo-not-null'
+                : agentReparation
+                    ? `/victime/agent-reparation/${encodeURIComponent(agentReparation.trim())}`
+                    : '/victime/paginate/filtered';
             const response = await fetchCtx.fetcher(`${endpoint}?${queryParams}`);
             const rows = Array.isArray(response?.data) ? response.data : [];
 
@@ -758,7 +768,11 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
         // 2. Si on est en ligne, on utilise l'API
         try {
             const queryParams = buildQueryParams();
-            const endpoint = photoNotNull ? '/victime/paginate/photo-not-null' : '/victime/paginate/filtered';
+            const endpoint = photoNotNull
+                ? '/victime/paginate/photo-not-null'
+                : agentReparation
+                    ? `/victime/agent-reparation/${encodeURIComponent(agentReparation.trim())}`
+                    : '/victime/paginate/filtered';
             const response = await fetchCtx.fetcher(`${endpoint}?${queryParams}`);
 
             if (response?.data) {
