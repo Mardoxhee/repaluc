@@ -1242,6 +1242,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                             {(filterRules.length > 0 || searchTerm) && (
                                 <div className="flex items-center gap-2 mt-4 pt-4 border-t border-gray-200">
                                     <span className="text-sm font-medium text-gray-700">Filtres actifs:</span>
+                                    <span className="text-sm text-gray-600">({meta.total} résultat{meta.total > 1 ? 's' : ''})</span>
                                     {searchTerm && (
                                         <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs border border-blue-200">
                                             Recherche: "{searchTerm}"
@@ -1280,7 +1281,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                                 <div className="flex items-center gap-3">
                                     <Users className="text-blue-600" size={20} />
                                     <span className="font-medium text-gray-900">
-                                        {victims.length} victime{victims.length > 1 ? 's' : ''} trouvée{victims.length > 1 ? 's' : ''}
+                                        {meta.total} victime{meta.total > 1 ? 's' : ''} trouvée{meta.total > 1 ? 's' : ''}
                                     </span>
                                 </div>
                                 {/* <button
