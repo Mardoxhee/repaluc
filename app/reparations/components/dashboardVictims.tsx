@@ -5,6 +5,7 @@ import { FiUsers, FiShield, FiMapPin, FiAward, FiDollarSign, FiTrendingUp, FiAle
 import { FaHospitalSymbol, FaUserCheck, FaBalanceScale } from "react-icons/fa";
 import { BsFillHousesFill } from "react-icons/bs";
 import { useFetch } from '../../context/FetchContext';
+import { Modal } from 'flowbite-react';
 
 const COLORS = ["#007fba", "#7f2360", "#0066cc", "#cc3366", "#0080ff", "#ff6b9d", "#4da6ff", "#ff8fab", "#80bfff", "#ffb3d1"];
 
@@ -217,6 +218,11 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
   const [agentsLoading, setAgentsLoading] = useState(false);
   const [victimsByAgentTotal, setVictimsByAgentTotal] = useState<Record<string, number>>({});
   const [victimsByAgentLoading, setVictimsByAgentLoading] = useState(false);
+  const [showAgentRecontactModal, setShowAgentRecontactModal] = useState(false);
+  const [selectedAgentRecontact, setSelectedAgentRecontact] = useState<string>('');
+  const [agentRecontactLoading, setAgentRecontactLoading] = useState(false);
+  const [agentRecontactRows, setAgentRecontactRows] = useState<any[]>([]);
+  const [agentRecontactMeta, setAgentRecontactMeta] = useState<{ total: number; page: number; limit: number; totalPages: number; hasNextPage: boolean; hasPreviousPage: boolean } | null>(null);
   const [victimesRecontactees, setVictimesRecontactees] = useState(0);
   const [victimesAvecContratSigne, setVictimesAvecContratSigne] = useState(0);
   const [victimesIndemnisationCommencee, setVictimesIndemnisationCommencee] = useState(0);
@@ -387,8 +393,12 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
         const entries = await Promise.all(
           agents.map(async (a) => {
             const agentReparation = getAgentPrenomNom(a);
-            const encoded = encodeURIComponent(agentReparation);
-            const resp = await fetcher(`/victime/agent-reparation/${encoded}?page=1&limit=1`);
+            const params = new URLSearchParams({
+              agentReparation,
+              page: '1',
+              limit: '1',
+            });
+            const resp = await fetcher(`/victime/filtre/agent-reparation?${params.toString()}`);
             const total = typeof resp?.meta?.total === 'number' ? resp.meta.total : 0;
             return [String(a.id), total] as const;
           })
@@ -404,6 +414,44 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
 
     loadVictimsTotalsByAgent();
   }, [agents, fetcher]);
+
+  const fetchAgentRecontactedVictims = async (agentReparation: string, page: number, limit: number) => {
+    if (!fetcher) return;
+    const params = new URLSearchParams({
+      agentReparation,
+      page: String(page),
+      limit: String(limit),
+    });
+    const resp = await fetcher(`/victime/filtre/agent-reparation?${params.toString()}`);
+    const rows = Array.isArray(resp?.data) ? resp.data : [];
+    const meta = resp?.meta;
+    setAgentRecontactRows(rows);
+    if (meta && typeof meta === 'object') {
+      setAgentRecontactMeta({
+        total: typeof meta.total === 'number' ? meta.total : rows.length,
+        page: typeof meta.page === 'number' ? meta.page : page,
+        limit: typeof meta.limit === 'number' ? meta.limit : limit,
+        totalPages: typeof meta.totalPages === 'number' ? meta.totalPages : 1,
+        hasNextPage: Boolean(meta.hasNextPage),
+        hasPreviousPage: Boolean(meta.hasPreviousPage),
+      });
+    } else {
+      setAgentRecontactMeta({ total: rows.length, page, limit, totalPages: 1, hasNextPage: false, hasPreviousPage: false });
+    }
+  };
+
+  const openAgentRecontactModal = async (agentReparation: string) => {
+    const offline = typeof navigator !== 'undefined' ? !navigator.onLine : false;
+    if (offline) return;
+    setSelectedAgentRecontact(agentReparation);
+    setShowAgentRecontactModal(true);
+    setAgentRecontactLoading(true);
+    try {
+      await fetchAgentRecontactedVictims(agentReparation, 1, 20);
+    } finally {
+      setAgentRecontactLoading(false);
+    }
+  };
 
   // Calculs des totaux
   const totalVictimes = totalVictimesGlobal ?? stats?.sexe?.reduce((acc, item: any) => acc + parseInt(item.total), 0);
@@ -854,7 +902,7 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
                 <button
                   key={a.id}
                   type="button"
-                  onClick={() => onSelectAgentReparation?.(agentReparation)}
+                  onClick={() => openAgentRecontactModal(agentReparation)}
                   className="w-full flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
                 >
                   <div className="flex items-center gap-3 min-w-0">
@@ -870,6 +918,116 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
           </div>
         )}
       </div>
+
+      <Modal show={showAgentRecontactModal} onClose={() => setShowAgentRecontactModal(false)} size="4xl">
+        <div className="p-6 bg-white text-gray-900 rounded-xl">
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div>
+              <h3 className="text-lg font-bold">Victimes recontactées</h3>
+              <div className="text-sm text-gray-500">Agent: {selectedAgentRecontact}</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setShowAgentRecontactModal(false);
+                onSelectAgentReparation?.(selectedAgentRecontact);
+              }}
+              className="px-3 py-2 bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+              disabled={!selectedAgentRecontact}
+              title="Ouvrir la liste filtrée"
+            >
+              Voir dans la liste
+            </button>
+          </div>
+
+          {agentRecontactLoading ? (
+            <div className="h-32 flex items-center justify-center">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="text-sm text-gray-600">
+                {agentRecontactMeta ? (
+                  <>Affichage de {(agentRecontactMeta.page - 1) * agentRecontactMeta.limit + 1} à {Math.min(agentRecontactMeta.page * agentRecontactMeta.limit, agentRecontactMeta.total)} sur {agentRecontactMeta.total} résultats</>
+                ) : null}
+              </div>
+
+              <div className="border border-gray-200 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">N°</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">Nom</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">Prénom</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">Origine</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {agentRecontactRows.map((row: any, idx: number) => {
+                        const origin = row?.["PROVINCE, TERRITOIRE, SECTEUR, GROUPEMENT  ET VILLAGE D'ORIGINE"] ?? '';
+                        return (
+                          <tr key={row?.id ?? idx} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-sm text-gray-700">{idx + 1 + ((agentRecontactMeta?.page ?? 1) - 1) * (agentRecontactMeta?.limit ?? 20)}</td>
+                            <td className="px-4 py-3 text-sm text-gray-900">{row?.nom ?? ''}</td>
+                            <td className="px-4 py-3 text-sm text-gray-900">{row?.prenom ?? ''}</td>
+                            <td className="px-4 py-3 text-sm text-gray-700">{origin}</td>
+                          </tr>
+                        );
+                      })}
+                      {agentRecontactRows.length === 0 && (
+                        <tr>
+                          <td className="px-4 py-6 text-center text-sm text-gray-500" colSpan={4}>Aucun résultat</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  className="px-3 py-2 border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  disabled={!agentRecontactMeta?.hasPreviousPage || agentRecontactLoading}
+                  onClick={async () => {
+                    if (!agentRecontactMeta) return;
+                    setAgentRecontactLoading(true);
+                    try {
+                      await fetchAgentRecontactedVictims(selectedAgentRecontact, agentRecontactMeta.page - 1, agentRecontactMeta.limit);
+                    } finally {
+                      setAgentRecontactLoading(false);
+                    }
+                  }}
+                >
+                  Précédent
+                </button>
+
+                <div className="text-sm text-gray-600">
+                  Page {agentRecontactMeta?.page ?? 1} / {agentRecontactMeta?.totalPages ?? 1}
+                </div>
+
+                <button
+                  type="button"
+                  className="px-3 py-2 border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  disabled={!agentRecontactMeta?.hasNextPage || agentRecontactLoading}
+                  onClick={async () => {
+                    if (!agentRecontactMeta) return;
+                    setAgentRecontactLoading(true);
+                    try {
+                      await fetchAgentRecontactedVictims(selectedAgentRecontact, agentRecontactMeta.page + 1, agentRecontactMeta.limit);
+                    } finally {
+                      setAgentRecontactLoading(false);
+                    }
+                  }}
+                >
+                  Suivant
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
 
       {/* Section de résumé */}
       <div className="mt-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl p-6 text-white">
