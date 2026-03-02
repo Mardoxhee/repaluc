@@ -893,28 +893,35 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
           </div>
         ) : (
           <div className="space-y-3 max-h-80 overflow-y-auto">
-            {agents.map((a: AgentCore) => {
-              const fullName = getAgentFullName(a);
-              const agentReparation = getAgentPrenomNom(a);
-              const count = victimsByAgentTotal[String(a.id)] ?? 0;
+            {[...agents]
+              .sort((a: AgentCore, b: AgentCore) => {
+                const ca = victimsByAgentTotal[String(a.id)] ?? 0;
+                const cb = victimsByAgentTotal[String(b.id)] ?? 0;
+                if (cb !== ca) return cb - ca;
+                return getAgentFullName(a).localeCompare(getAgentFullName(b));
+              })
+              .map((a: AgentCore) => {
+                const fullName = getAgentFullName(a);
+                const agentReparation = getAgentPrenomNom(a);
+                const count = victimsByAgentTotal[String(a.id)] ?? 0;
 
-              return (
-                <button
-                  key={a.id}
-                  type="button"
-                  onClick={() => openAgentRecontactModal(agentReparation)}
-                  className="w-full flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-2.5 h-2.5 rounded-full bg-primary-500 flex-shrink-0" />
-                    <span className="font-medium text-gray-800 truncate">{fullName}</span>
-                  </div>
-                  <span className="bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full text-sm font-semibold">
-                    {victimsByAgentLoading ? '...' : count}
-                  </span>
-                </button>
-              );
-            })}
+                return (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => openAgentRecontactModal(agentReparation)}
+                    className="w-full flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-2.5 h-2.5 rounded-full bg-primary-500 flex-shrink-0" />
+                      <span className="font-medium text-gray-800 truncate">{fullName}</span>
+                    </div>
+                    <span className="bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full text-sm font-semibold">
+                      {victimsByAgentLoading ? '...' : count}
+                    </span>
+                  </button>
+                );
+              })}
           </div>
         )}
       </div>
