@@ -197,10 +197,16 @@ const isReparationsAgent = (a: AgentCore): boolean | null => {
 
   // Filtre strict demandé: direction.direction doit être REPARATIONS.
   if (typeof objDirection === 'string' && objDirection.trim().length > 0) {
-    return objDirection.trim().toUpperCase() === 'REPARATIONS';
+    const d = objDirection.trim().toUpperCase();
+    return d === 'REPARATIONS' || d === 'ETUDES, ENQUETES ET EVALUATIONS';
   }
 
-  return normalized.some((s) => s === 'REPARATIONS' || s.includes('REPARATIONS'));
+  return normalized.some((s) =>
+    s === 'REPARATIONS' ||
+    s.includes('REPARATIONS') ||
+    s === 'ETUDES, ENQUETES ET EVALUATIONS' ||
+    s.includes('ETUDES')
+  );
 };
 
 interface DashboardVictimsProps {
