@@ -70,6 +70,65 @@ const attachDocToVictim = async (doc: PendingVictimDoc, lien: string): Promise<b
   return resp.ok;
 };
 
+export const syncPendingVictimDocsForVictim = async (
+  victimId: number,
+  opts?: { limit?: number }
+): Promise<{ synced: number; failed: number; skipped: number }> => {
+  if (isSyncing) return { synced: 0, failed: 0, skipped: 0 };
+  if (!isOnline()) return { synced: 0, failed: 0, skipped: 0 };
+
+  isSyncing = true;
+  let synced = 0;
+  let failed = 0;
+  let skipped = 0;
+
+  try {
+    const pending = await getAllPendingVictimDocs();
+    const filtered = pending
+      .filter((x) => x.victimId === victimId)
+      .filter((x) => !x.synced)
+      .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+
+    const limit = typeof opts?.limit === 'number' && opts.limit > 0 ? opts.limit : undefined;
+    const toSync = typeof limit === 'number' ? filtered.slice(0, limit) : filtered;
+
+    for (const item of toSync) {
+      if (item.synced) {
+        skipped++;
+        continue;
+      }
+      if (!item.id) {
+        failed++;
+        continue;
+      }
+
+      try {
+        const lien = await uploadDoc(item);
+        if (!lien) {
+          failed++;
+          continue;
+        }
+
+        const ok = await attachDocToVictim(item, lien);
+        if (!ok) {
+          failed++;
+          continue;
+        }
+
+        await markVictimDocSynced(item.id, lien);
+        synced++;
+      } catch (e) {
+        console.error('[VictimDocsSync] Failed to sync doc (per victim)', { itemId: item.id, victimId: item.victimId, error: e });
+        failed++;
+      }
+    }
+  } finally {
+    isSyncing = false;
+  }
+
+  return { synced, failed, skipped };
+};
+
 export const syncPendingVictimDocs = async (): Promise<{ synced: number; failed: number; skipped: number }> => {
   if (isSyncing) return { synced: 0, failed: 0, skipped: 0 };
   if (!isOnline()) return { synced: 0, failed: 0, skipped: 0 };

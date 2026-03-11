@@ -105,6 +105,86 @@ const patchVictimPhoto = async (victimId: number, photoUrl: string): Promise<boo
   return resp.ok;
 };
 
+export const syncPendingVictimPhotosForVictim = async (
+  victimId: number,
+  opts?: { limit?: number }
+): Promise<{ synced: number; failed: number; skipped: number }> => {
+  if (isSyncing) {
+    return { synced: 0, failed: 0, skipped: 0 };
+  }
+
+  if (!isOnline()) {
+    return { synced: 0, failed: 0, skipped: 0 };
+  }
+
+  isSyncing = true;
+  let synced = 0;
+  let failed = 0;
+  let skipped = 0;
+
+  try {
+    const pending: PendingVictimPhoto[] = await getAllPendingVictimPhotos();
+    const filtered = pending
+      .filter((x) => x.victimId === victimId)
+      .filter((x) => !x.synced)
+      .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+
+    const limit = typeof opts?.limit === 'number' && opts.limit > 0 ? opts.limit : undefined;
+    const toSync = typeof limit === 'number' ? filtered.slice(0, limit) : filtered;
+
+    for (const item of toSync) {
+      if (item.synced) {
+        skipped++;
+        continue;
+      }
+
+      if (!item.id) {
+        failed++;
+        continue;
+      }
+
+      try {
+        const remoteUrl = await uploadPhoto(item.photoDataUrl, item.victimId);
+
+        if (!remoteUrl) {
+          failed++;
+          continue;
+        }
+
+        const ok = await patchVictimPhoto(item.victimId, remoteUrl);
+
+        if (!ok) {
+          failed++;
+          continue;
+        }
+
+        try {
+          const agentFullName = getAgentFullNameFromLocalStorage();
+          if (agentFullName) {
+            await patchVictimAgentReparation(item.victimId, agentFullName);
+          }
+        } catch {
+          // ignore
+        }
+
+        await markVictimPhotoSynced(item.id, remoteUrl);
+        synced++;
+      } catch (e) {
+        console.error('[VictimPhotosSync] Failed to sync photo (per victim)', {
+          itemId: item.id,
+          victimId: item.victimId,
+          error: e,
+        });
+        failed++;
+      }
+    }
+  } finally {
+    isSyncing = false;
+  }
+
+  return { synced, failed, skipped };
+};
+
 const getVictimVariablesSpecifiques = async (victimId: number): Promise<Record<string, any> | null> => {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 
