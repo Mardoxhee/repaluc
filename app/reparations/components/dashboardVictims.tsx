@@ -224,6 +224,7 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
   const [agentsLoading, setAgentsLoading] = useState(false);
   const [victimsByAgentTotal, setVictimsByAgentTotal] = useState<Record<string, number>>({});
   const [victimsByAgentLoading, setVictimsByAgentLoading] = useState(false);
+  const [victimsByAgentLoaded, setVictimsByAgentLoaded] = useState(false);
   const [showAgentRecontactModal, setShowAgentRecontactModal] = useState(false);
   const [selectedAgentRecontact, setSelectedAgentRecontact] = useState<string>('');
   const [agentRecontactLoading, setAgentRecontactLoading] = useState(false);
@@ -380,46 +381,46 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
     fetchAgents();
   }, []);
 
-  useEffect(() => {
-    const loadVictimsTotalsByAgent = async () => {
-      if (!fetcher) return;
-      if (!agents || agents.length === 0) {
-        setVictimsByAgentTotal({});
-        return;
-      }
+  const loadVictimsTotalsByAgent = async () => {
+    if (!fetcher) return;
+    if (!agents || agents.length === 0) {
+      setVictimsByAgentTotal({});
+      setVictimsByAgentLoaded(false);
+      return;
+    }
 
-      const offline = typeof navigator !== 'undefined' ? !navigator.onLine : false;
-      if (offline) {
-        setVictimsByAgentTotal({});
-        return;
-      }
+    const offline = typeof navigator !== 'undefined' ? !navigator.onLine : false;
+    if (offline) {
+      setVictimsByAgentTotal({});
+      setVictimsByAgentLoaded(false);
+      return;
+    }
 
-      setVictimsByAgentLoading(true);
-      try {
-        const entries = await Promise.all(
-          agents.map(async (a) => {
-            const agentReparation = getAgentPrenomNom(a);
-            const params = new URLSearchParams({
-              agentReparation,
-              page: '1',
-              limit: '1',
-            });
-            const resp = await fetcher(`/victime/filtre/agent-reparation?${params.toString()}`);
-            const total = typeof resp?.meta?.total === 'number' ? resp.meta.total : 0;
-            return [String(a.id), total] as const;
-          })
-        );
+    setVictimsByAgentLoading(true);
+    try {
+      const entries = await Promise.all(
+        agents.map(async (a) => {
+          const agentReparation = getAgentPrenomNom(a);
+          const params = new URLSearchParams({
+            agentReparation,
+            page: '1',
+            limit: '1',
+          });
+          const resp = await fetcher(`/victime/filtre/agent-reparation?${params.toString()}`);
+          const total = typeof resp?.meta?.total === 'number' ? resp.meta.total : 0;
+          return [String(a.id), total] as const;
+        })
+      );
 
-        setVictimsByAgentTotal(Object.fromEntries(entries));
-      } catch {
-        setVictimsByAgentTotal({});
-      } finally {
-        setVictimsByAgentLoading(false);
-      }
-    };
-
-    loadVictimsTotalsByAgent();
-  }, [agents, fetcher]);
+      setVictimsByAgentTotal(Object.fromEntries(entries));
+      setVictimsByAgentLoaded(true);
+    } catch {
+      setVictimsByAgentTotal({});
+      setVictimsByAgentLoaded(false);
+    } finally {
+      setVictimsByAgentLoading(false);
+    }
+  };
 
   const fetchAgentRecontactedVictims = async (agentReparation: string, page: number, limit: number) => {
     if (!fetcher) return;
@@ -884,11 +885,22 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
             <h3 className="text-lg font-bold text-gray-900">Agents</h3>
             <p className="text-sm text-gray-500">Clique sur un agent pour filtrer les victimes par agentReparation</p>
           </div>
-          {agentsLoading ? (
-            <div className="h-6 w-24 bg-gray-200 animate-pulse rounded" />
-          ) : (
-            <div className="text-sm text-gray-500">{agents.length} agent(s)</div>
-          )}
+          <div className="flex items-center gap-3">
+            {agentsLoading ? (
+              <div className="h-6 w-24 bg-gray-200 animate-pulse rounded" />
+            ) : (
+              <div className="text-sm text-gray-500">{agents.length} agent(s)</div>
+            )}
+            <button
+              type="button"
+              onClick={loadVictimsTotalsByAgent}
+              disabled={agentsLoading || victimsByAgentLoading || agents.length === 0}
+              className="px-3 py-2 border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              title="Lancer le calcul des victimes recontactées par agent"
+            >
+              {victimsByAgentLoaded ? 'Recalculer' : 'Charger les totaux'}
+            </button>
+          </div>
         </div>
 
         {agentsLoading ? (
@@ -901,9 +913,11 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
           <div className="space-y-3 max-h-80 overflow-y-auto">
             {[...agents]
               .sort((a: AgentCore, b: AgentCore) => {
-                const ca = victimsByAgentTotal[String(a.id)] ?? 0;
-                const cb = victimsByAgentTotal[String(b.id)] ?? 0;
-                if (cb !== ca) return cb - ca;
+                if (victimsByAgentLoaded) {
+                  const ca = victimsByAgentTotal[String(a.id)] ?? 0;
+                  const cb = victimsByAgentTotal[String(b.id)] ?? 0;
+                  if (cb !== ca) return cb - ca;
+                }
                 return getAgentFullName(a).localeCompare(getAgentFullName(b));
               })
               .map((a: AgentCore) => {
@@ -923,7 +937,7 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
                       <span className="font-medium text-gray-800 truncate">{fullName}</span>
                     </div>
                     <span className="bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full text-sm font-semibold">
-                      {victimsByAgentLoading ? '...' : count}
+                      {victimsByAgentLoading ? '...' : (victimsByAgentLoaded ? count : '-')}
                     </span>
                   </button>
                 );

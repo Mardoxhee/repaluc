@@ -9,6 +9,7 @@ import {
   Check,
   X,
   Eye,
+  Download,
   Folder,
   BarChart2,
   Settings,
@@ -51,6 +52,29 @@ const getFileLink = async (lien: string): Promise<string> => {
     console.log('Erreur getFileLink:', error);
     throw error;
   }
+};
+
+const downloadBlob = async (blob: Blob, filename: string) => {
+  const url = URL.createObjectURL(blob);
+  try {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || 'fichier';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+};
+
+const downloadFromUrl = async (url: string, filename: string) => {
+  const resp = await fetch(url);
+  if (!resp.ok) {
+    throw new Error(`Téléchargement échoué (${resp.status})`);
+  }
+  const blob = await resp.blob();
+  await downloadBlob(blob, filename);
 };
 
 interface Victim {
@@ -149,6 +173,58 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
   const stopDocStream = (s: MediaStream | null) => {
     if (!s) return;
     for (const track of s.getTracks()) track.stop();
+  };
+
+  const handleDownloadPendingDoc = async (pendingId: number) => {
+    try {
+      const entry = await getPendingVictimDocById(pendingId);
+      if (!entry) {
+        throw new Error('Document introuvable dans le cache');
+      }
+      const filename = entry.fileName || `document_${entry.victimId}_${pendingId}`;
+      await downloadBlob(entry.fileData, filename);
+    } catch (err: any) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'Téléchargement impossible',
+        text: err?.message || 'Impossible de télécharger le document.',
+        confirmButtonColor: '#901c67',
+      });
+    }
+  };
+
+  const resolveDownloadUrl = async (lien?: string) => {
+    if (!lien) return '';
+    if (/^https?:\/\//i.test(lien)) return lien;
+    const realUrl = await getFileLink(lien);
+    return realUrl;
+  };
+
+  const handleDownloadServerDoc = async (file: { name?: string; lien?: string; label?: string }) => {
+    try {
+      if (!isOnline()) {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Hors ligne',
+          text: 'Téléchargement impossible hors ligne.',
+          confirmButtonColor: '#901c67',
+        });
+        return;
+      }
+
+      const url = await resolveDownloadUrl(file.lien);
+      if (!url) throw new Error('Lien du fichier indisponible');
+
+      const filename = file.name || file.lien || (file.label ? `${file.label}.pdf` : 'fichier');
+      await downloadFromUrl(url, filename);
+    } catch (err: any) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'Téléchargement impossible',
+        text: err?.message || 'Impossible de télécharger le document.',
+        confirmButtonColor: '#901c67',
+      });
+    }
   };
 
   const startDocCamera = async () => {
@@ -662,6 +738,17 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
+                          handleDownloadPendingDoc(doc.id);
+                        }}
+                        className="px-2 py-1 !bg-yellow-100 !text-yellow-800 text-sm rounded hover:!bg-yellow-200 flex items-center gap-1"
+                        title="Télécharger le document"
+                      >
+                        <Download size={16} className="text-yellow-800" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
                           handleOpenFile({ id: doc.id, label: doc.label, name: doc.name });
                         }}
                         className="px-2 py-1 !bg-yellow-100 !text-yellow-800 text-sm rounded hover:!bg-yellow-200 flex items-center gap-1"
@@ -756,6 +843,17 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownloadServerDoc(file);
+                            }}
+                            className="px-2 py-1 !bg-blue-50 !text-blue-600 text-sm rounded hover:!bg-blue-100 flex items-center gap-1"
+                            title="Télécharger le document"
+                          >
+                            <Download size={16} className="text-blue-600" />
+                          </button>
                           <button
                             className="px-2 py-1 !bg-blue-50 !text-blue-600 text-sm rounded hover:!bg-blue-100 flex items-center gap-1"
                             onClick={(e) => {
