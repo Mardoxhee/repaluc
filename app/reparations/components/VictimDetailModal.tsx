@@ -3,8 +3,6 @@ import {
   Info,
   FileText,
   Camera,
-  Edit,
-  Trash,
   Plus,
   Check,
   X,
@@ -30,7 +28,7 @@ import ContratVictim from './contrat';
 import SuiviPaiement from './SuiviPaiement';
 import Swal from 'sweetalert2';
 import { isOnline } from '@/app/utils/victimsCache';
-import { deletePendingVictimDocById, getPendingDocsForVictim, getPendingVictimDocById, savePendingVictimDoc } from '@/app/utils/victimDocsCache';
+import { getPendingDocsForVictim, getPendingVictimDocById, savePendingVictimDoc } from '@/app/utils/victimDocsCache';
 
 // Fonction pour obtenir le lien réel du fichier
 const getFileLink = async (lien: string): Promise<string> => {
@@ -756,37 +754,6 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                       >
                         <Eye size={16} className="text-yellow-800" />
                       </button>
-                      <button
-                        type="button"
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          const confirm = await Swal.fire({
-                            icon: 'warning',
-                            title: 'Supprimer ce document ?',
-                            text: 'Ce document est en attente de synchronisation.',
-                            showCancelButton: true,
-                            confirmButtonText: 'Supprimer',
-                            cancelButtonText: 'Annuler',
-                            confirmButtonColor: '#dc2626',
-                          });
-                          if (!confirm.isConfirmed) return;
-                          try {
-                            await deletePendingVictimDocById(doc.id);
-                            setPendingDocs((prev) => prev.filter((x) => x.id !== doc.id));
-                          } catch (err) {
-                            await Swal.fire({
-                              icon: 'error',
-                              title: 'Suppression impossible',
-                              text: 'Impossible de supprimer le document en attente.',
-                              confirmButtonColor: '#901c67',
-                            });
-                          }
-                        }}
-                        className="px-2 py-1 !bg-red-50 !text-red-600 text-sm rounded hover:!bg-red-100 flex items-center gap-1"
-                        title="Supprimer le document"
-                      >
-                        <Trash size={14} />
-                      </button>
                     </div>
                   </div>
                 ))}
@@ -853,67 +820,6 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                             title="Télécharger le document"
                           >
                             <Download size={16} className="text-blue-600" />
-                          </button>
-                          <button
-                            className="px-2 py-1 !bg-blue-50 !text-blue-600 text-sm rounded hover:!bg-blue-100 flex items-center gap-1"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditFileIdx(idx);
-                              setEditFileLabel(file.label);
-                              setEditFileName(file.name || '');
-                            }}
-                          >
-                            <Edit size={14} />
-                          </button>
-                          <button
-                            className="px-2 py-1 !bg-red-50 !text-red-600 text-sm rounded hover:!bg-red-100 flex items-center gap-1"
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              const confirm = await Swal.fire({
-                                icon: 'warning',
-                                title: 'Supprimer ce document ?',
-                                showCancelButton: true,
-                                confirmButtonText: 'Supprimer',
-                                cancelButtonText: 'Annuler',
-                                confirmButtonColor: '#dc2626',
-                              });
-                              if (!confirm.isConfirmed) return;
-                              if (!isOnline()) {
-                                await Swal.fire({
-                                  icon: 'warning',
-                                  title: 'Hors ligne',
-                                  text: 'Suppression impossible hors ligne.',
-                                  confirmButtonColor: '#901c67',
-                                });
-                                return;
-                              }
-
-                              try {
-                                const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
-                                const resp = await fetch(`${baseUrl}/document-victime/${file.id}`, {
-                                  method: 'DELETE',
-                                });
-                                if (!resp.ok) {
-                                  throw new Error(`DELETE document-victime failed: ${resp.status}`);
-                                }
-
-                                if (currentVictim?.id) {
-                                  await reloadServerDocs(currentVictim.id);
-                                } else {
-                                  setFiles((prev) => prev.filter((_, i) => i !== idx));
-                                }
-                              } catch (err) {
-                                console.log('Erreur suppression document:', err);
-                                await Swal.fire({
-                                  icon: 'error',
-                                  title: 'Suppression échouée',
-                                  text: 'Impossible de supprimer le document.',
-                                  confirmButtonColor: '#901c67',
-                                });
-                              }
-                            }}
-                          >
-                            <Trash size={14} />
                           </button>
                           <button
                             type="button"

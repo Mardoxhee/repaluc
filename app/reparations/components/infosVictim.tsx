@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Camera, DollarSign, FileText, User, MapPin, Calendar, Shield, Check, UserCircle, FolderOpen, Loader2, RefreshCw, X, Trash } from 'lucide-react';
+import { Camera, DollarSign, FileText, User, MapPin, Calendar, Shield, Check, UserCircle, FolderOpen, Loader2, RefreshCw, X, Eye, Download } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { isOnline } from '@/app/utils/victimsCache';
 import { savePendingVictimPhoto, getLatestVictimPhoto } from '@/app/utils/victimPhotosCache';
@@ -111,6 +111,8 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
     const [isResolvingRemote, setIsResolvingRemote] = useState(false);
     const [isImageLoaded, setIsImageLoaded] = useState(false);
 
+    const [showPhotoPreview, setShowPhotoPreview] = useState(false);
+
     const [showCamera, setShowCamera] = useState(false);
     const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
     const [stream, setStream] = useState<MediaStream | null>(null);
@@ -122,6 +124,60 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
         remoteResolvedSrc ||
         localPhotoPreview ||
         avatar;
+
+    const downloadBlob = async (blob: Blob, filename: string) => {
+        const url = URL.createObjectURL(blob);
+        try {
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename || 'photo';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        } finally {
+            URL.revokeObjectURL(url);
+        }
+    };
+
+    const handleDownloadPhoto = async () => {
+        try {
+            if (!displayedPhoto) {
+                await Swal.fire({
+                    icon: 'warning',
+                    title: 'Aucune photo',
+                    text: 'Aucune photo disponible pour cette victime.',
+                    confirmButtonColor: '#901c67'
+                });
+                return;
+            }
+
+            if (!isOnline() && !(displayedPhoto.startsWith('data:'))) {
+                await Swal.fire({
+                    icon: 'warning',
+                    title: 'Hors ligne',
+                    text: 'Téléchargement impossible hors ligne (photo non disponible en cache).',
+                    confirmButtonColor: '#901c67'
+                });
+                return;
+            }
+
+            const resp = await fetch(displayedPhoto);
+            if (!resp.ok) throw new Error(`Téléchargement échoué (${resp.status})`);
+            const blob = await resp.blob();
+
+            const mime = blob.type || '';
+            const ext = mime.includes('png') ? 'png' : (mime.includes('webp') ? 'webp' : 'jpg');
+            const filename = `photo_victime_${id}.${ext}`;
+            await downloadBlob(blob, filename);
+        } catch (err: any) {
+            await Swal.fire({
+                icon: 'error',
+                title: 'Téléchargement impossible',
+                text: err?.message || 'Impossible de télécharger la photo.',
+                confirmButtonColor: '#901c67'
+            });
+        }
+    };
 
     useEffect(() => {
         // Les dataURL (photo capturée / IDB) peuvent ne pas déclencher onLoad de façon fiable sur certains devices,
@@ -370,23 +426,6 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
                                     onLoad={() => setIsImageLoaded(true)}
                                     onError={() => setIsImageLoaded(true)}
                                 />
-                                {onDeletePhoto && (
-                                    <div className="absolute bottom-0 left-0 right-0 px-1 pb-1">
-                                        <button
-                                            type="button"
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                onDeletePhoto();
-                                            }}
-                                            className="w-full flex items-center justify-center gap-2 px-2 py-1 text-xs rounded-md bg-black/60 text-white hover:bg-black/70 transition-colors"
-                                            title="Supprimer la photo"
-                                        >
-                                            <Trash size={14} />
-                                            Supprimer
-                                        </button>
-                                    </div>
-                                )}
                             </div>
                         ) : (
                             <div className="w-32 h-32 mx-auto flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 border border-gray-400 rounded-lg">
@@ -394,6 +433,29 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
                             </div>
                         )}
                         <p className="text-xs text-gray-500 text-center mt-2">Photo d'identité</p>
+
+                        <div className="mt-2 flex items-center justify-center gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setShowPhotoPreview(true)}
+                                disabled={!displayedPhoto}
+                                className="px-3 py-2 text-xs rounded border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                                title="Afficher la photo en grand"
+                            >
+                                <Eye size={14} />
+                                Afficher
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleDownloadPhoto}
+                                disabled={!displayedPhoto}
+                                className="px-3 py-2 text-xs rounded border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                                title="Télécharger la photo"
+                            >
+                                <Download size={14} />
+                                Télécharger
+                            </button>
+                        </div>
 
                         {/* Deux boutons pour capturer ou choisir une photo */}
                         <div className="mt-3 flex flex-col gap-2">
@@ -446,6 +508,46 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
                             className="hidden"
                         />
                     </div>
+
+                    {showPhotoPreview && displayedPhoto && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+                            <div className="bg-white w-full max-w-4xl rounded-lg overflow-hidden shadow-xl">
+                                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+                                    <h3 className="text-sm font-semibold text-gray-800">Photo de profil</h3>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPhotoPreview(false)}
+                                        className="p-2 rounded hover:bg-gray-100 text-gray-600"
+                                        title="Fermer"
+                                    >
+                                        <X size={18} />
+                                    </button>
+                                </div>
+                                <div className="p-3">
+                                    <div className="w-full h-[70vh] bg-black rounded overflow-hidden">
+                                        <img src={displayedPhoto} alt="Photo de profil" className="w-full h-full object-contain" />
+                                    </div>
+                                    <div className="mt-3 flex items-center justify-end gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={handleDownloadPhoto}
+                                            className="px-3 py-2 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50 inline-flex items-center gap-2"
+                                        >
+                                            <Download size={16} />
+                                            Télécharger
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPhotoPreview(false)}
+                                            className="px-3 py-2 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50"
+                                        >
+                                            Fermer
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {showCamera && (
                         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
