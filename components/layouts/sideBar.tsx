@@ -41,7 +41,7 @@ const SideBar: React.FC<SideBarProps> = ({ onNavigate }) => {
       <div className="flex-1 px-4 py-6 overflow-y-auto">
         <nav className="space-y-2">
           {navItems.map(item => {
-            const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+            const isActive = pathname === item.href || (item.href !== '/' && pathname?.startsWith(item.href));
             return (
               <Link
                 href={item.href}
