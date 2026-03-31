@@ -657,6 +657,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                 'Programme': v?.programme ?? '',
                 'Type de violation': v?.typeViolation ?? '',
                 'Date incident': v?.dateIncident ?? '',
+                'Indemnisation': v?.indemnisation ?? '',
             }));
 
             const ws = XLSX.utils.json_to_sheet(exportData);
