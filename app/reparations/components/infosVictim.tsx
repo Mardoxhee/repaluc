@@ -368,6 +368,20 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
         }
     }, [id]);
 
+    const closeCamera = useCallback(() => {
+        setShowCamera(false);
+        stopStream(stream);
+        setStream(null);
+        setCapturedDataUrl(null);
+        if (videoRef.current) videoRef.current.srcObject = null;
+    }, [stopStream, stream]);
+
+    const useCapturedPhoto = useCallback(async () => {
+        if (!capturedDataUrl) return;
+        await persistPhoto(capturedDataUrl);
+        closeCamera();
+    }, [capturedDataUrl, closeCamera, persistPhoto]);
+
     const handlePhotoSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -456,7 +470,144 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
                                 Télécharger
                             </button>
                         </div>
+
+                        <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setFacingMode('environment');
+                                    setShowCamera(true);
+                                }}
+                                disabled={savingPhoto}
+                                className="px-3 py-2 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                                title="Prendre une photo"
+                            >
+                                <Camera size={14} />
+                                Prendre photo
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => galleryInputRef.current?.click()}
+                                disabled={savingPhoto}
+                                className="px-3 py-2 text-xs rounded bg-gray-100 text-gray-800 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                                title="Charger une photo"
+                            >
+                                <FolderOpen size={14} />
+                                Charger photo
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => cameraInputRef.current?.click()}
+                                disabled={savingPhoto}
+                                className="px-3 py-2 text-xs rounded bg-gray-100 text-gray-800 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                                title="Prendre une photo (capture)"
+                            >
+                                <Camera size={14} />
+                                Capture
+                            </button>
+
+                            {displayedPhoto && onDeletePhoto && (
+                                <button
+                                    type="button"
+                                    onClick={async () => {
+                                        const res = await Swal.fire({
+                                            icon: 'warning',
+                                            title: 'Supprimer la photo',
+                                            text: 'Voulez-vous supprimer la photo de cette victime ?',
+                                            showCancelButton: true,
+                                            confirmButtonText: 'Supprimer',
+                                            cancelButtonText: 'Annuler',
+                                            confirmButtonColor: '#dc2626'
+                                        });
+                                        if (!res.isConfirmed) return;
+                                        onDeletePhoto();
+                                        setLocalPhotoPreview(null);
+                                        setRemoteResolvedSrc(null);
+                                    }}
+                                    disabled={savingPhoto}
+                                    className="px-3 py-2 text-xs rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="Supprimer la photo"
+                                >
+                                    Supprimer
+                                </button>
+                            )}
+                        </div>
+
+                        <input
+                            ref={galleryInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={handlePhotoSelected}
+                        />
+                        <input
+                            ref={cameraInputRef}
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            className="hidden"
+                            onChange={handlePhotoSelected}
+                        />
                     </div>
+
+                    {showCamera && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+                            <div className="bg-white w-full max-w-2xl rounded-lg overflow-hidden shadow-xl">
+                                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+                                    <div className="text-sm font-semibold text-gray-800">Caméra</div>
+                                    <button
+                                        type="button"
+                                        onClick={closeCamera}
+                                        className="p-2 rounded hover:bg-gray-100 text-gray-600"
+                                        title="Fermer"
+                                    >
+                                        <X size={18} />
+                                    </button>
+                                </div>
+
+                                <div className="p-4 space-y-3">
+                                    <div className="w-full aspect-video bg-black rounded overflow-hidden">
+                                        <video ref={videoRef} className="w-full h-full object-contain" playsInline muted />
+                                        <canvas ref={canvasRef} className="hidden" />
+                                    </div>
+
+                                    {capturedDataUrl && (
+                                        <div className="w-full aspect-video bg-black rounded overflow-hidden">
+                                            <img src={capturedDataUrl} alt="Capture" className="w-full h-full object-contain" />
+                                        </div>
+                                    )}
+
+                                    <div className="flex flex-wrap items-center justify-end gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setFacingMode((prev) => (prev === 'environment' ? 'user' : 'environment'))}
+                                            className="px-3 py-2 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50"
+                                        >
+                                            Changer caméra
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={takePhotoFromVideo}
+                                            className="px-3 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700"
+                                        >
+                                            Capturer
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={useCapturedPhoto}
+                                            disabled={!capturedDataUrl || savingPhoto}
+                                            className="px-3 py-2 text-sm rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                                        >
+                                            {savingPhoto ? <Loader2 className="animate-spin" size={16} /> : null}
+                                            Utiliser
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {showPhotoPreview && displayedPhoto && (
                         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
