@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { FiGrid, FiUsers, FiTrendingUp, FiSettings } from "react-icons/fi";
 import ReglagesPanel from "./components/reglagePanel";
 import ListVictims from './components/ListVictims'
-import DashboardVictims from './components/dashboardVictims'
+import DashboardReparations from './components/DashboardReparations'
 
 
 
@@ -44,7 +44,7 @@ const TAB_LIST = [
   { label: "Dashboard", key: "dashboard", icon: <FiGrid size={18} className="mr-2" /> },
   { label: "Victimes", key: "victimes", icon: <FiUsers size={18} className="mr-2" /> },
   { label: "Statistiques & rapports", key: "stats", icon: <FiTrendingUp size={18} className="mr-2" /> },
-  { label: "Reglages", key: "reglage", icon: <FiSettings size={18} className="mr-2" /> },
+  // { label: "Reglages", key: "reglage", icon: <FiSettings size={18} className="mr-2" /> },
 ];
 
 
@@ -99,7 +99,7 @@ const ReparationsTabs = () => {
         <div className="bg-white shadow-sm border-l-4 border-primary-500 mx-4 mt-4">
           <div className="p-6">
             {activeTab === "dashboard" && (
-              <DashboardVictims
+              <DashboardReparations
                 onSelectAgentReparation={handleSelectAgent}
                 onShowRecontactedVictims={handleShowRecontactedVictims}
               />
@@ -117,10 +117,9 @@ const ReparationsTabs = () => {
                 />
               </>
             )}
-            {activeTab === "programme" && <div>Contenu programme de réparations</div>}
             {activeTab === "indemnisation" && <div>Contenu demandes d’indemnisation</div>}
             {activeTab === "stats" && <div>Contenu statistiques & rapports</div>}
-            {activeTab === "reglage" && <ReglagesPanel mockPrejudices={mockPrejudices} mockMesures={mockMesures} mockProgrammes={mockProgrammes} mockCategories={mockCategories} />}
+            {/* {activeTab === "reglage" && <ReglagesPanel mockPrejudices={mockPrejudices} mockMesures={mockMesures} mockProgrammes={mockProgrammes} mockCategories={mockCategories} />} */}
           </div>
         </div>
       </div>

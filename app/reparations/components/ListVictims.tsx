@@ -87,6 +87,8 @@ interface FilterType {
     endDate: string;
 }
 
+type VictimTypeFilter = 'all' | 'luc' | 'mpu' | 'medical_urgent';
+
 const prejudiceFinalOptions = [
     "Perte de vie",
     "Perte économique",
@@ -149,6 +151,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
         loadQuestions();
     }, []);
     const [searchTerm, setSearchTerm] = useState<string>("");
+    const [victimTypeFilter, setVictimTypeFilter] = useState<VictimTypeFilter>('all');
     const [filters, setFilters] = useState<FilterType>({
         status: "",
         category: "",
@@ -166,6 +169,40 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                 (victim.nom && victim.nom.toLowerCase().includes(searchTerm.toLowerCase())) ||
                 (victim.prenom && victim.prenom.toLowerCase().includes(searchTerm.toLowerCase())) ||
                 (victim.reference && victim.reference.toLowerCase().includes(searchTerm.toLowerCase()));
+
+            const statusValue = typeof victim?.status === 'string' ? victim.status.trim().toLowerCase() : '';
+            const categorieValue = typeof victim?.categorie === 'string' ? victim.categorie.trim().toLowerCase() : '';
+            const programmeValue = typeof victim?.programme === 'string' ? victim.programme.trim().toLowerCase() : '';
+
+            const matchesVictimType = (() => {
+                if (victimTypeFilter === 'all') return true;
+
+                if (victimTypeFilter === 'luc') {
+                    return statusValue.includes('luc') || categorieValue.includes('luc') || programmeValue.includes('luc');
+                }
+
+                if (victimTypeFilter === 'medical_urgent') {
+                    return (
+                        categorieValue.includes('urgence') ||
+                        categorieValue.includes('médicale') ||
+                        categorieValue.includes('medicale') ||
+                        programmeValue.includes('urgence')
+                    );
+                }
+
+                if (victimTypeFilter === 'mpu') {
+                    return (
+                        statusValue.includes('mpu') ||
+                        statusValue.includes('mesure provisoire') ||
+                        statusValue.includes('provisoire urgente') ||
+                        categorieValue.includes('mpu') ||
+                        categorieValue.includes('mesure provisoire') ||
+                        programmeValue.includes('mpu')
+                    );
+                }
+
+                return true;
+            })();
 
             // 2. Filtre par règles dynamiques (filterRules)
             const matchesRules = filterRules.length === 0 || filterRules.every(rule => {
@@ -191,9 +228,9 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                 }
             });
 
-            return matchesSearch && matchesRules;
+            return matchesSearch && matchesVictimType && matchesRules;
         });
-    }, [searchTerm, filterRules, agentReparation]);
+    }, [searchTerm, filterRules, victimTypeFilter]);
     const [victims, setVictims] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string>("");
@@ -604,7 +641,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
 
     useEffect(() => {
         setMeta(prev => ({ ...prev, page: 1 }));
-    }, [agentReparation, photoNotNull]);
+    }, [agentReparation, photoNotNull, victimTypeFilter]);
 
     const handleExportExcel = useCallback(async () => {
         if (!fetchCtx?.fetcher) return;
@@ -1141,6 +1178,53 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                                             {filterRules.length}
                                         </span>
                                     )}
+                                </button>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2 mb-4">
+                                <button
+                                    type="button"
+                                    onClick={() => setVictimTypeFilter('all')}
+                                    className={`px-3 py-2 border text-sm font-medium transition-colors ${victimTypeFilter === 'all'
+                                        ? 'bg-blue-50 border-blue-300 text-blue-700'
+                                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                                        }`}
+                                >
+                                    <Users size={16} className="inline-block mr-2" />
+                                    Tous
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setVictimTypeFilter('luc')}
+                                    className={`px-3 py-2 border text-sm font-medium transition-colors ${victimTypeFilter === 'luc'
+                                        ? 'bg-blue-50 border-blue-300 text-blue-700'
+                                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                                        }`}
+                                >
+                                    <BadgeCheck size={16} className="inline-block mr-2" />
+                                    LUC
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setVictimTypeFilter('mpu')}
+                                    className={`px-3 py-2 border text-sm font-medium transition-colors ${victimTypeFilter === 'mpu'
+                                        ? 'bg-blue-50 border-blue-300 text-blue-700'
+                                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                                        }`}
+                                >
+                                    <AlertCircle size={16} className="inline-block mr-2" />
+                                    MPU
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setVictimTypeFilter('medical_urgent')}
+                                    className={`px-3 py-2 border text-sm font-medium transition-colors ${victimTypeFilter === 'medical_urgent'
+                                        ? 'bg-blue-50 border-blue-300 text-blue-700'
+                                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                                        }`}
+                                >
+                                    <Stethoscope size={16} className="inline-block mr-2" />
+                                    Urgence médicale
                                 </button>
                             </div>
 

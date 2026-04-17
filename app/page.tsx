@@ -81,7 +81,7 @@ export default function Home() {
                       <FiShield className="text-white text-2xl" />
                     </div>
                     <div>
-                      <h3 className="text-[14px] font-bold text-gray-900">Programmes de Réparations</h3>
+                      <h3 className="text-[14px] font-bold text-gray-900">Réparations</h3>
                       <p className="text-green-600 font-medium text-xs">Module Réparations</p>
                     </div>
                   </div>

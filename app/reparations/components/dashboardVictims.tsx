@@ -467,6 +467,12 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
   const totalProvinces = stats?.province?.length;
   const totalTerritoires = stats?.territoire?.length;
 
+  const totalIndemnisationSafe = Number.isFinite(stats?.totalIndemnisation) ? stats.totalIndemnisation : 0;
+  const percentIndemnisationDejaVersees =
+    totalIndemnisationSafe > 0
+      ? Math.round((montantIndemnisationsDejaVersees / totalIndemnisationSafe) * 100)
+      : 0;
+
   // Préparation des données pour les graphiques
   const sexeChartData = stats.sexe.map((item: any, index) => ({
     name: item.sexe,
@@ -645,6 +651,7 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
           icon={<FiCreditCard className="text-white text-xl" />}
           color="bg-gradient-to-br from-cyan-500 to-cyan-600"
           subtitle=""
+          trend={loading || loadingRecontact || totalIndemnisationSafe <= 0 ? undefined : `${percentIndemnisationDejaVersees}%`}
           loading={loading || loadingRecontact}
         />
       </div>
