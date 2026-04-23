@@ -459,16 +459,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
                                 <Eye size={14} />
                                 Afficher
                             </button>
-                            <button
-                                type="button"
-                                onClick={handleDownloadPhoto}
-                                disabled={!displayedPhoto}
-                                className="px-3 py-2 text-xs rounded border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
-                                title="Télécharger la photo"
-                            >
-                                <Download size={14} />
-                                Télécharger
-                            </button>
+
                         </div>
 
                         <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
@@ -497,16 +488,6 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
                                 Charger photo
                             </button>
 
-                            <button
-                                type="button"
-                                onClick={() => cameraInputRef.current?.click()}
-                                disabled={savingPhoto}
-                                className="px-3 py-2 text-xs rounded bg-gray-100 text-gray-800 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
-                                title="Prendre une photo (capture)"
-                            >
-                                <Camera size={14} />
-                                Capture
-                            </button>
 
                             {displayedPhoto && onDeletePhoto && (
                                 <button
@@ -554,7 +535,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
 
                     {showCamera && (
                         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-                            <div className="bg-white w-full max-w-2xl rounded-lg overflow-hidden shadow-xl">
+                            <div className={`bg-white w-full ${capturedDataUrl ? 'max-w-5xl' : 'max-w-2xl'} rounded-lg overflow-hidden shadow-xl`}>
                                 <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
                                     <div className="text-sm font-semibold text-gray-800">Caméra</div>
                                     <button
@@ -568,16 +549,24 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
                                 </div>
 
                                 <div className="p-4 space-y-3">
-                                    <div className="w-full aspect-video bg-black rounded overflow-hidden">
-                                        <video ref={videoRef} className="w-full h-full object-contain" playsInline muted />
-                                        <canvas ref={canvasRef} className="hidden" />
-                                    </div>
-
-                                    {capturedDataUrl && (
-                                        <div className="w-full aspect-video bg-black rounded overflow-hidden">
-                                            <img src={capturedDataUrl} alt="Capture" className="w-full h-full object-contain" />
+                                    <div className={`grid gap-3 ${capturedDataUrl ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
+                                        <div className="space-y-1">
+                                            <div className="text-xs font-medium text-gray-600">Aperçu caméra</div>
+                                            <div className="w-full aspect-video bg-black rounded overflow-hidden">
+                                                <video ref={videoRef} className="w-full h-full object-contain" playsInline muted />
+                                                <canvas ref={canvasRef} className="hidden" />
+                                            </div>
                                         </div>
-                                    )}
+
+                                        {capturedDataUrl && (
+                                            <div className="space-y-1">
+                                                <div className="text-xs font-medium text-gray-600">Photo capturée</div>
+                                                <div className="w-full aspect-video bg-black rounded overflow-hidden">
+                                                    <img src={capturedDataUrl} alt="Capture" className="w-full h-full object-contain" />
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
 
                                     <div className="flex flex-wrap items-center justify-end gap-2">
                                         <button

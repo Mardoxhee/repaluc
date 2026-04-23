@@ -7,7 +7,10 @@ const withSerwist = withSerwistInit({
   swDest: "public/sw.js",
   disable: process.env.NODE_ENV === "development",
   cacheOnNavigation: true,
-  reloadOnOnline: true,
+  // Ne PAS recharger automatiquement à la reconnexion : cela peut
+  // interrompre l'utilisateur et, sur connexion faible, remplacer un
+  // rendu hors-ligne valide par une page cassée.
+  reloadOnOnline: false,
 });
 
 const nextConfig: NextConfig = {

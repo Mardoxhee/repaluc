@@ -1,220 +1,25 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, LineChart, Line, CartesianGrid, AreaChart, Area } from 'recharts';
-import { FiUsers, FiShield, FiMapPin, FiAward, FiDollarSign, FiTrendingUp, FiAlertTriangle, FiCheckCircle, FiWifi, FiWifiOff, FiFileText, FiCreditCard } from 'react-icons/fi';
+import { FiUsers, FiShield, FiMapPin, FiAward, FiDollarSign, FiTrendingUp, FiAlertTriangle, FiCheckCircle, FiFileText, FiCreditCard } from 'react-icons/fi';
 import { FaHospitalSymbol, FaUserCheck, FaBalanceScale } from "react-icons/fa";
 import { BsFillHousesFill } from "react-icons/bs";
 import { useFetch } from '../../context/FetchContext';
 import { Modal } from 'flowbite-react';
-
-const COLORS = ["#007fba", "#7f2360", "#0066cc", "#cc3366", "#0080ff", "#ff6b9d", "#4da6ff", "#ff8fab", "#80bfff", "#ffb3d1"];
-
-interface StatCardProps {
-  title: string;
-  value: string | number;
-  icon: React.ReactNode;
-  color: string;
-  subtitle?: string;
-  trend?: string;
-  loading?: boolean;
-}
-
-const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color, subtitle, trend, loading }) => (
-  <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-all duration-300 group">
-    <div className="flex items-start justify-between">
-      <div className="flex-1">
-        <div className="flex items-center gap-3 mb-3">
-          <div className={`p-3 rounded-xl ${color} shadow-md group-hover:scale-110 transition-transform duration-300`}>
-            {icon}
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">{title}</h3>
-            {subtitle && <p className="text-xs text-gray-500 mt-1">{subtitle}</p>}
-          </div>
-        </div>
-        <div className="flex items-end gap-2">
-          {loading ? (
-            <div className="h-8 w-16 bg-gray-200 animate-pulse rounded"></div>
-          ) : (
-            <span className="text-3xl font-bold text-gray-900">{value}</span>
-          )}
-          {trend && (
-            <span className="text-sm font-medium text-green-600 mb-1">{trend}</span>
-          )}
-        </div>
-      </div>
-    </div>
-  </div>
-);
-
-interface ProgressCardProps {
-  title: string;
-  current: number;
-  total: number;
-  icon: React.ReactNode;
-  color: string;
-  subtitle?: string;
-  loading?: boolean;
-  onClick?: () => void;
-}
-
-const ProgressCard: React.FC<ProgressCardProps> = ({
-  title,
-  current,
-  total,
-  icon,
-  color,
-  subtitle,
-  loading,
-  onClick,
-}) => {
-  const safeTotal = Number.isFinite(total) && total > 0 ? total : 0;
-  const safeCurrent = Number.isFinite(current) && current > 0 ? Math.min(current, safeTotal || current) : 0;
-  const percent = safeTotal > 0 ? Math.round((safeCurrent / safeTotal) * 100) : 0;
-
-  return (
-    <div
-      className={`bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-all duration-300 group ${onClick ? 'cursor-pointer' : ''}`}
-      onClick={onClick}
-      role={onClick ? 'button' : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      onKeyDown={(e) => {
-        if (!onClick) return;
-        if (e.key === 'Enter' || e.key === ' ') onClick();
-      }}
-    >
-      <div className="flex items-start justify-between">
-        <div className="flex-1">
-          <div className="flex items-center gap-3 mb-3">
-            <div className={`p-3 rounded-xl ${color} shadow-md group-hover:scale-110 transition-transform duration-300`}>
-              {icon}
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">{title}</h3>
-              {subtitle && <p className="text-xs text-gray-500 mt-1">{subtitle}</p>}
-            </div>
-          </div>
-
-          <div>
-            <div className="flex items-end justify-between gap-4">
-              <div>
-                {loading ? (
-                  <div className="h-8 w-24 bg-gray-200 animate-pulse rounded" />
-                ) : (
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold text-gray-900">{safeCurrent.toLocaleString()}</span>
-                    <span className="text-sm text-gray-500 font-medium">/ {safeTotal.toLocaleString()}</span>
-                  </div>
-                )}
-                <div className="mt-2 text-xs text-gray-600">
-                  {loading ? (
-                    <div className="h-3 w-28 bg-gray-200 animate-pulse rounded" />
-                  ) : percent > 0 ? (
-                    <>
-                      <span className="font-semibold text-gray-900">{percent}%</span>
-                      <span className="text-gray-500"> de couverture</span>
-                    </>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="text-right">
-                <div className="text-xs font-semibold text-gray-500">Progression</div>
-              </div>
-            </div>
-
-            <div className="mt-4 h-2.5 w-full bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-blue-500 to-purple-600 transition-all duration-700"
-                style={{ width: `${percent}%` }}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-type AgentCore = {
-  id: number;
-  nom?: string;
-  postnom?: string;
-  prenom?: string;
-  username?: string;
-  email?: string;
-  lieu_affectation?: string;
-  status?: boolean;
-  isConnected?: boolean;
-  direction?: { id?: number; direction?: string } | string;
-  service?: string;
-  departement?: string;
-  department?: string;
-  division?: { nom?: string };
-  directionNom?: string;
-  serviceNom?: string;
-};
-
-const getAgentFullName = (a: AgentCore): string => {
-  const parts = [a?.prenom, a?.postnom, a?.nom]
-    .filter((x) => typeof x === 'string' && x.trim().length > 0)
-    .map((x) => (x as string).trim());
-  if (parts.length > 0) return parts.join(' ');
-  const fallback = a?.username ?? a?.email ?? String(a?.id ?? '');
-  return String(fallback);
-};
-
-const getAgentPrenomNom = (a: AgentCore): string => {
-  const parts = [a?.prenom, a?.nom]
-    .filter((x) => typeof x === 'string' && x.trim().length > 0)
-    .map((x) => (x as string).trim());
-  if (parts.length > 0) return parts.join(' ');
-  return getAgentFullName(a);
-};
-
-const isReparationsAgent = (a: AgentCore): boolean | null => {
-  const objDirection = typeof (a as any)?.direction === 'object' && (a as any)?.direction !== null
-    ? (a as any)?.direction?.direction
-    : undefined;
-
-  const candidates: Array<unknown> = [
-    objDirection,
-    (a as any)?.direction,
-    (a as any)?.directionNom,
-    (a as any)?.service,
-    (a as any)?.serviceNom,
-    (a as any)?.departement,
-    (a as any)?.department,
-    (a as any)?.division?.nom,
-  ];
-
-  const normalized = candidates
-    .filter((x) => typeof x === 'string')
-    .map((x) => (x as string).trim().toUpperCase())
-    .filter((s) => s.length > 0);
-
-  if (normalized.length === 0) return null;
-
-  // Filtre strict demandé: direction.direction doit être REPARATIONS.
-  if (typeof objDirection === 'string' && objDirection.trim().length > 0) {
-    const d = objDirection.trim().toUpperCase();
-    return d === 'REPARATIONS' || d === 'ETUDES, ENQUETES ET EVALUATIONS';
-  }
-
-  return normalized.some((s) =>
-    s === 'REPARATIONS' ||
-    s.includes('REPARATIONS') ||
-    s === 'ETUDES, ENQUETES ET EVALUATIONS' ||
-    s.includes('ETUDES')
-  );
-};
+import StatCard from './dashboard/StatCard';
+import ProgressCard from './dashboard/ProgressCard';
+import CustomTooltip from './dashboard/CustomTooltip';
+import OfflineIndicator from './dashboard/OfflineIndicator';
+import { COLORS, TRANCHE_AGE_ORDER } from './dashboard/constants';
+import { AgentCore, getAgentFullName, getAgentPrenomNom, isReparationsAgent } from './dashboard/agents';
 
 interface DashboardVictimsProps {
   onSelectAgentReparation?: (fullName: string) => void;
   onShowRecontactedVictims?: () => void;
+  extraSection?: React.ReactNode;
 }
 
-const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentReparation, onShowRecontactedVictims }) => {
+const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentReparation, onShowRecontactedVictims, extraSection }) => {
   const { fetcher } = useFetch();
   const [loading, setLoading] = useState(true);
   const [loadingRecontact, setLoadingRecontact] = useState(true);
@@ -493,6 +298,23 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
     color: COLORS[index % COLORS.length]
   }));
 
+  const trancheAgeChartData = (() => {
+    const raw = Array.isArray(stats.trancheAge) ? stats.trancheAge : [];
+    const map = new Map<string, number>(raw.map((item: any) => [String(item?.tranche ?? ''), Number(item?.total) || 0]));
+    const ordered = TRANCHE_AGE_ORDER
+      .filter((k) => map.has(k))
+      .map((k) => ({ tranche: k, total: map.get(k) || 0 }));
+    const extras = raw
+      .filter((item: any) => !TRANCHE_AGE_ORDER.includes(String(item?.tranche)))
+      .map((item: any) => ({ tranche: String(item?.tranche ?? ''), total: Number(item?.total) || 0 }));
+    return [...ordered, ...extras].map((entry, index) => ({
+      name: `${entry.tranche} ans`,
+      fullName: `${entry.tranche} ans`,
+      value: entry.total,
+      color: COLORS[index % COLORS.length],
+    }));
+  })();
+
   const programmeChartData = stats.programme.map((item: any, index) => ({
     name: item?.programme?.length > 40 ? item?.programme?.substring(0, 40) + '...' : item?.programme,
     fullName: item?.programme,
@@ -500,78 +322,14 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
     color: COLORS[index % COLORS.length]
   }));
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
-        <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
-          <p className="font-semibold text-gray-800">{data.fullName || data.name}</p>
-          <p className="text-blue-600">
-            <span className="font-medium">Total: {data.value}</span>
-          </p>
-        </div>
-      );
-    }
-    return null;
-  };
-
   return (
     <div className="w-full px-6 py-8 bg-gray-50 min-h-screen">
-      {/* En-tête */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Tableau de Bord des Victimes</h1>
-            <p className="text-gray-600">Vue d'ensemble des données et statistiques du système FONAREV</p>
-          </div>
-
-          {/* Indicateur de statut */}
-          {isOffline && showOfflineIndicator && (
-            <div className={`flex items-center gap-3 px-4 py-2 rounded-lg border ${isOffline
-              ? 'bg-orange-50 text-orange-800 border-orange-200'
-              : 'bg-blue-50 text-blue-800 border-blue-200'
-              }`}>
-              {isOffline ? (
-                <>
-                  <FiWifiOff size={18} />
-                  <span className="text-sm font-medium">Mode Hors Ligne</span>
-                </>
-              ) : (
-                <>
-                  <FiWifi size={18} />
-                  <span className="text-sm font-medium">Données en cache</span>
-                </>
-              )}
-              <button
-                onClick={() => setShowOfflineIndicator(false)}
-                className="ml-2 p-1 hover:bg-white/50 rounded transition-colors"
-                title="Fermer"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Notification discrète si l'indicateur est fermé */}
-      {isOffline && !showOfflineIndicator && (
-        <div className="fixed bottom-4 right-4 z-50">
-          <button
-            onClick={() => setShowOfflineIndicator(true)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-full shadow-lg border ${isOffline
-              ? 'bg-orange-100 text-orange-800 border-orange-300'
-              : 'bg-blue-100 text-blue-800 border-blue-300'
-              } hover:scale-105 transition-transform`}
-            title={isOffline ? "Mode Hors Ligne" : "Données en cache"}
-          >
-            {isOffline ? <FiWifiOff size={16} /> : <FiWifi size={16} />}
-          </button>
-        </div>
-      )}
-
+      <OfflineIndicator
+        isOffline={isOffline}
+        showOfflineIndicator={showOfflineIndicator}
+        setShowOfflineIndicator={setShowOfflineIndicator}
+      />
+      {extraSection}
       {/* Cartes de statistiques principales */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
 
@@ -677,6 +435,8 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
         />
       </div>
 
+
+
       {/* Graphiques principaux */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
         {/* Répartition par sexe */}
@@ -753,31 +513,32 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
 
       {/* Graphiques secondaires */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-        {/* Types de préjudices */}
+        {/* Victimes par tranche d'âge */}
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
           <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 rounded-lg bg-red-50">
-              <FiAlertTriangle className="text-red-600" size={20} />
+            <div className="p-2 rounded-lg bg-indigo-50">
+              <FiUsers className="text-indigo-600" size={20} />
             </div>
-            <h3 className="text-lg font-bold text-gray-900">Types de Préjudices</h3>
+            <h3 className="text-lg font-bold text-gray-900">Victimes par tranche d’âge</h3>
           </div>
           {loading ? (
             <div className="h-80 flex items-center justify-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600"></div>
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={320}>
               <PieChart>
                 <Pie
-                  data={prejudiceChartData}
+                  data={trancheAgeChartData}
                   dataKey="value"
                   nameKey="name"
                   cx="50%"
                   cy="50%"
                   outerRadius={100}
-                  label={({ value }) => value}
+                  label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  labelLine={false}
                 >
-                  {prejudiceChartData.map((entry, index) => (
+                  {trancheAgeChartData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
