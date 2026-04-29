@@ -198,6 +198,44 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
     return realUrl;
   };
 
+  const resolveDocUrl = async (docUrl: string) => {
+    let realUrl = docUrl;
+    if (!docUrl.startsWith('http')) {
+      realUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006'}${docUrl}`;
+    }
+    return realUrl;
+  };
+
+  const openFilePicker = async (ref: React.RefObject<HTMLInputElement | null>) => {
+    const input = ref.current;
+    if (!input) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'Impossible d\'ouvrir le sélecteur',
+        text: "Le champ de sélection de fichier n'est pas disponible sur cet appareil.",
+        confirmButtonColor: '#901c67',
+      });
+      return;
+    }
+
+    try {
+      input.value = '';
+      const anyInput = input as unknown as { showPicker?: () => void };
+      if (typeof anyInput.showPicker === 'function') {
+        anyInput.showPicker();
+        return;
+      }
+      input.click();
+    } catch {
+      await Swal.fire({
+        icon: 'error',
+        title: 'Action non supportée',
+        text: "Votre navigateur bloque l'ouverture automatique du sélecteur. Essayez sur un autre navigateur/appareil.",
+        confirmButtonColor: '#901c67',
+      });
+    }
+  };
+
   const handleDownloadServerDoc = async (file: { name?: string; lien?: string; label?: string }) => {
     try {
       if (!isOnline()) {
@@ -1037,7 +1075,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                     <button
                       type="button"
                       className="px-3 py-1 !bg-gray-200 !text-gray-800 text-sm rounded hover:!bg-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      onClick={() => fileDocInputRef.current?.click()}
+                      onClick={() => void openFilePicker(fileDocInputRef)}
                       disabled={uploadingFile}
                       title="Choisir un fichier"
                     >
@@ -1050,7 +1088,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                   <input
                     ref={fileDocInputRef}
                     type="file"
-                    className="hidden"
+                    className="sr-only"
                     onChange={e => setNewFileFile(e.target.files?.[0] || null)}
                     disabled={uploadingFile}
                   />

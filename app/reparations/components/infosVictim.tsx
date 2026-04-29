@@ -118,6 +118,40 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
     const [stream, setStream] = useState<MediaStream | null>(null);
     const [capturedDataUrl, setCapturedDataUrl] = useState<string | null>(null);
 
+    const openFilePicker = useCallback((ref: React.RefObject<HTMLInputElement | null>) => {
+        const input = ref.current;
+        if (!input) {
+            void Swal.fire({
+                icon: 'error',
+                title: 'Impossible d\'ouvrir le sélecteur',
+                text: "Le champ de sélection de fichier n'est pas disponible sur cet appareil.",
+                confirmButtonColor: '#901c67',
+            });
+            return;
+        }
+
+        try {
+            // Permet de re-sélectionner le même fichier
+            input.value = '';
+
+            // Certains navigateurs exposent showPicker() (plus fiable que click())
+            const anyInput = input as unknown as { showPicker?: () => void };
+            if (typeof anyInput.showPicker === 'function') {
+                anyInput.showPicker();
+                return;
+            }
+
+            input.click();
+        } catch {
+            void Swal.fire({
+                icon: 'error',
+                title: 'Action non supportée',
+                text: "Votre navigateur bloque l'ouverture automatique du sélecteur. Essayez sur un autre navigateur/appareil.",
+                confirmButtonColor: '#901c67',
+            });
+        }
+    }, []);
+
     const photoIsDirectUrl = !!photo && (photo.startsWith('http') || photo.startsWith('data:'));
     const displayedPhoto =
         (photoIsDirectUrl ? photo : null) ||
@@ -351,7 +385,14 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
 
             if (isOnline()) {
                 // Ne pas bloquer l'UI sur le réseau
-                syncPendingVictimPhotos().catch(() => undefined);
+                syncPendingVictimPhotos().catch(async (err: any) => {
+                    await Swal.fire({
+                        icon: 'warning',
+                        title: 'Synchronisation échouée',
+                        text: err?.message || 'La photo est enregistrée, mais l’envoi a échoué. Elle sera réessayée plus tard.',
+                        confirmButtonColor: '#901c67',
+                    });
+                });
             }
 
             await Swal.fire({
@@ -363,6 +404,14 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
                 timer: 1800,
                 showConfirmButton: false
             });
+        } catch (err: any) {
+            await Swal.fire({
+                icon: 'error',
+                title: 'Enregistrement impossible',
+                text: err?.message || "Impossible d'enregistrer la photo sur cet appareil.",
+                confirmButtonColor: '#901c67',
+            });
+            throw err;
         } finally {
             setSavingPhoto(false);
         }
@@ -479,7 +528,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
 
                             <button
                                 type="button"
-                                onClick={() => galleryInputRef.current?.click()}
+                                onClick={() => openFilePicker(galleryInputRef)}
                                 disabled={savingPhoto}
                                 className="px-3 py-2 text-xs rounded bg-gray-100 text-gray-800 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
                                 title="Charger une photo"
@@ -520,7 +569,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
                             ref={galleryInputRef}
                             type="file"
                             accept="image/*"
-                            className="hidden"
+                            className="sr-only"
                             onChange={handlePhotoSelected}
                         />
                         <input
@@ -528,7 +577,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
                             type="file"
                             accept="image/*"
                             capture="environment"
-                            className="hidden"
+                            className="sr-only"
                             onChange={handlePhotoSelected}
                         />
                     </div>

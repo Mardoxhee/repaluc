@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from "react";
-import { FiEye, FiGrid, FiUsers, FiTrendingUp, FiSettings, FiInfo, FiMapPin, FiHome, FiPhone, FiFolder, FiFileText, FiBarChart2, FiSearch, FiUser } from "react-icons/fi";
+import {FiGrid, FiUsers } from "react-icons/fi";
 import { IoSettings } from "react-icons/io5";
 import ListVictims from './components/ListVictims'
 import DashboardVictims from './components/dashboardVictims'
@@ -30,12 +30,12 @@ const mockMesures = [
   { id: 1, nom: "Prise en charge médicale" },
   { id: 2, nom: "Clinique mobile" },
   { id: 3, nom: "Accompagnement psychologique" },
-  { id: 4, nom: "Réinsertion sociale" },
-  { id: 5, nom: "Indemnisation financière" },
-  { id: 6, nom: "Appui économique" },
-  { id: 7, nom: "Médiation familiale" },
-  { id: 8, nom: "Assistance juridique" },
-  { id: 9, nom: "Formation professionnelle" },
+  // { id: 4, nom: "Réinsertion sociale" },
+  // { id: 5, nom: "Indemnisation financière" },
+  // { id: 6, nom: "Appui économique" },
+  // { id: 7, nom: "Médiation familiale" },
+  // { id: 8, nom: "Assistance juridique" },
+  // { id: 9, nom: "Formation professionnelle" },
 
 ];
 
