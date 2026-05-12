@@ -18,6 +18,7 @@ import {
   FiX,
 } from 'react-icons/fi';
 import { getVictimsFromCache } from '../../utils/victimsCache';
+import MpuCliniquesSection from './MpuCliniquesSection';
 
 interface DashboardVictimsMpuProps {
   onSelectAgentReparation?: (fullName: string) => void;
@@ -692,6 +693,11 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = () => {
           </div>
         </div>
       )}
+
+      {/* ─── Cliniques mobiles + MUSO/AVEC ─── */}
+      <div className="mt-8">
+        <MpuCliniquesSection />
+      </div>
     </div>
   );
 };

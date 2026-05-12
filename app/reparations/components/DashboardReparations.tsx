@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useMemo, useState } from 'react';
-import { FiAlertCircle, FiAlertTriangle, FiGrid } from 'react-icons/fi';
+import { FiAlertCircle, FiAlertTriangle, FiAward, FiGrid, FiHeart } from 'react-icons/fi';
 import { FaHospitalSymbol } from 'react-icons/fa';
 import DashboardVictimsLuc from './DashboardVictimsLuc';
 import DashboardVictimsMpu from './DashboardVictimsMpu';
-import DashboardVictimsMedicalUrgent from './DashboardVictimsMedicalUrgent';
+import DashboardVictimesPecmu from './DashboardVictimesPecmu';
+import DashboardVictimesReparees from './DashboardVictimesReparees';
 
-export type ReparationsDashboardKey = 'luc' | 'mpu' | 'medical_urgent';
+export type ReparationsDashboardKey = 'luc' | 'mpu' | 'pecmu' | 'reparees';
 
 interface DashboardReparationsProps {
   defaultDashboard?: ReparationsDashboardKey;
@@ -32,20 +33,26 @@ const DashboardReparations: React.FC<DashboardReparationsProps> = ({
       {
         key: 'luc',
         label: 'Victimes de la LUC',
-        description: 'Dashboard par défaut (actuel).',
+        description: 'Réparations administratives intégrales.',
         icon: <FiGrid size={18} className="text-blue-600" />,
       },
       {
         key: 'mpu',
         label: 'Victimes MPU',
-        description: 'Mesure Provisoire Urgente.',
+        description: 'Mesures Provisoires Urgentes.',
         icon: <FiAlertCircle size={18} className="text-orange-600" />,
       },
       {
-        key: 'medical_urgent',
-        label: 'Prise en charge médicale urgente',
-        description: 'Victimes en urgence médicale.',
-        icon: <FaHospitalSymbol size={18} className="text-red-600" />,
+        key: 'pecmu',
+        label: 'PECMU',
+        description: 'Prise en charge médicale urgente.',
+        icon: <FiHeart size={18} className="text-red-600" />,
+      },
+      {
+        key: 'reparees',
+        label: 'Totalement réparées',
+        description: 'Victimes ayant complété le circuit.',
+        icon: <FiAward size={18} className="text-emerald-600" />,
       },
     ],
     []
@@ -63,7 +70,7 @@ const DashboardReparations: React.FC<DashboardReparationsProps> = ({
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {options.map((o) => {
             const active = o.key === selected;
             return (
@@ -112,8 +119,15 @@ const DashboardReparations: React.FC<DashboardReparationsProps> = ({
         />
       )}
 
-      {selected === 'medical_urgent' && (
-        <DashboardVictimsMedicalUrgent
+      {selected === 'pecmu' && (
+        <DashboardVictimesPecmu
+          onSelectAgentReparation={onSelectAgentReparation}
+          onShowRecontactedVictims={onShowRecontactedVictims}
+        />
+      )}
+
+      {selected === 'reparees' && (
+        <DashboardVictimesReparees
           onSelectAgentReparation={onSelectAgentReparation}
           onShowRecontactedVictims={onShowRecontactedVictims}
         />

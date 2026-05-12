@@ -4,6 +4,7 @@ import { FiGrid, FiUsers, FiTrendingUp, FiSettings } from "react-icons/fi";
 import ReglagesPanel from "./components/reglagePanel";
 import ListVictims from './components/ListVictims'
 import DashboardReparations from './components/DashboardReparations'
+import StatsRapports from './components/StatsRapports'
 
 
 
@@ -118,7 +119,7 @@ const ReparationsTabs = () => {
               </>
             )}
             {activeTab === "indemnisation" && <div>Contenu demandes d’indemnisation</div>}
-            {activeTab === "stats" && <div>Contenu statistiques & rapports</div>}
+            {activeTab === "stats" && <StatsRapports />}
             {/* {activeTab === "reglage" && <ReglagesPanel mockPrejudices={mockPrejudices} mockMesures={mockMesures} mockProgrammes={mockProgrammes} mockCategories={mockCategories} />} */}
           </div>
         </div>

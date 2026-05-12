@@ -4,6 +4,7 @@ import React from 'react';
 import { FiShield } from 'react-icons/fi';
 import DashboardVictims from './dashboardVictims';
 import ProgressionMesuresLuc from './ProgressionMesuresLuc';
+import ProgressionDetailLuc from './ProgressionDetailLuc';
 
 interface DashboardVictimsLucProps {
   onSelectAgentReparation?: (fullName: string) => void;
@@ -32,6 +33,9 @@ const DashboardVictimsLuc: React.FC<DashboardVictimsLucProps> = ({
             </div>
           </div>
           <ProgressionMesuresLuc />
+          <div className="mt-8">
+            <ProgressionDetailLuc />
+          </div>
         </>
       }
     />

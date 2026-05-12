@@ -267,8 +267,12 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
 
   // Calculs des totaux
   const totalVictimes = totalVictimesGlobal ?? stats?.sexe?.reduce((acc, item: any) => acc + parseInt(item.total), 0);
-  const totalFemmes = stats?.sexe?.find((item: any) => item.sexe === 'Femme')?.total || 0;
-  const totalHommes = stats?.sexe?.find((item: any) => item.sexe === 'Homme')?.total || 0;
+  const totalFemmes = stats?.sexe
+    ?.filter((item: any) => ['f', 'femme'].includes(String(item.sexe).trim().toLowerCase()))
+    .reduce((acc: number, item: any) => acc + Number(item.total), 0) || 0;
+  const totalHommes = stats?.sexe
+    ?.filter((item: any) => ['h', 'homme', 'm'].includes(String(item.sexe).trim().toLowerCase()))
+    .reduce((acc: number, item: any) => acc + Number(item.total), 0) || 0;
   const totalProvinces = stats?.province?.length;
   const totalTerritoires = stats?.territoire?.length;
 
@@ -279,11 +283,27 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
       : 0;
 
   // Préparation des données pour les graphiques
-  const sexeChartData = stats.sexe.map((item: any, index) => ({
-    name: item.sexe,
-    value: parseInt(item.total),
-    color: COLORS[index % COLORS.length]
-  }));
+  const sexeChartData = (() => {
+    const normalizeSexe = (s: string | null | undefined): string | null => {
+      if (!s) return null;
+      const v = s.trim().toLowerCase();
+      if (!v || v === 'null') return null;
+      if (v === 'h' || v === 'homme' || v === 'm') return 'Homme';
+      if (v === 'f' || v === 'femme') return 'Femme';
+      return s.trim();
+    };
+    const grouped = new Map<string, number>();
+    for (const item of stats.sexe) {
+      const key = normalizeSexe(item.sexe);
+      if (!key) continue;
+      grouped.set(key, (grouped.get(key) || 0) + Number(item.total));
+    }
+    return Array.from(grouped.entries()).map(([name, value], index) => ({
+      name,
+      value,
+      color: COLORS[index % COLORS.length],
+    }));
+  })();
 
   const provinceChartData = stats.province.map((item: any, index) => ({
     name: item.province,
