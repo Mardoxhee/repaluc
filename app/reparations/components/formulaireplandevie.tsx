@@ -439,29 +439,11 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
 
       console.log('Payload à envoyer:', payload);
 
-      // Vérifier la connexion
-      if (!isOnline()) {
-        // Sauvegarder hors ligne
-        await savePendingForm(victim.id, userId || 1, formData);
-        await deleteDraft(victim.id);
-        setHasDraft(false);
-        await checkPendingForms();
-
-        await Swal.fire({
-          icon: 'info',
-          title: 'Sauvegardé hors ligne',
-          html: `
-            <p>Vous êtes hors ligne. Le formulaire a été sauvegardé localement.</p>
-            <p class="text-sm text-gray-600 mt-2">Il sera automatiquement synchronisé lors du retour de la connexion.</p>
-          `,
-          confirmButtonColor: '#901c67'
-        });
-
-        setSaving(false);
-        return;
+      if (!API_PLANVIE_URL) {
+        throw new Error('NEXT_PUBLIC_API_PLANVIE_URL n’est pas configurée');
       }
 
-      // Envoyer au serveur
+      // Toujours tenter l'enregistrement en ligne lors de la soumission.
       const response = await fetch(`${API_PLANVIE_URL}/plan-vie-enquette`, {
         method: 'POST',
         headers: {
@@ -471,10 +453,11 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
       });
 
       if (!response.ok) {
-        throw new Error('Erreur lors de l\'enregistrement');
+        const errorBody = await response.text().catch(() => '');
+        throw new Error(`Erreur lors de l'enregistrement (${response.status})${errorBody ? `: ${errorBody}` : ''}`);
       }
 
-      const result = await response.json();
+      const result = await response.json().catch(() => null);
 
       // Supprimer le brouillon après succès
       await deleteDraft(victim.id);
@@ -511,8 +494,8 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
     } catch (err: any) {
       console.log('Erreur:', err);
 
-      // En cas d'erreur réseau, proposer de sauvegarder hors ligne
-      if (err.message.includes('fetch') || err.message.includes('network')) {
+      // Utiliser la file locale uniquement si la tentative réseau a réellement échoué.
+      if (err instanceof TypeError) {
         const result = await Swal.fire({
           icon: 'warning',
           title: 'Erreur de connexion',
