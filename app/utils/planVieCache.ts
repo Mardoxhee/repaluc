@@ -9,6 +9,7 @@ interface FormCacheEntry {
   victimeId: number;
   userId: number;
   formData: any;
+  categoriePV?: string;
   timestamp: number;
   status: 'draft' | 'pending_sync';
 }
@@ -128,7 +129,8 @@ export const deleteDraft = async (victimeId: number): Promise<void> => {
 export const savePendingForm = async (
   victimeId: number,
   userId: number,
-  formData: any
+  formData: any,
+  categoriePV?: string
 ): Promise<void> => {
   try {
     const db = await openDB();
@@ -140,6 +142,7 @@ export const savePendingForm = async (
       victimeId,
       userId,
       formData,
+      categoriePV,
       timestamp: Date.now(),
       status: 'pending_sync'
     };

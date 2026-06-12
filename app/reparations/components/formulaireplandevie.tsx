@@ -180,7 +180,16 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
             questionResponse
           };
 
-          const response = await fetch(`${API_PLANVIE_URL}/plan-vie-enquette`, {
+          const submitBaseUrl = form.categoriePV ? CORE_POWERVIZ_URL : API_PLANVIE_URL;
+          if (!submitBaseUrl) {
+            throw new Error(form.categoriePV
+              ? 'NEXT_PUBLIC_CORE_POWERVIZ n’est pas configurée'
+              : 'NEXT_PUBLIC_API_PLANVIE_URL n’est pas configurée');
+          }
+          const submitUrl = form.categoriePV
+            ? `${submitBaseUrl}/question/type/PLANDEVIE`
+            : `${submitBaseUrl}/plan-vie-enquette`;
+          const response = await fetch(submitUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -439,12 +448,18 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
 
       console.log('Payload à envoyer:', payload);
 
-      if (!API_PLANVIE_URL) {
-        throw new Error('NEXT_PUBLIC_API_PLANVIE_URL n’est pas configurée');
+      const submitBaseUrl = categoriePV ? CORE_POWERVIZ_URL : API_PLANVIE_URL;
+      if (!submitBaseUrl) {
+        throw new Error(categoriePV
+          ? 'NEXT_PUBLIC_CORE_POWERVIZ n’est pas configurée'
+          : 'NEXT_PUBLIC_API_PLANVIE_URL n’est pas configurée');
       }
 
       // Toujours tenter l'enregistrement en ligne lors de la soumission.
-      const response = await fetch(`${API_PLANVIE_URL}/plan-vie-enquette`, {
+      const submitUrl = categoriePV
+        ? `${submitBaseUrl}/question/type/PLANDEVIE`
+        : `${submitBaseUrl}/plan-vie-enquette`;
+      const response = await fetch(submitUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -507,7 +522,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
         });
 
         if (result.isConfirmed) {
-          await savePendingForm(victim.id, userId || 1, formData);
+          await savePendingForm(victim.id, userId || 1, formData, categoriePV);
           await deleteDraft(victim.id);
           setHasDraft(false);
           await checkPendingForms();
