@@ -366,7 +366,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
   // Charger les questions depuis le cache
   useEffect(() => {
     const loadQuestions = async () => {
-      if (tab === 'formulaires' || (tab === 'plan-de-vie' && !isLucContext)) {
+      if ((tab === 'formulaires' || tab === 'plan-de-vie') && !isLucContext) {
         setLoadingQuestions(true);
         try {
           const cachedQuestions = await getQuestions();
@@ -1387,13 +1387,19 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
                     <X size={16} />
                     Retour à la liste
                   </button>
-                  {loadingQuestions ? (
+                  {!isLucContext && loadingQuestions ? (
                     <div className="flex justify-center items-center h-64">
                       <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500"></div>
                     </div>
+                  ) : isLucContext ? (
+                    <Formulaireplandevie
+                      victim={currentVictim}
+                      userId={1}
+                      categoriePV="DJ"
+                    />
                   ) : questions ? (
                     <Formulaireplandevie
-                      victim={victim}
+                      victim={currentVictim}
                       userId={1}
                       initialQuestions={questions}
                     />
