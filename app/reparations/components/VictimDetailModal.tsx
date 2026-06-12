@@ -131,7 +131,7 @@ interface VictimDetailModalProps {
 
 const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, onClose, onVictimUpdate, onDeletePhoto, onViewEvaluation }) => {
   const fetchCtx = useContext(FetchContext);
-  const isLucContext = mention?.trim().toLowerCase() === 'luc';
+  const useMpuPlanVie = mention?.trim().toLowerCase() === 'mpu';
   const [tab, setTab] = useState<'info' | 'dossier' | 'progression' | 'reglages' | 'formulaires' | 'plan-de-vie' | 'contrat' | 'paiement'>('info');
   const [hasContrat, setHasContrat] = useState(false);
   const [currentVictim, setCurrentVictim] = useState<Victim>(victim);
@@ -366,7 +366,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
   // Charger les questions depuis le cache
   useEffect(() => {
     const loadQuestions = async () => {
-      if ((tab === 'formulaires' || tab === 'plan-de-vie') && !isLucContext) {
+      if ((tab === 'formulaires' || tab === 'plan-de-vie') && useMpuPlanVie) {
         setLoadingQuestions(true);
         try {
           const cachedQuestions = await getQuestions();
@@ -384,7 +384,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
     };
 
     loadQuestions();
-  }, [tab, isLucContext]);
+  }, [tab, useMpuPlanVie]);
 
   // Désactiver le scroll du body quand le modal est ouvert
   React.useEffect(() => {
@@ -1387,11 +1387,11 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
                     <X size={16} />
                     Retour à la liste
                   </button>
-                  {!isLucContext && loadingQuestions ? (
+                  {useMpuPlanVie && loadingQuestions ? (
                     <div className="flex justify-center items-center h-64">
                       <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500"></div>
                     </div>
-                  ) : isLucContext ? (
+                  ) : !useMpuPlanVie ? (
                     <Formulaireplandevie
                       victim={currentVictim}
                       userId={1}
@@ -1415,11 +1415,11 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
 
           {tab === 'plan-de-vie' && (
             <div className="!bg-white !text-gray-900">
-              {!isLucContext && loadingQuestions ? (
+              {useMpuPlanVie && loadingQuestions ? (
                 <div className="flex justify-center items-center h-64">
                   <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500"></div>
                 </div>
-              ) : !isLucContext && questions ? (
+              ) : useMpuPlanVie && questions ? (
                 <Formulaireplandevie
                   victim={currentVictim}
                   userId={1}
@@ -1429,7 +1429,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
                 <Formulaireplandevie
                   victim={currentVictim}
                   userId={1}
-                  categoriePV={isLucContext ? 'DJ' : undefined}
+                  categoriePV="DJ"
                 />
               )}
             </div>
