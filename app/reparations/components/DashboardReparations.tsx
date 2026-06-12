@@ -1,19 +1,20 @@
 "use client";
 
 import React, { useMemo, useState } from 'react';
-import { FiAlertCircle, FiAlertTriangle, FiAward, FiGrid, FiHeart } from 'react-icons/fi';
-import { FaHospitalSymbol } from 'react-icons/fa';
+import { FiAlertCircle, FiAward, FiGrid, FiHeart, FiUsers } from 'react-icons/fi';
 import DashboardVictimsLuc from './DashboardVictimsLuc';
 import DashboardVictimsMpu from './DashboardVictimsMpu';
 import DashboardVictimesPecmu from './DashboardVictimesPecmu';
 import DashboardVictimesReparees from './DashboardVictimesReparees';
+import DashboardToutesVictimes from './DashboardToutesVictimes';
 
-export type ReparationsDashboardKey = 'luc' | 'mpu' | 'pecmu' | 'reparees';
+export type ReparationsDashboardKey = 'toutes' | 'luc' | 'mpu' | 'pecmu' | 'reparees';
 
 interface DashboardReparationsProps {
   defaultDashboard?: ReparationsDashboardKey;
   onSelectAgentReparation?: (fullName: string) => void;
   onShowRecontactedVictims?: () => void;
+  onSelectMention?: (mention: string) => void;
 }
 
 type DashboardOption = {
@@ -27,9 +28,16 @@ const DashboardReparations: React.FC<DashboardReparationsProps> = ({
   defaultDashboard = 'luc',
   onSelectAgentReparation,
   onShowRecontactedVictims,
+  onSelectMention,
 }) => {
   const options: DashboardOption[] = useMemo(
     () => [
+      {
+        key: 'toutes',
+        label: 'Toutes les victimes',
+        description: 'Vue globale reprise du dashboard LUC.',
+        icon: <FiUsers size={18} className="text-indigo-600" />,
+      },
       {
         key: 'luc',
         label: 'Victimes de la LUC',
@@ -70,7 +78,7 @@ const DashboardReparations: React.FC<DashboardReparationsProps> = ({
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           {options.map((o) => {
             const active = o.key === selected;
             return (
@@ -104,6 +112,14 @@ const DashboardReparations: React.FC<DashboardReparationsProps> = ({
           </div>
         )} */}
       </div>
+
+      {selected === 'toutes' && (
+        <DashboardToutesVictimes
+          onSelectAgentReparation={onSelectAgentReparation}
+          onShowRecontactedVictims={onShowRecontactedVictims}
+          onSelectMention={onSelectMention}
+        />
+      )}
 
       {selected === 'luc' && (
         <DashboardVictimsLuc

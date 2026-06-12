@@ -64,7 +64,7 @@ const ProgressionDetailLuc: React.FC = () => {
       </div>
 
       {/* Barème d'indemnisation */}
-      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 mb-10">
+      {/* <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 mb-10">
         <div className="flex items-center gap-3 mb-5">
           <div className="p-2 rounded-lg bg-amber-50">
             <FiDollarSign className="text-amber-600" size={20} />
@@ -108,7 +108,7 @@ const ProgressionDetailLuc: React.FC = () => {
             </tbody>
           </table>
         </div>
-      </div>
+      </div> */}
     </div>
   );
 };

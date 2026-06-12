@@ -21,6 +21,7 @@ interface ReglagesProps {
     mockCategories: { id: number; nom: string }[];
     agentReparation?: string;
     photoNotNull?: boolean;
+    mention?: string;
 }
 
 const provincesRDC = [
@@ -119,7 +120,7 @@ const operators = [
     { key: 'between', label: 'Entre', types: ['number', 'date'] },
 ];
 
-const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation, photoNotNull }) => {
+const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation, photoNotNull, mention }) => {
     // Charger les questions du formulaire plan de vie au démarrage
     useEffect(() => {
         const loadQuestions = async () => {
@@ -160,6 +161,9 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
     });
     const [filterRules, setFilterRules] = useState<FilterRule[]>([]);
     const [showFilterBuilder, setShowFilterBuilder] = useState(false);
+    const effectiveMention = victimTypeFilter === 'luc' || victimTypeFilter === 'mpu'
+        ? victimTypeFilter
+        : mention?.trim() || '';
 
     // Fonction pour appliquer les filtres localement sur les données en cache
     const applyLocalFilters = useCallback((data: any[]) => {
@@ -173,12 +177,16 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
             const statusValue = typeof victim?.status === 'string' ? victim.status.trim().toLowerCase() : '';
             const categorieValue = typeof victim?.categorie === 'string' ? victim.categorie.trim().toLowerCase() : '';
             const programmeValue = typeof victim?.programme === 'string' ? victim.programme.trim().toLowerCase() : '';
+            const mentionValue = typeof victim?.mention === 'string' ? victim.mention.trim().toLowerCase() : '';
+            const selectedMentionValue = effectiveMention.toLowerCase();
+
+            const matchesMention = !selectedMentionValue || mentionValue === selectedMentionValue;
 
             const matchesVictimType = (() => {
                 if (victimTypeFilter === 'all') return true;
 
                 if (victimTypeFilter === 'luc') {
-                    return statusValue.includes('luc') || categorieValue.includes('luc') || programmeValue.includes('luc');
+                    return mentionValue === 'luc' || statusValue.includes('luc') || categorieValue.includes('luc') || programmeValue.includes('luc');
                 }
 
                 if (victimTypeFilter === 'medical_urgent') {
@@ -195,6 +203,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                         statusValue.includes('mpu') ||
                         statusValue.includes('mesure provisoire') ||
                         statusValue.includes('provisoire urgente') ||
+                        mentionValue === 'mpu' ||
                         categorieValue.includes('mpu') ||
                         categorieValue.includes('mesure provisoire') ||
                         programmeValue.includes('mpu')
@@ -228,9 +237,9 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                 }
             });
 
-            return matchesSearch && matchesVictimType && matchesRules;
+            return matchesSearch && matchesMention && matchesVictimType && matchesRules;
         });
-    }, [searchTerm, filterRules, victimTypeFilter]);
+    }, [searchTerm, filterRules, victimTypeFilter, effectiveMention]);
     const [victims, setVictims] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string>("");
@@ -614,6 +623,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
 
         if (searchTerm) params.nom = searchTerm;
         if (agentReparation && agentReparation.trim().length > 0) params.agentReparation = agentReparation.trim();
+        if (effectiveMention) params.mention = effectiveMention;
 
         // Build filters from rules
         filterRules.forEach((rule) => {
@@ -621,7 +631,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
         });
 
         return new URLSearchParams(params).toString();
-    }, [meta.page, meta.limit, searchTerm, filterRules, agentReparation, photoNotNull]);
+    }, [meta.page, meta.limit, searchTerm, filterRules, agentReparation, photoNotNull, effectiveMention]);
 
     const buildExportQueryParams = useCallback(() => {
         const params: Record<string, string> = {
@@ -631,17 +641,18 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
 
         if (searchTerm) params.nom = searchTerm;
         if (agentReparation && agentReparation.trim().length > 0) params.agentReparation = agentReparation.trim();
+        if (effectiveMention) params.mention = effectiveMention;
 
         filterRules.forEach((rule) => {
             if (rule.value) params[rule.field] = rule.value;
         });
 
         return new URLSearchParams(params).toString();
-    }, [searchTerm, filterRules, agentReparation, photoNotNull]);
+    }, [searchTerm, filterRules, agentReparation, photoNotNull, effectiveMention]);
 
     useEffect(() => {
         setMeta(prev => ({ ...prev, page: 1 }));
-    }, [agentReparation, photoNotNull, victimTypeFilter]);
+    }, [agentReparation, photoNotNull, victimTypeFilter, mention]);
 
     const handleExportExcel = useCallback(async () => {
         if (!fetchCtx?.fetcher) return;
@@ -1550,6 +1561,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
             {showVictimModal && selectedVictim && (
                 <VictimDetailModal
                     victim={selectedVictim}
+                    mention={effectiveMention}
                     onClose={() => setShowVictimModal(false)}
                     onVictimUpdate={(updatedVictim) => {
                         setVictims((prevVictims) => prevVictims.map(v => v.id === updatedVictim.id ? updatedVictim : v));

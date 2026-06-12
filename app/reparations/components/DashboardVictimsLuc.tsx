@@ -9,11 +9,17 @@ import ProgressionDetailLuc from './ProgressionDetailLuc';
 interface DashboardVictimsLucProps {
   onSelectAgentReparation?: (fullName: string) => void;
   onShowRecontactedVictims?: () => void;
+  title?: string;
+  description?: string;
+  beforeProgression?: React.ReactNode;
 }
 
 const DashboardVictimsLuc: React.FC<DashboardVictimsLucProps> = ({
   onSelectAgentReparation,
   onShowRecontactedVictims,
+  title = 'Tableau de bord — Victimes LUC',
+  description = 'vue d’ensemble et indicateurs clés.',
+  beforeProgression,
 }) => {
   return (
     <DashboardVictims
@@ -26,12 +32,13 @@ const DashboardVictimsLuc: React.FC<DashboardVictimsLucProps> = ({
               <FiShield className="text-blue-600" size={22} />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Tableau de bord — Victimes LUC</h1>
+              <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
               <p className="text-sm text-gray-600">
-                Lutte contre l’Impunité des Crimes — vue d’ensemble et indicateurs clés.
+                {description}
               </p>
             </div>
           </div>
+          {beforeProgression}
           <ProgressionMesuresLuc />
           <div className="mt-8">
             <ProgressionDetailLuc />

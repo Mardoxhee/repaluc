@@ -48,9 +48,10 @@ interface FormProps {
   victim?: Victim;
   userId?: number;
   initialQuestions?: QuestionsByCategory;
+  categoriePV?: string;
 }
 
-const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuestions }) => {
+const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuestions, categoriePV }) => {
   const [questions, setQuestions] = useState<QuestionsByCategory>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -88,7 +89,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [victim]);
+  }, [victim, initialQuestions, categoriePV]);
 
   // Sauvegarder automatiquement le brouillon à chaque modification
   useEffect(() => {
@@ -278,7 +279,10 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
 
     try {
       setLoading(true);
-      const response = await fetch(`${API_PLANVIE_URL}/question/type/plandevie`);
+      const questionEndpoint = categoriePV
+        ? `/question/type/PLANDEVIE?${new URLSearchParams({ categoriePV }).toString()}`
+        : '/question/type/plandevie';
+      const response = await fetch(`${API_PLANVIE_URL}${questionEndpoint}`);
 
       if (!response.ok) {
         throw new Error('Erreur lors de la récupération des questions');

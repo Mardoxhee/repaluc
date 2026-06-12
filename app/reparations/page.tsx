@@ -53,16 +53,26 @@ const ReparationsTabs = () => {
   const [activeTab, setActiveTab] = React.useState(TAB_LIST[0].key);
   const [selectedAgentReparation, setSelectedAgentReparation] = useState<string>('');
   const [photoNotNull, setPhotoNotNull] = useState<boolean>(false);
+  const [selectedMention, setSelectedMention] = useState<string>('');
 
   const handleSelectAgent = (fullName: string) => {
     setSelectedAgentReparation(fullName);
     setPhotoNotNull(false);
+    setSelectedMention('');
     setActiveTab('victimes');
   };
 
   const handleShowRecontactedVictims = () => {
     setSelectedAgentReparation('');
     setPhotoNotNull(true);
+    setSelectedMention('');
+    setActiveTab('victimes');
+  };
+
+  const handleSelectMention = (mention: string) => {
+    setSelectedAgentReparation('');
+    setPhotoNotNull(false);
+    setSelectedMention(mention);
     setActiveTab('victimes');
   };
 
@@ -103,6 +113,7 @@ const ReparationsTabs = () => {
               <DashboardReparations
                 onSelectAgentReparation={handleSelectAgent}
                 onShowRecontactedVictims={handleShowRecontactedVictims}
+                onSelectMention={handleSelectMention}
               />
             )}
             {activeTab === "victimes" && (
@@ -115,6 +126,7 @@ const ReparationsTabs = () => {
                   mockCategories={mockCategories}
                   agentReparation={selectedAgentReparation}
                   photoNotNull={photoNotNull}
+                  mention={selectedMention}
                 />
               </>
             )}
@@ -128,4 +140,4 @@ const ReparationsTabs = () => {
   );
 };
 
-export default ReparationsTabs; 
+export default ReparationsTabs;
