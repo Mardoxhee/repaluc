@@ -217,11 +217,18 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
   };
 
   const checkExistingForm = async () => {
-    if (!victim?.id) return;
+    if (!victim?.id) {
+      setCheckingExisting(false);
+      return;
+    }
 
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 10000);
     try {
       setCheckingExisting(true);
-      const response = await fetch(`${API_PLANVIE_URL}/plan-vie-enquette/victime/${victim.id}`);
+      const response = await fetch(`${API_PLANVIE_URL}/plan-vie-enquette/victime/${victim.id}`, {
+        signal: controller.signal,
+      });
 
       if (response.ok) {
         const data = await response.json();
@@ -254,6 +261,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
       console.log('[Plan de Vie] Erreur lors de la vérification:', err);
       setHasExistingForm(false);
     } finally {
+      window.clearTimeout(timeoutId);
       setCheckingExisting(false);
     }
   };
@@ -844,13 +852,11 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
     );
   };
 
-  if (loading || checkingExisting) {
+  if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-16">
         <Loader2 className="animate-spin text-pink-600 mb-4" size={48} />
-        <p className="text-gray-600">
-          {checkingExisting ? 'Vérification du formulaire...' : 'Chargement du formulaire...'}
-        </p>
+        <p className="text-gray-600">Chargement du formulaire...</p>
       </div>
     );
   }
@@ -896,6 +902,13 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
 
       {/* Status Indicators */}
       <div className="mb-4 flex flex-wrap gap-3">
+        {checkingExisting && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-gray-100 text-gray-700 border border-gray-300">
+            <Loader2 className="animate-spin" size={16} />
+            <span className="font-medium">Vérification du formulaire existant...</span>
+          </div>
+        )}
+
         {/* Connection Status */}
         <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${isOffline
           ? 'bg-orange-100 text-orange-800 border border-orange-300'
