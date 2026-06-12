@@ -12,6 +12,7 @@ import { deletePendingVictimPhotosForVictim } from '@/app/utils/victimPhotosCach
 import * as XLSX from 'xlsx';
 
 const API_PLANVIE_URL = process.env.NEXT_PUBLIC_API_PLANVIE_URL;
+const CORE_POWERVIZ_URL = process.env.NEXT_PUBLIC_CORE_POWERVIZ;
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
 
 interface ReglagesProps {
@@ -133,10 +134,10 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
 
                 if (cacheValid) return;
                 if (!isOnline()) return;
-                if (!API_PLANVIE_URL) return;
+                if (!CORE_POWERVIZ_URL) return;
 
                 if (!cacheValid) {
-                    const response = await fetch(`${API_PLANVIE_URL}/question/type/plandevie`);
+                    const response = await fetch(`${CORE_POWERVIZ_URL}/question/type/plandevie`);
                     if (!response.ok) {
                         throw new Error('Erreur lors du chargement des questions');
                     }

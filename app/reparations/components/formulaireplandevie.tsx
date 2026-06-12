@@ -12,6 +12,7 @@ import {
 } from '@/app/utils/planVieCache';
 
 const API_PLANVIE_URL = process.env.NEXT_PUBLIC_API_PLANVIE_URL;
+const CORE_POWERVIZ_URL = process.env.NEXT_PUBLIC_CORE_POWERVIZ;
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
 
 interface Assertion {
@@ -279,10 +280,14 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
 
     try {
       setLoading(true);
+      if (!CORE_POWERVIZ_URL) {
+        throw new Error('NEXT_PUBLIC_CORE_POWERVIZ n’est pas configurée');
+      }
+
       const questionEndpoint = categoriePV
         ? `/question/type/PLANDEVIE?${new URLSearchParams({ categoriePV }).toString()}`
         : '/question/type/plandevie';
-      const response = await fetch(`${API_PLANVIE_URL}${questionEndpoint}`);
+      const response = await fetch(`${CORE_POWERVIZ_URL}${questionEndpoint}`);
 
       if (!response.ok) {
         throw new Error('Erreur lors de la récupération des questions');
