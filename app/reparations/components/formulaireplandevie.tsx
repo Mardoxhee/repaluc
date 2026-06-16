@@ -11,7 +11,6 @@ import {
   isOnline
 } from '@/app/utils/planVieCache';
 
-const API_PLANVIE_URL = process.env.NEXT_PUBLIC_API_PLANVIE_URL;
 const CORE_POWERVIZ_URL = process.env.NEXT_PUBLIC_CORE_POWERVIZ;
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
 
@@ -231,7 +230,11 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
     const timeoutId = window.setTimeout(() => controller.abort(), 10000);
     try {
       setCheckingExisting(true);
-      const response = await fetch(`${API_PLANVIE_URL}/plan-vie-enquette/victime/${victim.id}`, {
+      if (!CORE_POWERVIZ_URL) {
+        throw new Error('NEXT_PUBLIC_CORE_POWERVIZ n’est pas configurée');
+      }
+
+      const response = await fetch(`${CORE_POWERVIZ_URL}/plan-vie-enquette/victime/${victim.id}`, {
         signal: controller.signal,
       });
 

@@ -11,7 +11,6 @@ import { saveQuestions, isCacheValid, getQuestions } from '../../utils/planVieQu
 import { deletePendingVictimPhotosForVictim } from '@/app/utils/victimPhotosCache';
 import * as XLSX from 'xlsx';
 
-const API_PLANVIE_URL = process.env.NEXT_PUBLIC_API_PLANVIE_URL;
 const CORE_POWERVIZ_URL = process.env.NEXT_PUBLIC_CORE_POWERVIZ;
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
 
