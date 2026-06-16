@@ -180,9 +180,9 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
             questionResponse
           };
 
-          const submitBaseUrl = API_PLANVIE_URL;
+          const submitBaseUrl = CORE_POWERVIZ_URL;
           if (!submitBaseUrl) {
-            throw new Error('NEXT_PUBLIC_API_PLANVIE_URL n’est pas configurée');
+            throw new Error('NEXT_PUBLIC_CORE_POWERVIZ n’est pas configurée');
           }
           const submitUrl = `${submitBaseUrl}/plan-vie-enquette`;
           const response = await fetch(submitUrl, {
@@ -444,9 +444,9 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
 
       console.log('Payload à envoyer:', payload);
 
-      const submitBaseUrl = API_PLANVIE_URL;
+      const submitBaseUrl = CORE_POWERVIZ_URL;
       if (!submitBaseUrl) {
-        throw new Error('NEXT_PUBLIC_API_PLANVIE_URL n’est pas configurée');
+        throw new Error('NEXT_PUBLIC_CORE_POWERVIZ n’est pas configurée');
       }
 
       // Toujours tenter l'enregistrement en ligne lors de la soumission.

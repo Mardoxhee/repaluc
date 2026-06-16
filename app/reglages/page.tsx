@@ -22,7 +22,7 @@ import { getAllPendingVictimPhotos } from '@/app/utils/victimPhotosCache';
 import { syncPendingVictimDocsForVictim } from '@/app/utils/victimDocsSyncService';
 import { syncPendingVictimPhotosForVictim } from '@/app/utils/victimPhotosSyncService';
 
-const API_PLANVIE_URL = process.env.NEXT_PUBLIC_API_PLANVIE_URL;
+const CORE_POWERVIZ_URL = process.env.NEXT_PUBLIC_CORE_POWERVIZ;
 
 interface PendingForm {
   key: string;
@@ -395,7 +395,11 @@ const ReglagesPage = () => {
         questionResponse
       };
 
-      const response = await fetch(`${API_PLANVIE_URL}/plan-vie-enquette`, {
+      if (!CORE_POWERVIZ_URL) {
+        throw new Error('NEXT_PUBLIC_CORE_POWERVIZ n’est pas configurée');
+      }
+
+      const response = await fetch(`${CORE_POWERVIZ_URL}/plan-vie-enquette`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -475,7 +479,11 @@ const ReglagesPage = () => {
           questionResponse
         };
 
-        const response = await fetch(`${API_PLANVIE_URL}/plan-vie-enquette`, {
+        if (!CORE_POWERVIZ_URL) {
+          throw new Error('NEXT_PUBLIC_CORE_POWERVIZ n’est pas configurée');
+        }
+
+        const response = await fetch(`${CORE_POWERVIZ_URL}/plan-vie-enquette`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
