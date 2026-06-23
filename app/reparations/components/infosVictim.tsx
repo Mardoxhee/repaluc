@@ -46,17 +46,33 @@ interface InfosVictimProps {
         isDirect?: boolean;
         programme?: string;
         variablesSpecifiques?: {
-            AGE?: string;
-            CAMP?: string;
-            LOCALITE?: string;
-            "VICTIME OU PAS"?: string;
-            "NUMÉRO DU MÉNAGE"?: string;
-            "NUMÉRO BLOC DU MÉNAGE"?: string;
-            [key: string]: string | undefined;
+            AGE?: string | null;
+            CAMP?: string | null;
+            LOCALITE?: string | null;
+            "VICTIME OU PAS"?: string | null;
+            "NUMÉRO DU MÉNAGE"?: string | null;
+            "NUMÉRO BLOC DU MÉNAGE"?: string | null;
+            [key: string]: string | null | undefined;
         };
     };
     onDeletePhoto?: () => void;
 }
+
+const getSpecificValue = (
+    variables: InfosVictimProps['victim']['variablesSpecifiques'],
+    keys: string[]
+) => {
+    if (!variables) return undefined;
+
+    for (const key of keys) {
+        const value = variables[key];
+        if (value !== null && value !== undefined && String(value).trim() !== '') {
+            return String(value).trim();
+        }
+    }
+
+    return undefined;
+};
 
 const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
     const {
@@ -98,6 +114,22 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
         photo,
     } = victim;
     const { isDirect } = victim;
+    const campName = getSpecificValue(victim.variablesSpecifiques, ['CAMP', 'NOM DU CAMP/ SITE', 'NOM DU CAMP/SITE', 'NOM DU SITE']);
+    const locality = getSpecificValue(victim.variablesSpecifiques, ['LOCALITE', 'LOCALITÉ']);
+    const householdNumber = getSpecificValue(victim.variablesSpecifiques, ['NUMÉRO DU MÉNAGE', 'NUMERO DU MENAGE']);
+    const householdBlock = getSpecificValue(victim.variablesSpecifiques, ['NUMÉRO BLOC DU MÉNAGE', 'NUMERO BLOC DU MENAGE']);
+    const declaredAge = getSpecificValue(victim.variablesSpecifiques, ['AGE']);
+    const householdHead = getSpecificValue(victim.variablesSpecifiques, ['NOM DU CHEF DE MENAGE', 'NOM DU CHEF DE MÉNAGE']);
+    const tanganyikaGroup = getSpecificValue(victim.variablesSpecifiques, ['GROUPES_TANGANYIKA']);
+    const hasCampInformation = Boolean(
+        campName ||
+        locality ||
+        householdNumber ||
+        householdBlock ||
+        declaredAge ||
+        householdHead ||
+        tanganyikaGroup
+    );
 
     // Deux références pour distinguer caméra et galerie
     const cameraInputRef = useRef<HTMLInputElement | null>(null);
@@ -860,7 +892,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
                     </div>
 
                     {/* Camp Information */}
-                    {victim.variablesSpecifiques && (
+                    {hasCampInformation && (
                         <div className="mb-6">
                             <div className="bg-blue-600 text-white px-4 py-2 border-b flex items-center">
                                 <MapPin className="mr-2 h-4 w-4" />
@@ -869,36 +901,48 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
                             <div className="border border-gray-300 border-t-0">
                                 <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-200">
                                     <div className="p-4 space-y-3">
-                                        {victim.variablesSpecifiques.CAMP && (
+                                        {campName && (
                                             <div className="flex">
                                                 <span className="text-sm font-semibold text-gray-600 uppercase w-32 flex-shrink-0">Camp :</span>
-                                                <span className="text-sm text-gray-800">{victim.variablesSpecifiques.CAMP}</span>
+                                                <span className="text-sm text-gray-800">{campName}</span>
                                             </div>
                                         )}
-                                        {victim.variablesSpecifiques.LOCALITE && (
+                                        {locality && (
                                             <div className="flex">
                                                 <span className="text-sm font-semibold text-gray-600 uppercase w-32 flex-shrink-0">Localité :</span>
-                                                <span className="text-sm text-gray-800">{victim.variablesSpecifiques.LOCALITE}</span>
+                                                <span className="text-sm text-gray-800">{locality}</span>
+                                            </div>
+                                        )}
+                                        {householdHead && (
+                                            <div className="flex">
+                                                <span className="text-sm font-semibold text-gray-600 uppercase w-32 flex-shrink-0">Chef ménage :</span>
+                                                <span className="text-sm text-gray-800">{householdHead}</span>
                                             </div>
                                         )}
                                     </div>
                                     <div className="p-4 space-y-3">
-                                        {victim.variablesSpecifiques["NUMÉRO DU MÉNAGE"] && (
+                                        {householdNumber && (
                                             <div className="flex">
                                                 <span className="text-sm font-semibold text-gray-600 uppercase w-32 flex-shrink-0">N° Ménage :</span>
-                                                <span className="text-sm text-gray-800">{victim.variablesSpecifiques["NUMÉRO DU MÉNAGE"]}</span>
+                                                <span className="text-sm text-gray-800">{householdNumber}</span>
                                             </div>
                                         )}
-                                        {victim.variablesSpecifiques["NUMÉRO BLOC DU MÉNAGE"] && (
+                                        {householdBlock && (
                                             <div className="flex">
                                                 <span className="text-sm font-semibold text-gray-600 uppercase w-32 flex-shrink-0">N° Bloc :</span>
-                                                <span className="text-sm text-gray-800">{victim.variablesSpecifiques["NUMÉRO BLOC DU MÉNAGE"]}</span>
+                                                <span className="text-sm text-gray-800">{householdBlock}</span>
                                             </div>
                                         )}
-                                        {victim.variablesSpecifiques.AGE && (
+                                        {declaredAge && (
                                             <div className="flex">
                                                 <span className="text-sm font-semibold text-gray-600 uppercase w-32 flex-shrink-0">Âge déclaré :</span>
-                                                <span className="text-sm text-gray-800">{victim.variablesSpecifiques.AGE} ans</span>
+                                                <span className="text-sm text-gray-800">{declaredAge} ans</span>
+                                            </div>
+                                        )}
+                                        {tanganyikaGroup && (
+                                            <div className="flex">
+                                                <span className="text-sm font-semibold text-gray-600 uppercase w-32 flex-shrink-0">Groupe :</span>
+                                                <span className="text-sm text-gray-800">{tanganyikaGroup}</span>
                                             </div>
                                         )}
                                     </div>

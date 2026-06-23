@@ -39,8 +39,27 @@ interface InfosVictimProps {
         avatar?: string;
         isDirect?: boolean;
         programme?: string;
+        variablesSpecifiques?: {
+            [key: string]: string | null | undefined;
+        };
     }
 }
+
+const getSpecificValue = (
+    variables: InfosVictimProps['victim']['variablesSpecifiques'],
+    keys: string[]
+) => {
+    if (!variables) return undefined;
+
+    for (const key of keys) {
+        const value = variables[key];
+        if (value !== null && value !== undefined && String(value).trim() !== '') {
+            return String(value).trim();
+        }
+    }
+
+    return undefined;
+};
 
 const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
     const {
@@ -80,6 +99,22 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
         avatar,
     } = victim;
     const { isDirect } = victim;
+    const campName = getSpecificValue(victim.variablesSpecifiques, ['CAMP', 'NOM DU CAMP/ SITE', 'NOM DU CAMP/SITE', 'NOM DU SITE']);
+    const locality = getSpecificValue(victim.variablesSpecifiques, ['LOCALITE', 'LOCALITÉ']);
+    const householdNumber = getSpecificValue(victim.variablesSpecifiques, ['NUMÉRO DU MÉNAGE', 'NUMERO DU MENAGE']);
+    const householdBlock = getSpecificValue(victim.variablesSpecifiques, ['NUMÉRO BLOC DU MÉNAGE', 'NUMERO BLOC DU MENAGE']);
+    const declaredAge = getSpecificValue(victim.variablesSpecifiques, ['AGE']);
+    const householdHead = getSpecificValue(victim.variablesSpecifiques, ['NOM DU CHEF DE MENAGE', 'NOM DU CHEF DE MÉNAGE']);
+    const tanganyikaGroup = getSpecificValue(victim.variablesSpecifiques, ['GROUPES_TANGANYIKA']);
+    const hasCampInformation = Boolean(
+        campName ||
+        locality ||
+        householdNumber ||
+        householdBlock ||
+        declaredAge ||
+        householdHead ||
+        tanganyikaGroup
+    );
 
 
     return (
@@ -302,10 +337,70 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                         </div>
                     </div>
 
+                    {/* Camp Information */}
+                    {hasCampInformation && (
+                        <div className="mb-6">
+                            <div className="bg-gray-800 text-white px-4 py-2 border-b flex items-center">
+                                <MapPin className="mr-2 h-4 w-4" />
+                                <h2 className="font-bold text-sm uppercase tracking-wide">4. Informations du Camp</h2>
+                            </div>
+                            <div className="border border-gray-300 border-t-0">
+                                <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-200">
+                                    <div className="p-4 space-y-3">
+                                        {campName && (
+                                            <div className="flex">
+                                                <span className="text-sm font-semibold text-gray-600 uppercase w-32 flex-shrink-0">Camp :</span>
+                                                <span className="text-sm text-gray-800">{campName}</span>
+                                            </div>
+                                        )}
+                                        {locality && (
+                                            <div className="flex">
+                                                <span className="text-sm font-semibold text-gray-600 uppercase w-32 flex-shrink-0">Localité :</span>
+                                                <span className="text-sm text-gray-800">{locality}</span>
+                                            </div>
+                                        )}
+                                        {householdHead && (
+                                            <div className="flex">
+                                                <span className="text-sm font-semibold text-gray-600 uppercase w-32 flex-shrink-0">Chef ménage :</span>
+                                                <span className="text-sm text-gray-800">{householdHead}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="p-4 space-y-3">
+                                        {householdNumber && (
+                                            <div className="flex">
+                                                <span className="text-sm font-semibold text-gray-600 uppercase w-32 flex-shrink-0">N° Ménage :</span>
+                                                <span className="text-sm text-gray-800">{householdNumber}</span>
+                                            </div>
+                                        )}
+                                        {householdBlock && (
+                                            <div className="flex">
+                                                <span className="text-sm font-semibold text-gray-600 uppercase w-32 flex-shrink-0">N° Bloc :</span>
+                                                <span className="text-sm text-gray-800">{householdBlock}</span>
+                                            </div>
+                                        )}
+                                        {declaredAge && (
+                                            <div className="flex">
+                                                <span className="text-sm font-semibold text-gray-600 uppercase w-32 flex-shrink-0">Âge déclaré :</span>
+                                                <span className="text-sm text-gray-800">{declaredAge} ans</span>
+                                            </div>
+                                        )}
+                                        {tanganyikaGroup && (
+                                            <div className="flex">
+                                                <span className="text-sm font-semibold text-gray-600 uppercase w-32 flex-shrink-0">Groupe :</span>
+                                                <span className="text-sm text-gray-800">{tanganyikaGroup}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Incident Information */}
                     <div className="mb-6">
                         <div className="bg-gray-800 text-white px-4 py-2 border-b">
-                            <h2 className="font-bold text-sm uppercase tracking-wide">4. Détails de l'Incident</h2>
+                            <h2 className="font-bold text-sm uppercase tracking-wide">{hasCampInformation ? '5' : '4'}. Détails de l'Incident</h2>
                         </div>
                         <div className="border border-gray-300 border-t-0">
                             <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-200">
@@ -340,7 +435,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                     {/* Compensation & Final Damage */}
                     <div className="mb-6">
                         <div className="bg-gray-800 text-white px-4 py-2 border-b">
-                            <h2 className="font-bold text-sm uppercase tracking-wide">5. Préjudice et Mésure de réparation</h2>
+                            <h2 className="font-bold text-sm uppercase tracking-wide">{hasCampInformation ? '6' : '5'}. Préjudice et Mésure de réparation</h2>
                         </div>
                         <div className="border border-gray-300 border-t-0 p-4">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -385,7 +480,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim }) => {
                     {/* Comments */}
                     <div className="mb-6">
                         <div className="bg-gray-800 text-white px-4 py-2 border-b">
-                            <h2 className="font-bold text-sm uppercase tracking-wide">6. Observations</h2>
+                            <h2 className="font-bold text-sm uppercase tracking-wide">{hasCampInformation ? '7' : '6'}. Observations</h2>
                         </div>
                         <div className="border border-gray-300 border-t-0 p-4">
                             <div className="bg-gray-50 border border-gray-200 p-4 min-h-20">

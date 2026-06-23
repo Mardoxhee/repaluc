@@ -76,6 +76,9 @@ interface Victim {
   commentaire?: string;
   prejudiceFinal?: string;
   indemnisation?: number;
+  variablesSpecifiques?: {
+    [key: string]: string | null | undefined;
+  };
   prejudices?: Array<{
     id: number;
     label: string;
