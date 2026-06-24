@@ -28,14 +28,17 @@ async function getDB() {
   return dbPromise;
 }
 
-export async function saveQuestions(questions: any) {
+const normalizeKey = (key?: string) => key || CACHE_KEY;
+
+export async function saveQuestions(questions: any, key?: string) {
   try {
     const db = await getDB();
+    const cacheKey = normalizeKey(key);
     await db.put(STORE_NAME, {
-      id: CACHE_KEY,
+      id: cacheKey,
       data: questions,
       timestamp: Date.now(),
-    }, CACHE_KEY);
+    }, cacheKey);
     return true;
   } catch (error) {
     console.error('Error saving questions to cache:', error);
@@ -43,10 +46,10 @@ export async function saveQuestions(questions: any) {
   }
 }
 
-export async function getQuestions() {
+export async function getQuestions(key?: string) {
   try {
     const db = await getDB();
-    const cached = await db.get(STORE_NAME, CACHE_KEY);
+    const cached = await db.get(STORE_NAME, normalizeKey(key));
     return cached?.data || null;
   } catch (error) {
     console.error('Error getting questions from cache:', error);
@@ -54,10 +57,10 @@ export async function getQuestions() {
   }
 }
 
-export async function clearQuestions() {
+export async function clearQuestions(key?: string) {
   try {
     const db = await getDB();
-    await db.delete(STORE_NAME, CACHE_KEY);
+    await db.delete(STORE_NAME, normalizeKey(key));
     return true;
   } catch (error) {
     console.error('Error clearing questions cache:', error);
@@ -65,9 +68,9 @@ export async function clearQuestions() {
   }
 }
 
-export function isCacheValid(maxAge: number = 24 * 60 * 60 * 1000) {
+export function isCacheValid(maxAge: number = 24 * 60 * 60 * 1000, key?: string) {
   return getDB().then(async (db) => {
-    const cached = await db.get(STORE_NAME, CACHE_KEY);
+    const cached = await db.get(STORE_NAME, normalizeKey(key));
     if (!cached) return false;
     return (Date.now() - cached.timestamp) < maxAge;
   }).catch(() => false);

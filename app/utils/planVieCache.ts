@@ -1,17 +1,26 @@
 // Utilitaire IndexedDB pour le cache des formulaires de plan de vie
 const DB_NAME = 'PlanVieCache';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = 'forms';
 const PENDING_STORE_NAME = 'pendingForms';
+const EXISTING_STORE_NAME = 'existingForms';
 
-interface FormCacheEntry {
+export interface FormCacheEntry {
   key: string;
   victimeId: number;
   userId: number;
   formData: any;
   categoriePV?: string;
+  victimName?: string;
   timestamp: number;
-  status: 'draft' | 'pending_sync';
+  status: 'draft' | 'pending_sync' | 'synced_cache';
+}
+
+interface ExistingFormCacheEntry {
+  key: string;
+  victimeId: number;
+  data: any;
+  timestamp: number;
 }
 
 // Ouvrir la base de données
@@ -34,6 +43,10 @@ const openDB = (): Promise<IDBDatabase> => {
       if (!db.objectStoreNames.contains(PENDING_STORE_NAME)) {
         const pendingStore = db.createObjectStore(PENDING_STORE_NAME, { keyPath: 'key' });
         pendingStore.createIndex('status', 'status', { unique: false });
+      }
+
+      if (!db.objectStoreNames.contains(EXISTING_STORE_NAME)) {
+        db.createObjectStore(EXISTING_STORE_NAME, { keyPath: 'key' });
       }
     };
   });
@@ -130,7 +143,8 @@ export const savePendingForm = async (
   victimeId: number,
   userId: number,
   formData: any,
-  categoriePV?: string
+  categoriePV?: string,
+  victimName?: string
 ): Promise<void> => {
   try {
     const db = await openDB();
@@ -138,11 +152,12 @@ export const savePendingForm = async (
     const store = transaction.objectStore(PENDING_STORE_NAME);
 
     const entry: FormCacheEntry = {
-      key: `pending_${victimeId}_${Date.now()}`,
+      key: `pending_${victimeId}`,
       victimeId,
       userId,
       formData,
       categoriePV,
+      victimName,
       timestamp: Date.now(),
       status: 'pending_sync'
     };
@@ -205,19 +220,65 @@ export const deletePendingForm = async (key: string): Promise<void> => {
   }
 };
 
+export const saveExistingFormToCache = async (victimeId: number, data: any): Promise<void> => {
+  try {
+    const db = await openDB();
+    const transaction = db.transaction([EXISTING_STORE_NAME], 'readwrite');
+    const store = transaction.objectStore(EXISTING_STORE_NAME);
+
+    const entry: ExistingFormCacheEntry = {
+      key: `existing_${victimeId}`,
+      victimeId,
+      data,
+      timestamp: Date.now()
+    };
+
+    store.put(entry);
+
+    return new Promise((resolve, reject) => {
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+  } catch (error) {
+    console.error('[PlanVieCache] Erreur sauvegarde formulaire existant:', error);
+    throw error;
+  }
+};
+
+export const getExistingFormFromCache = async (victimeId: number): Promise<any | null> => {
+  try {
+    const db = await openDB();
+    const transaction = db.transaction([EXISTING_STORE_NAME], 'readonly');
+    const store = transaction.objectStore(EXISTING_STORE_NAME);
+    const request = store.get(`existing_${victimeId}`);
+
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => {
+        const entry = request.result as ExistingFormCacheEntry | undefined;
+        resolve(entry?.data || null);
+      };
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    console.error('[PlanVieCache] Erreur récupération formulaire existant:', error);
+    return null;
+  }
+};
+
 // Vérifier si on est en ligne
 export const isOnline = (): boolean => {
-  return navigator.onLine;
+  return typeof navigator === 'undefined' ? true : navigator.onLine;
 };
 
 // Vider tous les caches
 export const clearAllCache = async (): Promise<void> => {
   try {
     const db = await openDB();
-    const transaction = db.transaction([STORE_NAME, PENDING_STORE_NAME], 'readwrite');
+    const transaction = db.transaction([STORE_NAME, PENDING_STORE_NAME, EXISTING_STORE_NAME], 'readwrite');
     
     transaction.objectStore(STORE_NAME).clear();
     transaction.objectStore(PENDING_STORE_NAME).clear();
+    transaction.objectStore(EXISTING_STORE_NAME).clear();
 
     return new Promise((resolve, reject) => {
       transaction.oncomplete = () => {

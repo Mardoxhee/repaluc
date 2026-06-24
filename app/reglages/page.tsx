@@ -15,6 +15,7 @@ import Swal from 'sweetalert2';
 import {
   getPendingForms,
   deletePendingForm,
+  deleteDraft,
   isOnline
 } from '@/app/utils/planVieCache';
 import { getAllPendingVictimDocs } from '@/app/utils/victimDocsCache';
@@ -23,12 +24,15 @@ import { syncPendingVictimDocsForVictim } from '@/app/utils/victimDocsSyncServic
 import { syncPendingVictimPhotosForVictim } from '@/app/utils/victimPhotosSyncService';
 
 const CORE_POWERVIZ_URL = process.env.NEXT_PUBLIC_CORE_POWERVIZ;
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
 
 interface PendingForm {
   key: string;
   victimeId: number;
   userId: number;
   formData: any;
+  categoriePV?: string;
+  victimName?: string;
   timestamp: number;
   status: string;
 }
@@ -48,7 +52,7 @@ const ReglagesPage = () => {
   const [mounted, setMounted] = useState(false);
   const [lastUpdateTime, setLastUpdateTime] = useState<string>('');
 
-  const [activeTab, setActiveTab] = useState<'sync' | 'cache'>('sync');
+  const [activeTab, setActiveTab] = useState<'sync' | 'plans' | 'cache'>('sync');
 
   const [showVictimPending, setShowVictimPending] = useState(false);
   const [pendingVictimRows, setPendingVictimRows] = useState<PendingVictimRow[]>([]);
@@ -406,6 +410,8 @@ const ReglagesPage = () => {
       });
 
       if (response.ok) {
+        await markVictimPlanVieDone(form.victimeId);
+        await deleteDraft(form.victimeId);
         await deletePendingForm(form.key);
         await Swal.fire({
           icon: 'success',
@@ -490,6 +496,8 @@ const ReglagesPage = () => {
         });
 
         if (response.ok) {
+          await markVictimPlanVieDone(form.victimeId);
+          await deleteDraft(form.victimeId);
           await deletePendingForm(form.key);
           successCount++;
         } else {
@@ -564,6 +572,18 @@ const ReglagesPage = () => {
     return Object.keys(formData).length;
   };
 
+  const markVictimPlanVieDone = async (victimId: number) => {
+    try {
+      await fetch(`${API_BASE_URL}/victime/${victimId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'interrogé' })
+      });
+    } catch (error) {
+      console.log('[Reglages] Statut victime non mis à jour après sync plan de vie:', error);
+    }
+  };
+
   return (
     <div className="p-6 pt-24">
       <div className="max-w-7xl mx-auto">
@@ -573,7 +593,7 @@ const ReglagesPage = () => {
             Paramètres & Synchronisation
           </h1>
           <p className="text-gray-600">
-            Gérez les formulaires en attente de synchronisation
+            Gérez les données locales et les synchronisations manuelles
           </p>
         </div>
 
@@ -587,6 +607,19 @@ const ReglagesPage = () => {
               }`}
           >
             Synchronisation
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('plans');
+              loadPendingForms();
+            }}
+            className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${activeTab === 'plans'
+              ? 'bg-white border-gray-300 text-gray-900 shadow-sm'
+              : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-white'
+              }`}
+          >
+            Plans de vie
           </button>
           <button
             type="button"
@@ -650,25 +683,6 @@ const ReglagesPage = () => {
             {/* Actions Bar */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
               <div className="flex flex-wrap items-center justify-between gap-4">
-                {/* <button
-                  onClick={loadPendingForms}
-                  disabled={loading}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-all disabled:opacity-50 font-medium shadow-sm"
-                >
-                  <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
-                  Actualiser
-                </button> */}
-
-                {/* <button
-                  onClick={syncAllForms}
-                  disabled={!online || pendingForms.length === 0 || syncing !== null}
-                  className="flex items-center gap-2 px-6 py-2.5 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm hover:shadow-md"
-                  style={{ backgroundColor: '#901c67' }}
-                >
-                  <CloudUpload size={18} />
-                  Synchroniser tout
-                </button> */}
-
                 <div className="flex flex-wrap items-center gap-3">
                   <button
                     onClick={async () => {
@@ -785,6 +799,41 @@ const ReglagesPage = () => {
               )}
             </div>
 
+          </>
+        )}
+
+        {activeTab === 'plans' && (
+          <>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Plans de vie en attente</h2>
+                  <p className="text-sm text-gray-600">Formulaires stockés localement dans IndexedDB, à synchroniser manuellement.</p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    onClick={loadPendingForms}
+                    disabled={loading || syncing !== null}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-all disabled:opacity-50 font-medium shadow-sm"
+                  >
+                    <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+                    Actualiser
+                  </button>
+
+                  <button
+                    onClick={syncAllForms}
+                    disabled={!online || pendingForms.length === 0 || syncing !== null}
+                    className="flex items-center gap-2 px-6 py-2.5 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm hover:shadow-md"
+                    style={{ backgroundColor: '#901c67' }}
+                  >
+                    <CloudUpload size={18} />
+                    Synchroniser tout
+                  </button>
+                </div>
+              </div>
+            </div>
+
             {/* Forms List */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200">
               {loading ? (
@@ -814,14 +863,23 @@ const ReglagesPage = () => {
                             )}
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
                             <div>
-                              <p className="text-gray-500">Victime ID</p>
-                              <p className="font-medium text-gray-900">{form.victimeId}</p>
+                              <p className="text-gray-500">Victime</p>
+                              <p className="font-medium text-gray-900">
+                                {form.victimName || `ID ${form.victimeId}`}
+                              </p>
+                              {form.victimName && (
+                                <p className="text-xs text-gray-500">ID {form.victimeId}</p>
+                              )}
                             </div>
                             <div>
                               <p className="text-gray-500">Questions</p>
                               <p className="font-medium text-gray-900">{getQuestionCount(form.formData)}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500">Catégorie</p>
+                              <p className="font-medium text-gray-900">{form.categoriePV || 'Standard'}</p>
                             </div>
                             <div>
                               <p className="text-gray-500">Date</p>
@@ -852,6 +910,13 @@ const ReglagesPage = () => {
                       </div>
                     </div>
                   ))}
+                  {pendingForms.length === 0 && (
+                    <div className="p-12 text-center">
+                      <FileText size={44} className="text-gray-300 mx-auto mb-4" />
+                      <p className="text-gray-700 font-medium">Aucun plan de vie en attente</p>
+                      <p className="text-sm text-gray-500 mt-1">Les formulaires sauvegardés hors ligne apparaîtront ici.</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

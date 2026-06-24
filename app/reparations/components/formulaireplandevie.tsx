@@ -7,12 +7,18 @@ import {
   deleteDraft,
   savePendingForm,
   getPendingForms,
-  deletePendingForm,
+  saveExistingFormToCache,
+  getExistingFormFromCache,
   isOnline
 } from '@/app/utils/planVieCache';
+import {
+  saveQuestions as saveQuestionsToCache,
+  getQuestions as getQuestionsFromCache
+} from '@/app/utils/planVieQuestionsCache';
 
 const CORE_POWERVIZ_URL = process.env.NEXT_PUBLIC_CORE_POWERVIZ;
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
+const NETWORK_TIMEOUT_MS = 7000;
 
 interface Assertion {
   id: number;
@@ -66,6 +72,29 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
   const [pendingFormsCount, setPendingFormsCount] = useState(0);
   const [validationErrors, setValidationErrors] = useState<number[]>([]);
 
+  const questionsCacheKey = `plan-vie-questions-${categoriePV || 'default'}`;
+
+  const getVictimName = () => {
+    if (!victim) return '';
+    const parts = [victim.prenom, victim.nom]
+      .filter((value) => typeof value === 'string' && value.trim())
+      .map((value) => value.trim());
+    return victim.nomComplet || victim.fullName || parts.join(' ');
+  };
+
+  const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs = NETWORK_TIMEOUT_MS) => {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, {
+        ...options,
+        signal: options.signal || controller.signal,
+      });
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
+  };
+
   useEffect(() => {
     fetchQuestions();
     if (victim?.id) {
@@ -77,7 +106,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
     // Écouter les changements de connexion
     const handleOnline = () => {
       setIsOffline(false);
-      syncPendingForms();
+      checkPendingForms();
     };
     const handleOffline = () => setIsOffline(true);
 
@@ -151,92 +180,30 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
     }
   };
 
-  // Synchroniser les formulaires en attente
-  const syncPendingForms = async () => {
-    if (!isOnline()) return;
-
-    try {
-      const pending = await getPendingForms();
-      if (pending.length === 0) return;
-
-      console.log(`[Sync] ${pending.length} formulaire(s) à synchroniser`);
-
-      for (const form of pending) {
-        try {
-          const questionResponse = Object.entries(form.formData).map(([questionId, reponse]) => {
-            const reponseFormatted = Array.isArray(reponse) ? reponse.join(', ') : String(reponse);
-            return {
-              questionId: parseInt(questionId),
-              reponse: reponseFormatted
-            };
-          }).filter(item => item.reponse && item.reponse.trim() !== '');
-
-          const payload = {
-            userId: form.userId,
-            victimeId: form.victimeId,
-            status: "Draft",
-            isSign: false,
-            questionResponse
-          };
-
-          const submitBaseUrl = CORE_POWERVIZ_URL;
-          if (!submitBaseUrl) {
-            throw new Error('NEXT_PUBLIC_CORE_POWERVIZ n’est pas configurée');
-          }
-          const submitUrl = `${submitBaseUrl}/plan-vie-enquette`;
-          const response = await fetch(submitUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-
-          if (response.ok) {
-            await deletePendingForm(form.key);
-            // Supprimer aussi le brouillon associé à cette victime
-            await deleteDraft(form.victimeId);
-            // Mettre à jour l'état si c'est la victime actuelle
-            if (victim?.id === form.victimeId) {
-              setHasDraft(false);
-            }
-            console.log(`[Sync] Formulaire synchronisé: ${form.key}`);
-            console.log(`[Sync] Brouillon supprimé pour victime ${form.victimeId}`);
-          }
-        } catch (error) {
-          console.error(`[Sync] Erreur sync formulaire ${form.key}:`, error);
-        }
-      }
-
-      await checkPendingForms();
-
-      await Swal.fire({
-        icon: 'success',
-        title: 'Synchronisation réussie',
-        text: 'Les formulaires hors ligne ont été synchronisés',
-        timer: 2000,
-        showConfirmButton: false
-      });
-    } catch (error) {
-      console.error('[Sync] Erreur synchronisation:', error);
-    }
-  };
-
   const checkExistingForm = async () => {
     if (!victim?.id) {
       setCheckingExisting(false);
       return;
     }
 
-    const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), 10000);
     try {
       setCheckingExisting(true);
+      const cachedExisting = await getExistingFormFromCache(victim.id);
+      if (cachedExisting) {
+        setExistingForm(cachedExisting);
+        setHasExistingForm(true);
+      }
+
+      if (!isOnline()) {
+        if (!cachedExisting) setHasExistingForm(false);
+        return;
+      }
+
       if (!CORE_POWERVIZ_URL) {
         throw new Error('NEXT_PUBLIC_CORE_POWERVIZ n’est pas configurée');
       }
 
-      const response = await fetch(`${CORE_POWERVIZ_URL}/plan-vie-enquette/victime/${victim.id}`, {
-        signal: controller.signal,
-      });
+      const response = await fetchWithTimeout(`${CORE_POWERVIZ_URL}/plan-vie-enquette/victime/${victim.id}`);
 
       if (response.ok) {
         const data = await response.json();
@@ -253,6 +220,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
         console.log('[Plan de Vie] A des données:', hasData);
 
         if (hasData) {
+          await saveExistingFormToCache(victim.id, data);
           setExistingForm(data);
           setHasExistingForm(true);
           console.log('[Plan de Vie] Formulaire existant détecté');
@@ -267,9 +235,14 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
       }
     } catch (err) {
       console.log('[Plan de Vie] Erreur lors de la vérification:', err);
-      setHasExistingForm(false);
+      const cachedExisting = await getExistingFormFromCache(victim.id);
+      if (cachedExisting) {
+        setExistingForm(cachedExisting);
+        setHasExistingForm(true);
+      } else {
+        setHasExistingForm(false);
+      }
     } finally {
-      window.clearTimeout(timeoutId);
       setCheckingExisting(false);
     }
   };
@@ -279,6 +252,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
     // Si des questions initiales sont fournies, les utiliser
     if (initialQuestions && Object.keys(initialQuestions).length > 0) {
       setQuestions(initialQuestions);
+      await saveQuestionsToCache(initialQuestions, questionsCacheKey);
       const categories = Object.keys(initialQuestions);
       if (categories.length > 0 && !currentCategory) {
         setCurrentCategory(categories[0]);
@@ -287,15 +261,27 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
       return;
     }
 
-    // Sinon, charger depuis l'API
-    if (!isOnline()) {
+    const cachedQuestions = await getQuestionsFromCache(questionsCacheKey) || await getQuestionsFromCache();
+    if (cachedQuestions && Object.keys(cachedQuestions).length > 0) {
+      setQuestions(cachedQuestions);
+      const categories = Object.keys(cachedQuestions);
+      if (categories.length > 0) {
+        setCurrentCategory(categories[0]);
+      }
       setLoading(false);
-      setError('Vous êtes hors ligne. Impossible de charger les questions.');
+      setError(null);
+    }
+
+    if (!isOnline()) {
+      if (!cachedQuestions) {
+        setLoading(false);
+        setError('Vous êtes hors ligne et aucune version locale de ce formulaire n’est disponible.');
+      }
       return;
     }
 
     try {
-      setLoading(true);
+      if (!cachedQuestions) setLoading(true);
       if (!CORE_POWERVIZ_URL) {
         throw new Error('NEXT_PUBLIC_CORE_POWERVIZ n’est pas configurée');
       }
@@ -303,7 +289,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
       const questionEndpoint = categoriePV
         ? `/question/type/PLANDEVIE?${new URLSearchParams({ categoriePV }).toString()}`
         : '/question/type/plandevie';
-      const response = await fetch(`${CORE_POWERVIZ_URL}${questionEndpoint}`);
+      const response = await fetchWithTimeout(`${CORE_POWERVIZ_URL}${questionEndpoint}`);
 
       if (!response.ok) {
         throw new Error('Erreur lors de la récupération des questions');
@@ -311,6 +297,8 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
 
       const data: QuestionsByCategory = await response.json();
       setQuestions(data);
+      await saveQuestionsToCache(data, questionsCacheKey);
+      await saveQuestionsToCache(data);
 
       // Set first category as current
       const categories = Object.keys(data);
@@ -320,12 +308,16 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
 
       setError(null);
     } catch (err: any) {
-      setError(err.message || 'Une erreur est survenue');
-      await Swal.fire({
-        icon: 'error',
-        title: 'Erreur',
-        text: 'Impossible de charger les questions du formulaire'
-      });
+      if (!cachedQuestions) {
+        setError(err.name === 'AbortError'
+          ? 'Connexion trop lente. Aucune version locale du formulaire n’a été trouvée.'
+          : err.message || 'Une erreur est survenue');
+        await Swal.fire({
+          icon: 'error',
+          title: 'Erreur',
+          text: 'Impossible de charger les questions du formulaire'
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -452,9 +444,25 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
         throw new Error('NEXT_PUBLIC_CORE_POWERVIZ n’est pas configurée');
       }
 
+      if (!isOnline()) {
+        await savePendingForm(victim.id, userId || 1, formData, categoriePV, getVictimName());
+        await deleteDraft(victim.id);
+        setHasDraft(false);
+        await checkPendingForms();
+
+        await Swal.fire({
+          icon: 'success',
+          title: 'Sauvegardé hors ligne',
+          text: 'Le plan de vie est enregistré localement. Synchronisez-le manuellement dans Paramètres.',
+          timer: 2400,
+          showConfirmButton: false
+        });
+        return;
+      }
+
       // Toujours tenter l'enregistrement en ligne lors de la soumission.
       const submitUrl = `${submitBaseUrl}/plan-vie-enquette`;
-      const response = await fetch(submitUrl, {
+      const response = await fetchWithTimeout(submitUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -504,32 +512,19 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
     } catch (err: any) {
       console.log('Erreur:', err);
 
-      // Utiliser la file locale uniquement si la tentative réseau a réellement échoué.
-      if (err instanceof TypeError) {
-        const result = await Swal.fire({
-          icon: 'warning',
-          title: 'Erreur de connexion',
-          text: 'Impossible de se connecter au serveur. Voulez-vous sauvegarder hors ligne ?',
-          showCancelButton: true,
-          confirmButtonText: 'Oui, sauvegarder',
-          cancelButtonText: 'Annuler',
-          confirmButtonColor: '#901c67'
+      if (err instanceof TypeError || err.name === 'AbortError') {
+        await savePendingForm(victim.id, userId || 1, formData, categoriePV, getVictimName());
+        await deleteDraft(victim.id);
+        setHasDraft(false);
+        await checkPendingForms();
+
+        await Swal.fire({
+          icon: 'success',
+          title: 'Sauvegardé localement',
+          text: 'Connexion absente ou trop lente. Le plan de vie attend une synchronisation manuelle dans Paramètres.',
+          timer: 2600,
+          showConfirmButton: false
         });
-
-        if (result.isConfirmed) {
-          await savePendingForm(victim.id, userId || 1, formData, categoriePV);
-          await deleteDraft(victim.id);
-          setHasDraft(false);
-          await checkPendingForms();
-
-          await Swal.fire({
-            icon: 'success',
-            title: 'Sauvegardé hors ligne',
-            text: 'Le formulaire sera synchronisé automatiquement',
-            timer: 2000,
-            showConfirmButton: false
-          });
-        }
       } else {
         await Swal.fire({
           icon: 'error',
@@ -924,8 +919,9 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
         {/* Pending Forms Counter */}
         {pendingFormsCount > 0 && (
           <button
-            onClick={syncPendingForms}
-            disabled={isOffline}
+            onClick={() => {
+              window.location.href = '/reglages';
+            }}
             className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-yellow-100 text-yellow-800 border border-yellow-300 hover:bg-yellow-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <CloudUpload size={16} />
@@ -944,7 +940,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
             <div>
               <p className="font-semibold text-sm">Mode hors ligne</p>
               <p className="text-xs mt-1">
-                Vos modifications sont sauvegardées localement. Le formulaire sera automatiquement synchronisé lors du retour de la connexion.
+                Vos modifications sont sauvegardées localement. La synchronisation se fait manuellement depuis Paramètres.
               </p>
             </div>
           </div>
