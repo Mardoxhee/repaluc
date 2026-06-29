@@ -48,6 +48,12 @@ const ReglagesPage = () => {
   const [pendingForms, setPendingForms] = useState<PendingForm[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState<string | null>(null);
+  const [planSyncProgress, setPlanSyncProgress] = useState<{
+    total: number;
+    completed: number;
+    success: number;
+    errors: number;
+  } | null>(null);
   const [online, setOnline] = useState(true);
   const [mounted, setMounted] = useState(false);
   const [lastUpdateTime, setLastUpdateTime] = useState<string>('');
@@ -381,6 +387,7 @@ const ReglagesPage = () => {
     }
 
     setSyncing(form.key);
+    setPlanSyncProgress(null);
 
     try {
       const questionResponse = Object.entries(form.formData).map(([questionId, reponse]) => {
@@ -464,6 +471,15 @@ const ReglagesPage = () => {
 
     let successCount = 0;
     let errorCount = 0;
+    let completedCount = 0;
+    const totalCount = pendingForms.length;
+
+    setPlanSyncProgress({
+      total: totalCount,
+      completed: 0,
+      success: 0,
+      errors: 0
+    });
 
     for (const form of pendingForms) {
       try {
@@ -506,6 +522,14 @@ const ReglagesPage = () => {
       } catch (error) {
         console.error(`Erreur sync ${form.key}:`, error);
         errorCount++;
+      } finally {
+        completedCount++;
+        setPlanSyncProgress({
+          total: totalCount,
+          completed: completedCount,
+          success: successCount,
+          errors: errorCount
+        });
       }
     }
 
@@ -827,11 +851,45 @@ const ReglagesPage = () => {
                     className="flex items-center gap-2 px-6 py-2.5 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm hover:shadow-md"
                     style={{ backgroundColor: '#901c67' }}
                   >
-                    <CloudUpload size={18} />
-                    Synchroniser tout
+                    {planSyncProgress && planSyncProgress.completed < planSyncProgress.total ? (
+                      <RefreshCw size={18} className="animate-spin" />
+                    ) : (
+                      <CloudUpload size={18} />
+                    )}
+                    {planSyncProgress && planSyncProgress.completed < planSyncProgress.total ? 'Synchronisation...' : 'Synchroniser tout'}
                   </button>
                 </div>
               </div>
+
+              {planSyncProgress && (
+                <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-blue-900">
+                      <RefreshCw
+                        size={16}
+                        className={planSyncProgress.completed < planSyncProgress.total ? 'animate-spin' : ''}
+                      />
+                      <span>
+                        {planSyncProgress.completed} / {planSyncProgress.total} plan(s) de vie traité(s)
+                      </span>
+                    </div>
+                    <div className="text-xs font-medium text-blue-800">
+                      {planSyncProgress.success} synchronisé(s)
+                      {planSyncProgress.errors > 0 ? ` · ${planSyncProgress.errors} erreur(s)` : ''}
+                    </div>
+                  </div>
+                  <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-blue-100">
+                    <div
+                      className="h-full rounded-full bg-blue-600 transition-all duration-300"
+                      style={{
+                        width: `${planSyncProgress.total > 0
+                          ? Math.round((planSyncProgress.completed / planSyncProgress.total) * 100)
+                          : 0}%`
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Forms List */}

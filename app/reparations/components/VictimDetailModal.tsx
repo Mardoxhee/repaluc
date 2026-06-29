@@ -16,7 +16,8 @@ import {
   RefreshCw,
   Stethoscope,
   ClipboardList,
-  ChevronRight
+  ChevronRight,
+  Trash2
 } from 'lucide-react';
 import { getQuestions } from '../../utils/planVieQuestionsCache';
 import { FetchContext } from '../../context/FetchContext';
@@ -28,7 +29,7 @@ import ContratVictim from './contrat';
 import SuiviPaiement from './SuiviPaiement';
 import Swal from 'sweetalert2';
 import { isOnline } from '@/app/utils/victimsCache';
-import { getPendingDocsForVictim, getPendingVictimDocById, savePendingVictimDoc } from '@/app/utils/victimDocsCache';
+import { deletePendingVictimDocById, getPendingDocsForVictim, getPendingVictimDocById, savePendingVictimDoc } from '@/app/utils/victimDocsCache';
 
 // Fonction pour obtenir le lien réel du fichier
 const getFileLink = async (lien: string): Promise<string> => {
@@ -143,6 +144,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
   const [files, setFiles] = useState<Array<{ id: number; label: string; name?: string; lien?: string }>>([]);
   const [loadingFiles, setLoadingFiles] = useState(true);
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [deletingFileId, setDeletingFileId] = useState<number | null>(null);
   const [newFileFile, setNewFileFile] = useState<File | null>(null);
   const [pendingDocs, setPendingDocs] = useState<Array<{ id: number; label: string; name: string }>>([]);
   const [selectedFile, setSelectedFile] = useState<{ id: number; label: string; name: string; lien?: string } | null>(null);
@@ -265,6 +267,112 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
         text: err?.message || 'Impossible de télécharger le document.',
         confirmButtonColor: '#901c67',
       });
+    }
+  };
+
+  const refreshPendingDocs = async (victimId: number) => {
+    const pending = await getPendingDocsForVictim(victimId);
+    setPendingDocs(
+      pending
+        .filter((d) => !d.synced)
+        .map((d) => ({ id: d.id || 0, label: d.label, name: d.fileName }))
+        .filter((d) => d.id)
+    );
+  };
+
+  const handleDeletePendingDoc = async (doc: { id: number; label: string; name: string }) => {
+    const result = await Swal.fire({
+      icon: 'warning',
+      title: 'Supprimer le document',
+      text: 'Ce document local en attente sera supprimé définitivement.',
+      showCancelButton: true,
+      confirmButtonText: 'Oui, supprimer',
+      cancelButtonText: 'Annuler',
+      confirmButtonColor: '#dc2626',
+    });
+
+    if (!result.isConfirmed) return;
+
+    setDeletingFileId(doc.id);
+    try {
+      await deletePendingVictimDocById(doc.id);
+      setPendingDocs((prev) => prev.filter((item) => item.id !== doc.id));
+      await Swal.fire({
+        icon: 'success',
+        title: 'Supprimé',
+        text: 'Le document local a été supprimé.',
+        timer: 1400,
+        showConfirmButton: false,
+      });
+    } catch (err: any) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'Suppression impossible',
+        text: err?.message || 'Impossible de supprimer ce document local.',
+        confirmButtonColor: '#901c67',
+      });
+    } finally {
+      setDeletingFileId(null);
+    }
+  };
+
+  const handleDeleteServerDoc = async (file: { id: number; label: string; name?: string; lien?: string }) => {
+    if (!isOnline()) {
+      await Swal.fire({
+        icon: 'warning',
+        title: 'Hors ligne',
+        text: 'Vous devez être en ligne pour supprimer un document déjà synchronisé.',
+        confirmButtonColor: '#901c67',
+      });
+      return;
+    }
+
+    const result = await Swal.fire({
+      icon: 'warning',
+      title: 'Supprimer le document',
+      text: 'Ce document sera supprimé du dossier de la victime.',
+      showCancelButton: true,
+      confirmButtonText: 'Oui, supprimer',
+      cancelButtonText: 'Annuler',
+      confirmButtonColor: '#dc2626',
+    });
+
+    if (!result.isConfirmed) return;
+
+    setDeletingFileId(file.id);
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
+      const response = await fetch(`${baseUrl}/document-victime/${file.id}`, {
+        method: 'DELETE',
+        headers: { Accept: 'application/json' },
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.message || `Suppression échouée (${response.status})`);
+      }
+
+      setFiles((prev) => prev.filter((item) => item.id !== file.id));
+      if (currentVictim?.id) {
+        await reloadServerDocs(currentVictim.id);
+      }
+
+      await Swal.fire({
+        icon: 'success',
+        title: 'Supprimé',
+        text: 'Le document a été supprimé.',
+        timer: 1400,
+        showConfirmButton: false,
+      });
+    } catch (err: any) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'Suppression impossible',
+        text: err?.message || 'Impossible de supprimer ce document.',
+        confirmButtonColor: '#901c67',
+      });
+    } finally {
+      setDeletingFileId(null);
     }
   };
 
@@ -521,14 +629,8 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
 
     const loadPending = async () => {
       try {
-        const pending = await getPendingDocsForVictim(currentVictim.id);
         if (cancelled) return;
-        setPendingDocs(
-          pending
-            .filter((d) => !d.synced)
-            .map((d) => ({ id: d.id || 0, label: d.label, name: d.fileName }))
-            .filter((d) => d.id)
-        );
+        await refreshPendingDocs(currentVictim.id);
       } catch {
         if (!cancelled) setPendingDocs([]);
       }
@@ -798,6 +900,22 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
                       >
                         <Eye size={16} className="text-yellow-800" />
                       </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeletePendingDoc(doc);
+                        }}
+                        disabled={deletingFileId === doc.id}
+                        className="px-2 py-1 !bg-red-50 !text-red-600 text-sm rounded hover:!bg-red-100 flex items-center gap-1 disabled:opacity-50"
+                        title="Supprimer le document"
+                      >
+                        {deletingFileId === doc.id ? (
+                          <Loader2 size={16} className="animate-spin text-red-600" />
+                        ) : (
+                          <Trash2 size={16} className="text-red-600" />
+                        )}
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -875,6 +993,22 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
                             title="Voir le document"
                           >
                             <Eye size={16} className="text-blue-600" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteServerDoc(file);
+                            }}
+                            disabled={deletingFileId === file.id}
+                            className="px-2 py-1 !bg-red-50 !text-red-600 text-sm rounded hover:!bg-red-100 flex items-center gap-1 disabled:opacity-50"
+                            title="Supprimer le document"
+                          >
+                            {deletingFileId === file.id ? (
+                              <Loader2 size={16} className="animate-spin text-red-600" />
+                            ) : (
+                              <Trash2 size={16} className="text-red-600" />
+                            )}
                           </button>
                         </div>
                       </>
