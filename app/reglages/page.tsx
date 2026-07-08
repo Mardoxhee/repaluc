@@ -18,13 +18,14 @@ import {
   deleteDraft,
   isOnline
 } from '@/app/utils/planVieCache';
-import { getAllPendingVictimDocs } from '@/app/utils/victimDocsCache';
-import { getAllPendingVictimPhotos } from '@/app/utils/victimPhotosCache';
+import { getPendingVictimDocsSummary } from '@/app/utils/victimDocsCache';
+import { getPendingVictimPhotosSummary } from '@/app/utils/victimPhotosCache';
 import { syncPendingVictimDocsForVictim } from '@/app/utils/victimDocsSyncService';
 import { syncPendingVictimPhotosForVictim } from '@/app/utils/victimPhotosSyncService';
 
 const CORE_POWERVIZ_URL = process.env.NEXT_PUBLIC_CORE_POWERVIZ;
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
+const PENDING_VICTIM_PAGE_SIZE = 20;
 
 interface PendingForm {
   key: string;
@@ -62,6 +63,8 @@ const ReglagesPage = () => {
 
   const [showVictimPending, setShowVictimPending] = useState(false);
   const [pendingVictimRows, setPendingVictimRows] = useState<PendingVictimRow[]>([]);
+  const [pendingVictimTotal, setPendingVictimTotal] = useState(0);
+  const [pendingVictimPage, setPendingVictimPage] = useState(1);
   const [loadingVictimPending, setLoadingVictimPending] = useState(false);
   const [syncingVictimId, setSyncingVictimId] = useState<number | null>(null);
   const [selectedVictims, setSelectedVictims] = useState<Record<number, boolean>>({});
@@ -229,34 +232,38 @@ const ReglagesPage = () => {
     };
   }, []);
 
-  const loadPendingVictimMedia = async () => {
+  const loadPendingVictimMedia = async (page = pendingVictimPage) => {
     try {
       setLoadingVictimPending(true);
-      const [docs, photos] = await Promise.all([getAllPendingVictimDocs(), getAllPendingVictimPhotos()]);
+      const [docs, photos] = await Promise.all([getPendingVictimDocsSummary(), getPendingVictimPhotosSummary()]);
       const rowsByVictim = new Map<number, PendingVictimRow>();
 
       const cacheMap = await getVictimsCacheMap();
 
       for (const d of docs || []) {
-        if (d.synced) continue;
         const row = rowsByVictim.get(d.victimId) || { victimId: d.victimId, victimName: cacheMap.get(d.victimId) || '', pendingDocs: 0, pendingPhotos: 0 };
-        row.pendingDocs += 1;
+        row.pendingDocs += d.count;
         rowsByVictim.set(d.victimId, row);
       }
 
       for (const p of photos || []) {
-        if (p.synced) continue;
         const row = rowsByVictim.get(p.victimId) || { victimId: p.victimId, victimName: cacheMap.get(p.victimId) || '', pendingDocs: 0, pendingPhotos: 0 };
-        row.pendingPhotos += 1;
+        row.pendingPhotos += p.count;
         rowsByVictim.set(p.victimId, row);
       }
 
-      const missingNames = Array.from(rowsByVictim.values())
+      const allRows = Array.from(rowsByVictim.values()).sort((a, b) => a.victimId - b.victimId);
+      const totalPages = Math.max(1, Math.ceil(allRows.length / PENDING_VICTIM_PAGE_SIZE));
+      const safePage = Math.min(Math.max(1, page), totalPages);
+      const start = (safePage - 1) * PENDING_VICTIM_PAGE_SIZE;
+      const rows = allRows.slice(start, start + PENDING_VICTIM_PAGE_SIZE);
+
+      const missingNames = rows
         .filter((r) => !r.victimName)
         .map((r) => r.victimId);
 
       if (online && missingNames.length > 0) {
-        for (const id of missingNames.slice(0, 50)) {
+        for (const id of missingNames) {
           const n = await fetchVictimNameFromApi(id);
           if (!n) continue;
           const existing = rowsByVictim.get(id);
@@ -267,12 +274,13 @@ const ReglagesPage = () => {
         }
       }
 
-      const rows = Array.from(rowsByVictim.values()).sort((a, b) => a.victimId - b.victimId);
+      setPendingVictimTotal(allRows.length);
+      setPendingVictimPage(safePage);
       setPendingVictimRows(rows);
 
       setSelectedVictims((prev) => {
         const next: Record<number, boolean> = { ...prev };
-        const existingIds = new Set(rows.map((r) => r.victimId));
+        const existingIds = new Set(allRows.map((r) => r.victimId));
         for (const key of Object.keys(next)) {
           const id = Number(key);
           if (!existingIds.has(id)) delete next[id];
@@ -282,6 +290,8 @@ const ReglagesPage = () => {
     } catch (e) {
       console.error('[Reglages] Erreur chargement pending victim media', e);
       setPendingVictimRows([]);
+      setPendingVictimTotal(0);
+      setPendingVictimPage(1);
     } finally {
       setLoadingVictimPending(false);
     }
@@ -305,7 +315,7 @@ const ReglagesPage = () => {
         syncPendingVictimDocsForVictim(victimId),
       ]);
     } finally {
-      await loadPendingVictimMedia();
+      await loadPendingVictimMedia(pendingVictimPage);
       setSyncingVictimId(null);
     }
   };
@@ -351,7 +361,7 @@ const ReglagesPage = () => {
           syncPendingVictimPhotosForVictim(victimId),
           syncPendingVictimDocsForVictim(victimId),
         ]);
-        await loadPendingVictimMedia();
+        await loadPendingVictimMedia(pendingVictimPage);
       }
     } finally {
       setSyncingVictimId(null);
@@ -712,7 +722,7 @@ const ReglagesPage = () => {
                     onClick={async () => {
                       const next = !showVictimPending;
                       setShowVictimPending(next);
-                      if (next) await loadPendingVictimMedia();
+                      if (next) await loadPendingVictimMedia(1);
                     }}
                     className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-all font-medium shadow-sm"
                     title="Afficher les données victimes (photos/docs) non synchronisées"
@@ -727,12 +737,12 @@ const ReglagesPage = () => {
                 <div className="mt-4 border-t border-gray-200 pt-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="text-sm text-gray-700 font-medium">
-                      Victimes en attente: <span className="font-semibold">{pendingVictimRows.length}</span>
+                      Victimes en attente: <span className="font-semibold">{pendingVictimTotal}</span>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-3">
                       <button
-                        onClick={loadPendingVictimMedia}
+                        onClick={() => loadPendingVictimMedia(pendingVictimPage)}
                         disabled={loadingVictimPending || batchSyncing}
                         className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all disabled:opacity-50 font-medium shadow-sm"
                       >
@@ -762,6 +772,33 @@ const ReglagesPage = () => {
                       </div>
                     </div>
                   </div>
+
+                  {pendingVictimTotal > 0 && (
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-gray-600">
+                      <span>
+                        Affichage de {(pendingVictimPage - 1) * PENDING_VICTIM_PAGE_SIZE + 1} à {Math.min(pendingVictimPage * PENDING_VICTIM_PAGE_SIZE, pendingVictimTotal)} sur {pendingVictimTotal}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => loadPendingVictimMedia(pendingVictimPage - 1)}
+                          disabled={loadingVictimPending || batchSyncing || pendingVictimPage <= 1}
+                          className="px-3 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 transition-all disabled:opacity-50 font-medium"
+                        >
+                          Précédent
+                        </button>
+                        <span className="font-medium text-gray-700">
+                          Page {pendingVictimPage} / {Math.max(1, Math.ceil(pendingVictimTotal / PENDING_VICTIM_PAGE_SIZE))}
+                        </span>
+                        <button
+                          onClick={() => loadPendingVictimMedia(pendingVictimPage + 1)}
+                          disabled={loadingVictimPending || batchSyncing || pendingVictimPage >= Math.ceil(pendingVictimTotal / PENDING_VICTIM_PAGE_SIZE)}
+                          className="px-3 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 transition-all disabled:opacity-50 font-medium"
+                        >
+                          Suivant
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="mt-3 overflow-x-auto">
                     <table className="w-full text-sm">

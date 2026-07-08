@@ -1,6 +1,6 @@
 'use client';
 
-import { getAllPendingVictimDocs, markVictimDocSynced, PendingVictimDoc } from './victimDocsCache';
+import { getAllPendingVictimDocs, getPendingVictimDocsToSyncForVictim, markVictimDocSynced, PendingVictimDoc } from './victimDocsCache';
 import { isOnline } from './victimsCache';
 
 let isSyncing = false;
@@ -83,11 +83,7 @@ export const syncPendingVictimDocsForVictim = async (
   let skipped = 0;
 
   try {
-    const pending = await getAllPendingVictimDocs();
-    const filtered = pending
-      .filter((x) => x.victimId === victimId)
-      .filter((x) => !x.synced)
-      .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    const filtered = await getPendingVictimDocsToSyncForVictim(victimId);
 
     const limit = typeof opts?.limit === 'number' && opts.limit > 0 ? opts.limit : undefined;
     const toSync = typeof limit === 'number' ? filtered.slice(0, limit) : filtered;

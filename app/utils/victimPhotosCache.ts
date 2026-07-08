@@ -1,8 +1,9 @@
 'use client';
 
 const DB_NAME = 'VictimPhotosDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = 'pendingVictimPhotos';
+const SYNCED_VICTIM_INDEX = 'syncedVictimId';
 
 export interface PendingVictimPhoto {
   id?: number;
@@ -14,6 +15,11 @@ export interface PendingVictimPhoto {
   remoteUrl?: string;
 }
 
+export interface PendingVictimMediaSummary {
+  victimId: number;
+  count: number;
+}
+
 const openDB = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -23,8 +29,15 @@ const openDB = (): Promise<IDBDatabase> => {
 
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
+      let store: IDBObjectStore;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+        store = db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+      } else {
+        store = request.transaction!.objectStore(STORE_NAME);
+      }
+
+      if (!store.indexNames.contains(SYNCED_VICTIM_INDEX)) {
+        store.createIndex(SYNCED_VICTIM_INDEX, ['synced', 'victimId'], { unique: false });
       }
     };
   });
@@ -58,6 +71,62 @@ export const getAllPendingVictimPhotos = async (): Promise<PendingVictimPhoto[]>
 
   return new Promise((resolve, reject) => {
     request.onsuccess = () => resolve((request.result as PendingVictimPhoto[]) || []);
+    request.onerror = () => reject(request.error);
+  });
+};
+
+export const getPendingVictimPhotosSummary = async (): Promise<PendingVictimMediaSummary[]> => {
+  const db = await openDB();
+  const tx = db.transaction([STORE_NAME], 'readonly');
+  const store = tx.objectStore(STORE_NAME);
+  const index = store.index(SYNCED_VICTIM_INDEX);
+  const range = IDBKeyRange.bound([false], [false, Number.MAX_SAFE_INTEGER]);
+  const request = index.openKeyCursor(range);
+  const counts = new Map<number, number>();
+
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) {
+        resolve(
+          Array.from(counts.entries()).map(([victimId, count]) => ({
+            victimId,
+            count,
+          }))
+        );
+        return;
+      }
+
+      const key = cursor.key as [boolean, number];
+      const victimId = key?.[1];
+      if (typeof victimId === 'number') {
+        counts.set(victimId, (counts.get(victimId) || 0) + 1);
+      }
+      cursor.continue();
+    };
+    request.onerror = () => reject(request.error);
+  });
+};
+
+export const getPendingVictimPhotosToSyncForVictim = async (victimId: number): Promise<PendingVictimPhoto[]> => {
+  const db = await openDB();
+  const tx = db.transaction([STORE_NAME], 'readonly');
+  const store = tx.objectStore(STORE_NAME);
+  const index = store.index(SYNCED_VICTIM_INDEX);
+  const request = index.openCursor(IDBKeyRange.only([false, victimId]));
+  const photos: PendingVictimPhoto[] = [];
+
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) {
+        resolve(photos.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)));
+        return;
+      }
+
+      photos.push(cursor.value as PendingVictimPhoto);
+      cursor.continue();
+    };
     request.onerror = () => reject(request.error);
   });
 };

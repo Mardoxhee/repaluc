@@ -1,6 +1,6 @@
 'use client';
 
-import { getAllPendingVictimPhotos, markVictimPhotoSynced, PendingVictimPhoto } from './victimPhotosCache';
+import { getAllPendingVictimPhotos, getPendingVictimPhotosToSyncForVictim, markVictimPhotoSynced, PendingVictimPhoto } from './victimPhotosCache';
 import { isOnline } from './victimsCache';
 
 let isSyncing = false;
@@ -123,11 +123,7 @@ export const syncPendingVictimPhotosForVictim = async (
   let skipped = 0;
 
   try {
-    const pending: PendingVictimPhoto[] = await getAllPendingVictimPhotos();
-    const filtered = pending
-      .filter((x) => x.victimId === victimId)
-      .filter((x) => !x.synced)
-      .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    const filtered = await getPendingVictimPhotosToSyncForVictim(victimId);
 
     const limit = typeof opts?.limit === 'number' && opts.limit > 0 ? opts.limit : undefined;
     const toSync = typeof limit === 'number' ? filtered.slice(0, limit) : filtered;
