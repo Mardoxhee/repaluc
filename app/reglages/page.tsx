@@ -46,12 +46,8 @@ type PendingVictimRow = {
 };
 
 type PendingVictimCacheInfo = {
-  docsTotal: number;
   docsPending: number;
-  docsSynced: number;
-  photosTotal: number;
   photosPending: number;
-  photosSynced: number;
 };
 
 const ReglagesPage = () => {
@@ -251,12 +247,8 @@ const ReglagesPage = () => {
       const cacheMap = await getVictimsCacheMap();
 
       setPendingVictimCacheInfo({
-        docsTotal: docs.totalRecords,
         docsPending: docs.pendingRecords,
-        docsSynced: docs.syncedRecords,
-        photosTotal: photos.totalRecords,
         photosPending: photos.pendingRecords,
-        photosSynced: photos.syncedRecords,
       });
 
       for (const d of docs.rows || []) {
@@ -821,30 +813,18 @@ const ReglagesPage = () => {
                   )}
 
                   {pendingVictimCacheInfo && (
-                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-gray-700 sm:grid-cols-3">
-                      <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                        <div className="font-semibold text-gray-900">{pendingVictimCacheInfo.docsTotal}</div>
-                        <div>docs en cache</div>
-                      </div>
-                      <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                        <div className="font-semibold text-gray-900">{pendingVictimCacheInfo.docsPending}</div>
-                        <div>docs en attente</div>
-                      </div>
-                      <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                        <div className="font-semibold text-gray-900">{pendingVictimCacheInfo.photosTotal}</div>
-                        <div>photos en cache</div>
-                      </div>
+                    <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-gray-700 sm:grid-cols-3">
                       <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
                         <div className="font-semibold text-gray-900">{pendingVictimCacheInfo.photosPending}</div>
                         <div>photos en attente</div>
                       </div>
                       <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                        <div className="font-semibold text-gray-900">{pendingVictimCacheInfo.docsSynced}</div>
-                        <div>docs déjà sync</div>
+                        <div className="font-semibold text-gray-900">{pendingVictimCacheInfo.docsPending}</div>
+                        <div>autres documents</div>
                       </div>
                       <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                        <div className="font-semibold text-gray-900">{pendingVictimCacheInfo.photosSynced}</div>
-                        <div>photos déjà sync</div>
+                        <div className="font-semibold text-gray-900">{pendingVictimTotal}</div>
+                        <div>victimes concernées</div>
                       </div>
                     </div>
                   )}
@@ -898,9 +878,7 @@ const ReglagesPage = () => {
                         {!loadingVictimPending && pendingVictimRows.length === 0 && (
                           <tr>
                             <td colSpan={6} className="py-6 text-center text-gray-600">
-                              {pendingVictimCacheInfo && (pendingVictimCacheInfo.docsTotal > 0 || pendingVictimCacheInfo.photosTotal > 0)
-                                ? 'Des données existent en cache, mais aucune photo / aucun document n’est marqué en attente.'
-                                : 'Aucune photo / aucun document en attente.'}
+                              Aucune photo / aucun document en attente.
                             </td>
                           </tr>
                         )}
