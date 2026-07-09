@@ -20,9 +20,12 @@ export const ConsentementsSection: React.FC<ConsentementsSectionProps> = ({
                     cadre du programme, en lien avec des structures partenaires.
                 </p>
                 <p className="mb-3">
-                    Selon son cas, la victime pourra également accéder à d'autres mesures disponibles
+                    Selon son cas, la victime pourra accéder à d'autres mesures disponibles
                     prévues par le programme (réinsertion socioéconomique, appui éducatif, soutien
                     administratif, prise en charge médicale,).
+                </p>
+                <p className="mb-3">
+                    Elle pourra également bénéficier d’un téléphone portable à titre de mesure de réparation.
                 </p>
                 <p className="mb-3">
                     Ce programme de réparation est une mesure de justice, distincte de l'assistance
@@ -42,10 +45,10 @@ export const ConsentementsSection: React.FC<ConsentementsSectionProps> = ({
                     Elle a pu poser toutes les questions souhaitées et a reçu des réponses complètes et
                     compréhensibles.
                 </p>
-            </div>
+            </div >
 
             {/* Section consentements */}
-            <div className="mb-6">
+            < div className="mb-6" >
                 <div className="space-y-3">
                     <div className="flex items-start">
                         <input
@@ -94,7 +97,7 @@ export const ConsentementsSection: React.FC<ConsentementsSectionProps> = ({
                         </label>
                     </div>
                 </div>
-            </div>
+            </div >
         </>
     );
 };
