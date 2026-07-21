@@ -1,24 +1,66 @@
 "use client";
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   FiActivity,
   FiBriefcase,
   FiDollarSign,
   FiHeart,
+  FiCreditCard,
+  FiFileText,
 } from 'react-icons/fi';
 import { IndemnisationGauge, ProgressionBreakdownCard } from './shared';
+import { getMockProgressionLucStats } from '../mocks/data';
+import { useFetch } from '../../context/FetchContext';
 import {
-  getMockIndemnisationByPourcentage,
-  getMockProgressionLucStats,
-  getMockBareme,
-} from '../mocks/data';
-import { COLORS } from './dashboard/constants';
+  buildIndemnisationDashboardStats,
+  IndemnisationDashboardStats,
+  normalizeApiList,
+} from '../utils/indemnisationDashboard';
+
+const emptyIndemnisationStats = (): IndemnisationDashboardStats =>
+  buildIndemnisationDashboardStats({ contrats: [], plans: [], indemnisations: [] });
+
+const formatUsd = (amount: number): string => {
+  return `${Math.round(amount).toLocaleString()} USD`;
+};
 
 const ProgressionDetailLuc: React.FC = () => {
-  const indemnData = useMemo(() => getMockIndemnisationByPourcentage(), []);
+  const { fetcher } = useFetch();
+  const [indemnStats, setIndemnStats] = useState<IndemnisationDashboardStats>(() => emptyIndemnisationStats());
+  const [loadingIndemnisation, setLoadingIndemnisation] = useState<boolean>(true);
   const lucStats = useMemo(() => getMockProgressionLucStats(), []);
-  const bareme = useMemo(() => getMockBareme(), []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadIndemnisationStats = async () => {
+      setLoadingIndemnisation(true);
+      try {
+        const [contratsResp, plansResp, indemnisationsResp] = await Promise.all([
+          fetcher('/contrat'),
+          fetcher('/plan-indemnisation'),
+          fetcher('/indemnisation'),
+        ]);
+
+        if (!mounted) return;
+        setIndemnStats(buildIndemnisationDashboardStats({
+          contrats: normalizeApiList(contratsResp),
+          plans: normalizeApiList(plansResp),
+          indemnisations: normalizeApiList(indemnisationsResp),
+        }));
+      } catch {
+        if (mounted) setIndemnStats(emptyIndemnisationStats());
+      } finally {
+        if (mounted) setLoadingIndemnisation(false);
+      }
+    };
+
+    loadIndemnisationStats();
+    return () => {
+      mounted = false;
+    };
+  }, [fetcher]);
 
   return (
     <div className="space-y-8">
@@ -36,8 +78,66 @@ const ProgressionDetailLuc: React.FC = () => {
       </div>
 
       {/* Indemnisation par palier 0-25-50-75-100% */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-5">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-emerald-50">
+              <FiCreditCard className="text-emerald-600" size={18} />
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Déjà versé</p>
+              <p className="text-xl font-bold text-gray-900">
+                {loadingIndemnisation ? '...' : formatUsd(indemnStats.totalVerseUSD)}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-5">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-blue-50">
+              <FiDollarSign className="text-blue-600" size={18} />
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Planifié</p>
+              <p className="text-xl font-bold text-gray-900">
+                {loadingIndemnisation ? '...' : formatUsd(indemnStats.totalPlanifieUSD)}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-5">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-amber-50">
+              <FiFileText className="text-amber-600" size={18} />
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Contrats</p>
+              <p className="text-xl font-bold text-gray-900">
+                {loadingIndemnisation ? '...' : indemnStats.totalContrats.toLocaleString()}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-5">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-violet-50">
+              <FiActivity className="text-violet-600" size={18} />
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Paiements démarrés</p>
+              <p className="text-xl font-bold text-gray-900">
+                {loadingIndemnisation ? '...' : indemnStats.contratsAvecPaiement.toLocaleString()}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <IndemnisationGauge
-        data={indemnData}
+        data={indemnStats.gaugeData}
         title="Progression des indemnisations (par palier)"
       />
 

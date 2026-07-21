@@ -12,6 +12,7 @@ import CustomTooltip from './dashboard/CustomTooltip';
 import OfflineIndicator from './dashboard/OfflineIndicator';
 import { COLORS, TRANCHE_AGE_ORDER } from './dashboard/constants';
 import { AgentCore, getAgentFullName, getAgentPrenomNom, isReparationsAgent } from './dashboard/agents';
+import { buildIndemnisationDashboardStats, normalizeApiList } from '../utils/indemnisationDashboard';
 
 interface DashboardVictimsProps {
   onSelectAgentReparation?: (fullName: string) => void;
@@ -92,7 +93,10 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
           prejudiceFinalData,
           totalIndemnisationData,
           categorieData,
-          prejudiceData
+          prejudiceData,
+          contratsData,
+          plansIndemnisationData,
+          indemnisationsData
         ] = await Promise.all([
           fetcher('/victime/stats/sexe'),
           fetcher('/victime/stats/tranche-age'),
@@ -102,8 +106,17 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
           fetcher('/victime/stats/prejudice-final'),
           fetcher('/victime/stats/total-indemnisation'),
           fetcher('/victime/stats/categorie'),
-          fetcher('/victime/stats/prejudice')
+          fetcher('/victime/stats/prejudice'),
+          fetcher('/contrat'),
+          fetcher('/plan-indemnisation'),
+          fetcher('/indemnisation')
         ]);
+
+        const indemnisationStats = buildIndemnisationDashboardStats({
+          contrats: normalizeApiList(contratsData),
+          plans: normalizeApiList(plansIndemnisationData),
+          indemnisations: normalizeApiList(indemnisationsData),
+        });
 
         const newStats = {
           sexe: sexeData || [],
@@ -112,11 +125,14 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
           programme: programmeData || [],
           territoire: territoireData || [],
           prejudiceFinal: prejudiceFinalData || [],
-          totalIndemnisation: totalIndemnisationData?.totalIndemnisation || 0,
+          totalIndemnisation: indemnisationStats.totalPlanifieUSD || totalIndemnisationData?.totalIndemnisation || 0,
           categorie: categorieData || [],
           prejudice: prejudiceData || []
         };
 
+        setVictimesAvecContratSigne(indemnisationStats.totalContrats || withContrat);
+        setVictimesIndemnisationCommencee(indemnisationStats.contratsAvecPaiement || indemnCommencee);
+        setMontantIndemnisationsDejaVersees(indemnisationStats.totalVerseUSD);
         setStats(newStats);
       } catch (error) {
         console.log('[Dashboard] Erreur chargement serveur:', error);

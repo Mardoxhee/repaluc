@@ -8,11 +8,8 @@ import {
   FiCheckCircle,
   FiClock,
   FiDollarSign,
-  FiFileText,
   FiHeart,
-  FiHome,
   FiTrendingUp,
-  FiTruck,
   FiUsers,
 } from 'react-icons/fi';
 import { useFetch } from '../../context/FetchContext';
@@ -22,15 +19,31 @@ type Mesure = { id: number; nom: string };
 
 const FALLBACK_MESURES: Mesure[] = [
   { id: 1, nom: 'Prise en charge médicale' },
-  { id: 2, nom: 'Clinique mobile' },
   { id: 3, nom: 'Accompagnement psychologique' },
-  { id: 4, nom: 'Réinsertion sociale' },
   { id: 5, nom: 'Indemnisation financière' },
   { id: 6, nom: 'Appui économique' },
-  { id: 7, nom: 'Médiation familiale' },
-  { id: 8, nom: 'Assistance juridique' },
   { id: 9, nom: 'Formation professionnelle' },
 ];
+
+const normalizeMeasureName = (nom: string): string => {
+  return nom
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+};
+
+const ALLOWED_MESURE_KEYS = new Set([
+  'prise en charge medicale',
+  'accompagnement psychologique',
+  'indemnisation financiere',
+  'appui economique',
+  'formation professionnelle',
+]);
+
+const filterLucMesures = (items: Mesure[]): Mesure[] => {
+  return items.filter((m) => ALLOWED_MESURE_KEYS.has(normalizeMeasureName(m.nom)));
+};
 
 type Visual = {
   icon: React.ReactNode;
@@ -46,56 +59,31 @@ const DEFAULT_VISUAL: Visual = {
 };
 
 const MESURE_VISUALS: Record<string, Visual> = {
-  'prise en charge médicale': {
+  'prise en charge medicale': {
     icon: <FiHeart size={20} className="text-white" />,
     gradient: 'from-rose-500 to-red-600',
     pill: 'bg-rose-50 text-rose-700',
-  },
-  'clinique mobile': {
-    icon: <FiTruck size={20} className="text-white" />,
-    gradient: 'from-cyan-500 to-blue-600',
-    pill: 'bg-cyan-50 text-cyan-700',
   },
   'accompagnement psychologique': {
     icon: <FiActivity size={20} className="text-white" />,
     gradient: 'from-purple-500 to-fuchsia-600',
     pill: 'bg-purple-50 text-purple-700',
   },
-  'réinsertion sociale': {
-    icon: <FiHome size={20} className="text-white" />,
-    gradient: 'from-teal-500 to-emerald-600',
-    pill: 'bg-teal-50 text-teal-700',
-  },
-  'indemnisation financière': {
+  'indemnisation financiere': {
     icon: <FiDollarSign size={20} className="text-white" />,
     gradient: 'from-emerald-500 to-green-600',
     pill: 'bg-emerald-50 text-emerald-700',
   },
-  'appui économique': {
+  'appui economique': {
     icon: <FiBriefcase size={20} className="text-white" />,
     gradient: 'from-amber-500 to-orange-600',
     pill: 'bg-amber-50 text-amber-700',
     subtitle: 'Prise en charge économique',
   },
-  'prise en charge économique': {
+  'prise en charge economique': {
     icon: <FiTrendingUp size={20} className="text-white" />,
     gradient: 'from-orange-500 to-amber-600',
     pill: 'bg-orange-50 text-orange-700',
-  },
-  'réinsertion économique': {
-    icon: <FiBriefcase size={20} className="text-white" />,
-    gradient: 'from-lime-500 to-green-600',
-    pill: 'bg-lime-50 text-lime-700',
-  },
-  'médiation familiale': {
-    icon: <FiUsers size={20} className="text-white" />,
-    gradient: 'from-pink-500 to-rose-600',
-    pill: 'bg-pink-50 text-pink-700',
-  },
-  'assistance juridique': {
-    icon: <FiFileText size={20} className="text-white" />,
-    gradient: 'from-indigo-500 to-blue-700',
-    pill: 'bg-indigo-50 text-indigo-700',
   },
   'formation professionnelle': {
     icon: <FiBookOpen size={20} className="text-white" />,
@@ -105,7 +93,7 @@ const MESURE_VISUALS: Record<string, Visual> = {
 };
 
 const getVisual = (nom: string): Visual => {
-  const key = nom.trim().toLowerCase();
+  const key = normalizeMeasureName(nom);
   return MESURE_VISUALS[key] || DEFAULT_VISUAL;
 };
 
@@ -180,7 +168,8 @@ const ProgressionMesuresLuc: React.FC = () => {
             }))
             .filter((m) => Number.isFinite(m.id) && m.nom.length > 0)
           : [];
-        if (mounted) setMesures(mapped.length > 0 ? mapped : FALLBACK_MESURES);
+        const allowedMapped = filterLucMesures(mapped);
+        if (mounted) setMesures(allowedMapped.length > 0 ? allowedMapped : FALLBACK_MESURES);
       } catch {
         if (mounted) setMesures(FALLBACK_MESURES);
       } finally {
