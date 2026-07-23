@@ -1,16 +1,51 @@
 'use client';
 import React from 'react';
-import { Victim, Representant } from './types';
+import { Victim, Representant, ContractForm, Consentements } from './types';
 
 interface VictimInfoProps {
     victim: Victim;
+    contractForm: ContractForm;
+    setContractForm: React.Dispatch<React.SetStateAction<ContractForm>>;
+    consentements: Consentements;
+    setConsentements: React.Dispatch<React.SetStateAction<Consentements>>;
     representant: Representant;
     setRepresentant: React.Dispatch<React.SetStateAction<Representant>>;
+    applyBaremeToTranches: () => void;
+    totalMontant: number;
 }
 
-export const VictimInfo: React.FC<VictimInfoProps> = ({ victim, representant, setRepresentant }) => {
+const inputClass = 'border-b border-dotted border-gray-400 outline-none text-sm bg-transparent px-1 py-0.5 min-w-0';
+
+const prejudiceOptions = [
+    'Perte de vie',
+    'VSLC',
+    "Atteinte à l'intégrité physique",
+    'Autres préjudices',
+    'Perte économique',
+];
+
+export const VictimInfo: React.FC<VictimInfoProps> = ({
+    contractForm,
+    setContractForm,
+    consentements,
+    setConsentements,
+    representant,
+    setRepresentant,
+    applyBaremeToTranches,
+    totalMontant,
+}) => {
+    const updateField = (field: keyof ContractForm, value: string) => {
+        setContractForm((prev) => ({ ...prev, [field]: value }));
+    };
+
     return (
         <>
+            <datalist id="prejudice-final-options">
+                {prejudiceOptions.map((option) => (
+                    <option key={option} value={option} />
+                ))}
+            </datalist>
+
             {/* Introduction */}
             <div className="mb-6 text-sm text-gray-700 leading-relaxed">
                 <p>
@@ -25,99 +60,199 @@ export const VictimInfo: React.FC<VictimInfoProps> = ({ victim, representant, se
             {/* Informations personnelles */}
             <div className="mb-6">
                 <div className="mb-3">
+                    <span className="font-semibold text-sm mr-2">Type de contrat :</span>
+                    <input
+                        type="text"
+                        value={contractForm.typeContrat}
+                        onChange={(e) => updateField('typeContrat', e.target.value)}
+                        className={`${inputClass} w-80`}
+                    />
+                </div>
+
+                <div className="mb-3">
                     <span className="font-semibold text-sm mr-2">Nom :</span>
-                    <span className="text-sm border-b border-dotted border-gray-400 inline-block min-w-96">{victim.nom || ''}</span>
+                    <input
+                        type="text"
+                        value={contractForm.nom}
+                        onChange={(e) => updateField('nom', e.target.value)}
+                        className={`${inputClass} w-96`}
+                    />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 mb-3">
                     <div>
                         <span className="font-semibold text-sm mr-2">Date et lieu de naissance :</span>
-                        <span className="text-sm border-b border-dotted border-gray-400 inline-block min-w-64">{victim.dateNaissance || ''}</span>
+                        <input
+                            type="text"
+                            value={contractForm.dateLieuNaissance}
+                            onChange={(e) => updateField('dateLieuNaissance', e.target.value)}
+                            className={`${inputClass} w-64`}
+                        />
                     </div>
                     <div>
                         <span className="font-semibold text-sm mr-2">Pièce d'identité (type et numéro) :</span>
-                        <span className="text-sm border-b border-dotted border-gray-400 inline-block min-w-48"></span>
+                        <input
+                            type="text"
+                            value={contractForm.pieceIdentite}
+                            onChange={(e) => updateField('pieceIdentite', e.target.value)}
+                            className={`${inputClass} w-48`}
+                        />
                     </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 mb-3">
                     <div>
                         <span className="font-semibold text-sm mr-2">Adresse ou territoire de résidence :</span>
-                        <span className="text-sm border-b border-dotted border-gray-400 inline-block min-w-48">{victim.territoire || ''}</span>
+                        <input
+                            type="text"
+                            value={contractForm.adresseResidence}
+                            onChange={(e) => updateField('adresseResidence', e.target.value)}
+                            className={`${inputClass} w-48`}
+                        />
                     </div>
                     <div>
                         <span className="font-semibold text-sm italic mr-2">Nationalité :</span>
-                        <span className="text-sm border-b border-dotted border-gray-400 inline-block min-w-48">{victim.nationalite || ''}</span>
+                        <input
+                            type="text"
+                            value={contractForm.nationalite}
+                            onChange={(e) => updateField('nationalite', e.target.value)}
+                            className={`${inputClass} w-48`}
+                        />
                     </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 mb-3">
                     <div>
                         <span className="font-semibold text-sm italic mr-2">Nom du père :</span>
-                        <span className="text-sm border-b border-dotted border-gray-400 inline-block min-w-64">{victim.nomPere || ''}</span>
+                        <input
+                            type="text"
+                            value={contractForm.nomPere}
+                            onChange={(e) => updateField('nomPere', e.target.value)}
+                            className={`${inputClass} w-64`}
+                        />
                     </div>
                     <div>
                         <span className="font-semibold text-sm italic mr-2">Nom de la Mère :</span>
-                        <span className="text-sm border-b border-dotted border-gray-400 inline-block min-w-64">{victim.nomMere || ''}</span>
+                        <input
+                            type="text"
+                            value={contractForm.nomMere}
+                            onChange={(e) => updateField('nomMere', e.target.value)}
+                            className={`${inputClass} w-64`}
+                        />
                     </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-4 mb-3">
                     <div>
                         <span className="font-semibold text-sm italic mr-2">Village :</span>
-                        <span className="text-sm border-b border-dotted border-gray-400 inline-block min-w-32">{victim.village || ''}</span>
+                        <input
+                            type="text"
+                            value={contractForm.village}
+                            onChange={(e) => updateField('village', e.target.value)}
+                            className={`${inputClass} w-32`}
+                        />
                     </div>
                     <div>
                         <span className="font-semibold text-sm italic mr-2">Groupement :</span>
-                        <span className="text-sm border-b border-dotted border-gray-400 inline-block min-w-32">{victim.groupement || ''}</span>
+                        <input
+                            type="text"
+                            value={contractForm.groupement}
+                            onChange={(e) => updateField('groupement', e.target.value)}
+                            className={`${inputClass} w-32`}
+                        />
                     </div>
                     <div>
                         <span className="font-semibold text-sm italic mr-2">Territoire :</span>
-                        <span className="text-sm border-b border-dotted border-gray-400 inline-block min-w-32">{victim.territoire || ''}</span>
+                        <input
+                            type="text"
+                            value={contractForm.territoire}
+                            onChange={(e) => updateField('territoire', e.target.value)}
+                            className={`${inputClass} w-32`}
+                        />
                     </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 mb-3">
                     <div>
                         <span className="font-semibold text-sm italic mr-2">Secteur :</span>
-                        <span className="text-sm border-b border-dotted border-gray-400 inline-block min-w-64">{victim.secteur || ''}</span>
+                        <input
+                            type="text"
+                            value={contractForm.secteur}
+                            onChange={(e) => updateField('secteur', e.target.value)}
+                            className={`${inputClass} w-64`}
+                        />
                     </div>
                     <div>
                         <span className="font-semibold text-sm italic mr-2">Province :</span>
-                        <span className="text-sm border-b border-dotted border-gray-400 inline-block min-w-64">{victim.province || ''}</span>
+                        <input
+                            type="text"
+                            value={contractForm.province}
+                            onChange={(e) => updateField('province', e.target.value)}
+                            className={`${inputClass} w-64`}
+                        />
                     </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 mb-3">
                     <div>
                         <span className="font-semibold text-sm mr-2">Type de violation :</span>
-                        <span className="text-sm border-b border-dotted border-gray-400 inline-block min-w-64">{victim.typeViolation || ''}</span>
+                        <input
+                            type="text"
+                            value={contractForm.typeViolation}
+                            onChange={(e) => updateField('typeViolation', e.target.value)}
+                            className={`${inputClass} w-64`}
+                        />
                     </div>
                     <div>
                         <span className="font-semibold text-sm mr-2">Type de préjudices :</span>
-                        <span className="text-sm border-b border-dotted border-gray-400 inline-block min-w-64">{victim.prejudicesSubis || ''}</span>
+                        <input
+                            type="text"
+                            value={contractForm.typePrejudices}
+                            onChange={(e) => updateField('typePrejudices', e.target.value)}
+                            className={`${inputClass} w-64`}
+                        />
                     </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 mb-3">
                     <div>
                         <span className="font-semibold text-sm mr-2">Réparation administrative :</span>
-                        <span className="text-sm border-b border-dotted border-gray-400 inline-block min-w-48"></span>
+                        <input
+                            type="text"
+                            value={contractForm.reparationAdministrative}
+                            onChange={(e) => updateField('reparationAdministrative', e.target.value)}
+                            className={`${inputClass} w-48`}
+                        />
                     </div>
                     <div>
                         <span className="font-semibold text-sm mr-2">Réparation judiciaire :</span>
-                        <span className="text-sm border-b border-dotted border-gray-400 inline-block min-w-48"></span>
+                        <input
+                            type="text"
+                            value={contractForm.reparationJudiciaire}
+                            onChange={(e) => updateField('reparationJudiciaire', e.target.value)}
+                            className={`${inputClass} w-48`}
+                        />
                     </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 mb-3">
                     <div>
                         <span className="font-semibold text-sm mr-2">Code bénéficiaire FONAREV :</span>
-                        <span className="text-sm border-b border-dotted border-gray-400 inline-block min-w-48"></span>
+                        <input
+                            type="text"
+                            value={contractForm.codeBeneficiaire}
+                            onChange={(e) => updateField('codeBeneficiaire', e.target.value)}
+                            className={`${inputClass} w-48`}
+                        />
                     </div>
                     <div>
                         <span className="font-semibold text-sm mr-2">Décision de justice (si détient une décision de justice exécutoire) :</span>
-                        <span className="text-sm border-b border-dotted border-gray-400 inline-block min-w-32"></span>
+                        <input
+                            type="text"
+                            value={contractForm.decisionJustice}
+                            onChange={(e) => updateField('decisionJustice', e.target.value)}
+                            className={`${inputClass} w-32`}
+                        />
                     </div>
                 </div>
 
@@ -129,12 +264,26 @@ export const VictimInfo: React.FC<VictimInfoProps> = ({ victim, representant, se
             {/* Section reconnaissance */}
             <div className="mb-6">
                 <p className="font-bold text-sm mb-2">A été reconnue comme victime du préjudice suivant :</p>
-                <p className="text-sm italic mb-4">
-                    {victim.prejudiceFinal || 'Pas de prejudice final ressorti'}
-                </p>
+                <div className="flex flex-col gap-2 mb-4 sm:flex-row sm:items-center">
+                    <input
+                        type="text"
+                        list="prejudice-final-options"
+                        value={contractForm.prejudiceFinal}
+                        onChange={(e) => updateField('prejudiceFinal', e.target.value)}
+                        className={`${inputClass} italic w-full sm:w-96`}
+                        placeholder="Préjudice final"
+                    />
+                    <button
+                        type="button"
+                        onClick={applyBaremeToTranches}
+                        className="no-print px-3 py-1.5 text-xs font-semibold text-blue-700 border border-blue-200 rounded hover:bg-blue-50"
+                    >
+                        Appliquer le barème
+                    </button>
+                </div>
                 <p className="text-sm leading-relaxed mb-4">
                     À ce titre, une indemnisation d'un montant de l'équivalent en Francs Congolais de
-                    4.320 USD (Quatre mille trois cent vingt dollars américains) vous est proposée, en tant
+                    <span className="font-semibold"> {totalMontant.toLocaleString()} USD </span> vous est proposée, en tant
                     que mesure de réparation administrative versée par le FONAREV, de manière forfaitaire
                     et à titre symbolique en vue de contribuer au soulagement des préjudices subis.
                 </p>
@@ -143,11 +292,21 @@ export const VictimInfo: React.FC<VictimInfoProps> = ({ victim, representant, se
                 <p className="text-sm mb-2">La victime a été informée de son droit :</p>
                 <div className="ml-6 space-y-2 text-sm">
                     <div className="flex items-start">
-                        <span className="mr-2">☐</span>
+                        <input
+                            type="checkbox"
+                            checked={consentements.faireMediateur}
+                            onChange={(e) => setConsentements({ ...consentements, faireMediateur: e.target.checked })}
+                            className="mt-1 mr-2"
+                        />
                         <span>À faire recours aux services du Médiateur ;</span>
                     </div>
                     <div className="flex items-start">
-                        <span className="mr-2">☐</span>
+                        <input
+                            type="checkbox"
+                            checked={consentements.avocat}
+                            onChange={(e) => setConsentements({ ...consentements, avocat: e.target.checked })}
+                            className="mt-1 mr-2"
+                        />
                         <span>
                             Et/ou à être accompagnée par un avocat (à ses propres frais) ou une
                             organisation de défense des droits des victimes de son choix, y compris une
@@ -159,11 +318,21 @@ export const VictimInfo: React.FC<VictimInfoProps> = ({ victim, representant, se
                 <p className="text-sm mt-4 mb-2">Elle déclare :</p>
                 <div className="ml-6 space-y-2 text-sm">
                     <div className="flex items-start">
-                        <span className="mr-2">☐</span>
+                        <input
+                            type="checkbox"
+                            checked={consentements.exerceDroit}
+                            onChange={(e) => setConsentements({ ...consentements, exerceDroit: e.target.checked })}
+                            className="mt-1 mr-2"
+                        />
                         <span>Avoir exercé ce droit avant de donner son consentement</span>
                     </div>
                     <div className="flex items-start">
-                        <span className="mr-2">☐</span>
+                        <input
+                            type="checkbox"
+                            checked={consentements.comprisDroit}
+                            onChange={(e) => setConsentements({ ...consentements, comprisDroit: e.target.checked })}
+                            className="mt-1 mr-2"
+                        />
                         <span>Avoir compris ce droit, mais avoir choisi de ne pas y recourir</span>
                     </div>
                 </div>
@@ -183,11 +352,29 @@ export const VictimInfo: React.FC<VictimInfoProps> = ({ victim, representant, se
                 <p className="font-bold text-sm italic mb-3 mt-6 page-break-avoid">Représentation pour consentement</p>
                 <div className="ml-6 space-y-2 text-sm mb-4">
                     <div className="flex items-start">
-                        <span className="mr-2">☐</span>
+                        <input
+                            type="checkbox"
+                            checked={representant.nom.trim().length > 0}
+                            onChange={(e) => {
+                                if (!e.target.checked) {
+                                    setRepresentant({ nom: '', qualite: '', organisation: '', pieceIdentite: '' });
+                                }
+                            }}
+                            className="mt-1 mr-2"
+                        />
                         <span>La victime est en situation d'incapacité permanente ou temporaire à consentir seule.</span>
                     </div>
                     <div className="flex items-start">
-                        <span className="mr-2">☐</span>
+                        <input
+                            type="checkbox"
+                            checked={representant.nom.trim().length > 0}
+                            onChange={(e) => {
+                                if (!e.target.checked) {
+                                    setRepresentant({ nom: '', qualite: '', organisation: '', pieceIdentite: '' });
+                                }
+                            }}
+                            className="mt-1 mr-2"
+                        />
                         <span>Le consentement est donné en ses lieu et place par :</span>
                     </div>
                 </div>

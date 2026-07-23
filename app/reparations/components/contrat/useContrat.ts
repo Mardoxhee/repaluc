@@ -2,59 +2,80 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { isOnline } from '../../../utils/victimsCache';
 import { savePendingContract, getAllPendingContracts, deletePendingContract, PendingContract } from '../../../utils/contractsCache';
-import { Victim, Tranche, Contrat, Consentements, Representant, SaveMessage } from './types';
+import { Victim, Tranche, Contrat, Consentements, Representant, SaveMessage, ContractForm } from './types';
 
-// Tranches par type de préjudice
-const TRANCHES_PERTE_VIE: Tranche[] = [
-    { id: '1', periode: 'Nov 2025', montant: '450' },
-    { id: '2', periode: 'Janv 2026', montant: '450' },
-    { id: '3', periode: 'Mars 2026', montant: '450' },
-    { id: '4', periode: 'Mai 2026', montant: '450' },
-    { id: '5', periode: 'Juil 2026', montant: '450' },
-    { id: '6', periode: 'Sept 2026', montant: '450' },
-    { id: '7', periode: 'Nov 2026', montant: '450' },
-    { id: '8', periode: 'Déc 2026', montant: '390' }
-]; // Total: 4320 USD
+const TRANCHE_LABELS = ['1ère tranche', '2ème tranche', '3ème tranche', '4ème tranche', '5ème tranche'];
 
-const TRANCHES_PREJUDICE_CORPOREL: Tranche[] = [
-    { id: '1', periode: 'Nov 2025', montant: '400' },
-    { id: '2', periode: 'Janv 2026', montant: '400' },
-    { id: '3', periode: 'Mars 2026', montant: '400' },
-    { id: '4', periode: 'Mai 2026', montant: '400' },
-    { id: '5', periode: 'Juil 2026', montant: '400' },
-    { id: '6', periode: 'Sept 2026', montant: '400' },
-    { id: '7', periode: 'Nov 2026', montant: '400' },
-    { id: '8', periode: 'Déc 2026', montant: '400' },
-    { id: '9', periode: 'Fév 2027', montant: '400' }
-]; // Total: 3600 USD
+const BAREME_INDEMNISATION = [
+    { match: ['perte de vie', 'deces', 'décès'], prejudice: 'Perte de vie', total: 2000, tranche: 400 },
+    { match: ['vslc', 'violence sexuelle'], prejudice: 'VSLC', total: 1500, tranche: 300 },
+    { match: ['atteinte a l integrite physique', 'atteinte à l intégrité physique', 'integrite physique', 'intégrité physique', 'physique', 'corporel'], prejudice: "Atteinte à l'intégrité physique", total: 1200, tranche: 240 },
+    { match: ['perte economique', 'perte économique', 'economique', 'économique'], prejudice: 'Perte économique', total: 500, tranche: 100 },
+    { match: ['autres prejudices', 'autres préjudices', 'autre prejudice', 'autre préjudice'], prejudice: 'Autres préjudices', total: 800, tranche: 160 },
+];
 
-const TRANCHES_PERTE_ECONOMIQUE: Tranche[] = [
-    { id: '1', periode: 'Nov 2025', montant: '250' },
-    { id: '2', periode: 'Janv 2026', montant: '250' },
-    { id: '3', periode: 'Mars 2026', montant: '250' },
-    { id: '4', periode: 'Mai 2026', montant: '250' }
-]; // Total: 1000 USD
+const normalizeText = (value?: string): string => {
+    return (value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[’']/g, ' ')
+        .trim()
+        .toLowerCase();
+};
+
+const getBaremeForPrejudice = (prejudiceFinal?: string) => {
+    const normalized = normalizeText(prejudiceFinal);
+    return BAREME_INDEMNISATION.find((item) =>
+        item.match.some((keyword) => normalized.includes(normalizeText(keyword)))
+    ) || BAREME_INDEMNISATION[4];
+};
+
+const createBaremeTranches = (prejudiceFinal?: string): Tranche[] => {
+    const bareme = getBaremeForPrejudice(prejudiceFinal);
+    return TRANCHE_LABELS.map((periode, index) => ({
+        id: String(index + 1),
+        periode,
+        montant: String(bareme.tranche),
+    }));
+};
+
+const getDateLieuNaissance = (victim: Victim): string => {
+    return [victim.dateNaissance, victim.lieuNaissance].filter(Boolean).join(' à ');
+};
+
+const getInitialContractForm = (victim: Victim): ContractForm => {
+    const bareme = getBaremeForPrejudice(victim.prejudiceFinal || victim.prejudicesSubis);
+    return {
+        nom: [victim.nom, victim.prenom].filter(Boolean).join(' ').trim(),
+        dateLieuNaissance: getDateLieuNaissance(victim),
+        pieceIdentite: victim.pieceIdentite || '',
+        adresseResidence: victim.territoire || '',
+        nationalite: victim.nationalite || '',
+        nomPere: victim.nomPere || '',
+        nomMere: victim.nomMere || '',
+        village: victim.village || '',
+        groupement: victim.groupement || '',
+        territoire: victim.territoire || '',
+        secteur: victim.secteur || '',
+        province: victim.province || '',
+        typeViolation: victim.typeViolation || '',
+        typePrejudices: victim.prejudicesSubis || '',
+        reparationAdministrative: 'Indemnisation financière',
+        reparationJudiciaire: 'En attente de décision',
+        codeBeneficiaire: victim.codeBeneficiaire || victim.codeUnique || '',
+        decisionJustice: '',
+        prejudiceFinal: victim.prejudiceFinal || bareme.prejudice,
+        typeContrat: 'Réparation Administrative',
+        lieuSignature: [victim.territoire, victim.province].filter(Boolean).join(', ') || 'Goma',
+        dateSignature: new Date().toISOString().split('T')[0],
+        fonarevNom: 'FATA MAKUNGA Patrick',
+        fonarevFonction: 'Directeur Général',
+    };
+};
 
 // Fonction pour obtenir les tranches par défaut selon le préjudice
 function getDefaultTranches(prejudiceFinal?: string): Tranche[] {
-    if (!prejudiceFinal) return TRANCHES_PERTE_VIE;
-
-    const prejudiceLower = prejudiceFinal.toLowerCase();
-
-    if (prejudiceLower.includes('perte de vie') || prejudiceLower.includes('décès')) {
-        return TRANCHES_PERTE_VIE;
-    }
-
-    if (prejudiceLower.includes('corporel') || prejudiceLower.includes('physique')) {
-        return TRANCHES_PREJUDICE_CORPOREL;
-    }
-
-    if (prejudiceLower.includes('économique') || prejudiceLower.includes('economique') || prejudiceLower.includes('perte économique')) {
-        return TRANCHES_PERTE_ECONOMIQUE;
-    }
-
-    // Par défaut: Perte de vie
-    return TRANCHES_PERTE_VIE;
+    return createBaremeTranches(prejudiceFinal);
 }
 
 const DEFAULT_CONSENTEMENTS: Consentements = {
@@ -65,7 +86,8 @@ const DEFAULT_CONSENTEMENTS: Consentements = {
     accepteReparation: false,
     refuseReparation: false,
     evaluationJointe: false,
-    signataire: false
+    signataire: false,
+    recuTelephone: false,
 };
 
 const DEFAULT_REPRESENTANT: Representant = {
@@ -79,6 +101,7 @@ export function useContrat(victim: Victim) {
     const [tranches, setTranches] = useState<Tranche[]>(() => getDefaultTranches(victim.prejudiceFinal));
     const [consentements, setConsentements] = useState<Consentements>(DEFAULT_CONSENTEMENTS);
     const [representant, setRepresentant] = useState<Representant>(DEFAULT_REPRESENTANT);
+    const [contractForm, setContractForm] = useState<ContractForm>(() => getInitialContractForm(victim));
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isDrawing, setIsDrawing] = useState(false);
@@ -132,19 +155,31 @@ export function useContrat(victim: Victim) {
                         })));
                     }
 
+                    setContractForm((prev) => ({
+                        ...prev,
+                        typeContrat: data.typeContrat || prev.typeContrat,
+                        reparationAdministrative: data.reparationAdministrative || prev.reparationAdministrative,
+                        reparationJudiciaire: data.reparationJudiciaire || prev.reparationJudiciaire,
+                        typePrejudices: data.typePrejudiceReconnu || prev.typePrejudices,
+                        prejudiceFinal: data.typePrejudiceReconnu || prev.prejudiceFinal,
+                        lieuSignature: data.lieuSignature || prev.lieuSignature,
+                        dateSignature: data.dateSignature ? new Date(data.dateSignature).toISOString().split('T')[0] : prev.dateSignature,
+                    }));
+
                     setConsentements({
-                        faireMediateur: data.droitAccompagnement || false,
+                        faireMediateur: data.serviceMediateurUtilise || false,
                         avocat: data.avocatAccompagnement || false,
-                        exerceDroit: false,
-                        comprisDroit: false,
+                        exerceDroit: data.droitAccompagnement || false,
+                        comprisDroit: data.comprisCesdroits || false,
                         accepteReparation: data.accepteReparation || false,
                         refuseReparation: false,
                         evaluationJointe: false,
-                        signataire: false
+                        signataire: false,
+                        recuTelephone: data.recuTelephone || data.aRecuTelephone || false,
                     });
 
                     setRepresentant({
-                        nom: '',
+                        nom: data.nomRepresentant || '',
                         qualite: data.qualiteRepresentant || '',
                         organisation: data.organisationAccompagnement || '',
                         pieceIdentite: data.pieceIdentiteRepresentant || ''
@@ -343,6 +378,10 @@ export function useContrat(victim: Victim) {
         setTranches(tranches.map(t => t.id === id ? { ...t, [field]: value } : t));
     };
 
+    const applyBaremeToTranches = () => {
+        setTranches(createBaremeTranches(contractForm.prejudiceFinal));
+    };
+
     // Sauvegarde du contrat
     const saveContract = async () => {
         setIsSaving(true);
@@ -365,21 +404,24 @@ export function useContrat(victim: Victim) {
             }
 
             const contractData = {
-                typeContrat: 'Réparation Administrative',
-                reparationAdministrative: victim.typeViolation || 'Indemnisation financière',
-                reparationJudiciaire: 'En attente de décision',
-                typePrejudiceReconnu: victim.prejudicesSubis || 'Perte de vie',
+                typeContrat: contractForm.typeContrat,
+                reparationAdministrative: contractForm.reparationAdministrative,
+                reparationJudiciaire: contractForm.reparationJudiciaire,
+                typePrejudiceReconnu: contractForm.prejudiceFinal || contractForm.typePrejudices,
                 montantTotalUSD: totalMontant,
-                droitAccompagnement: consentements.faireMediateur,
+                droitAccompagnement: consentements.faireMediateur || consentements.avocat || consentements.exerceDroit || consentements.comprisDroit,
+                serviceMediateurUtilise: consentements.faireMediateur,
                 avocatAccompagnement: consentements.avocat,
-                organisationAccompagnement: representant.organisation || 'AVRECOP',
+                comprisCesdroits: consentements.comprisDroit,
+                organisationAccompagnement: representant.organisation || '',
                 incapableConsentir: representant.nom ? true : false,
+                nomRepresentant: representant.nom || null,
                 qualiteRepresentant: representant.qualite || null,
                 pieceIdentiteRepresentant: representant.pieceIdentite || null,
                 accepteReparation: consentements.accepteReparation,
-                dateSignature: new Date().toISOString(),
-                signature: 'SIG_ELEC',
-                lieuSignature: `${victim.territoire || ''}, ${victim.province || ''}`.trim() || 'Goma',
+                dateSignature: contractForm.dateSignature ? new Date(contractForm.dateSignature).toISOString() : new Date().toISOString(),
+                signature: existingContrat?.signature || 'SIG_ELEC',
+                lieuSignature: contractForm.lieuSignature,
                 victimeId: victim.id,
                 planIndemnisation: tranches.map(t => ({
                     periode: t.periode,
@@ -387,6 +429,30 @@ export function useContrat(victim: Victim) {
                     statut: 'Planifier'
                 }))
             };
+
+            if (existingContrat) {
+                if (!isOnline()) {
+                    setSaveMessage({ type: 'error', text: 'Connecte-toi pour enregistrer les modifications d’un contrat déjà existant.' });
+                    return;
+                }
+
+                const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
+                const response = await fetch(`${baseUrl}/contrat/${existingContrat.id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(contractData),
+                });
+
+                if (!response.ok) {
+                    throw new Error('Erreur lors de la mise à jour du contrat');
+                }
+
+                const updated = await response.json().catch(() => ({ ...existingContrat, ...contractData }));
+                setExistingContrat(updated);
+                setSaveMessage({ type: 'success', text: 'Modifications du contrat enregistrées.' });
+                setTimeout(() => setSaveMessage(null), 3000);
+                return;
+            }
 
             await savePendingContract({
                 victimId: victim.id,
@@ -498,6 +564,7 @@ export function useContrat(victim: Victim) {
         tranches,
         consentements,
         representant,
+        contractForm,
         canvasRef,
         isSaving,
         saveMessage,
@@ -513,6 +580,7 @@ export function useContrat(victim: Victim) {
         // Setters
         setConsentements,
         setRepresentant,
+        setContractForm,
         setShowContratDetail,
         setShowSignatureModal,
 
@@ -524,6 +592,7 @@ export function useContrat(victim: Victim) {
         addTranche,
         removeTranche,
         updateTranche,
+        applyBaremeToTranches,
         saveContract,
         exportToPDF,
     };

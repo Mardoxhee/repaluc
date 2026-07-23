@@ -86,6 +86,16 @@ export const ConsentementsSection: React.FC<ConsentementsSectionProps> = ({
                     <div className="flex items-start">
                         <input
                             type="checkbox"
+                            checked={consentements.recuTelephone}
+                            onChange={(e) => setConsentements({ ...consentements, recuTelephone: e.target.checked })}
+                            className="mt-1 mr-3"
+                        />
+                        <label className="text-sm">A reçu le téléphone</label>
+                    </div>
+
+                    <div className="flex items-start">
+                        <input
+                            type="checkbox"
                             checked={consentements.signataire}
                             onChange={(e) => setConsentements({ ...consentements, signataire: e.target.checked })}
                             className="mt-1 mr-3"

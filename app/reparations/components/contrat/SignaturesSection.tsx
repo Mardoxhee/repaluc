@@ -1,11 +1,13 @@
 'use client';
 import React from 'react';
 import { Clock, Wifi } from 'lucide-react';
-import { Victim, Contrat, SaveMessage } from './types';
+import { Victim, Contrat, SaveMessage, ContractForm } from './types';
 import { PendingContract } from '../../../utils/contractsCache';
 
 interface SignaturesSectionProps {
     victim: Victim;
+    contractForm: ContractForm;
+    setContractForm: React.Dispatch<React.SetStateAction<ContractForm>>;
     existingContrat: Contrat | null;
     signatureUrl: string;
     formattedSignatureDate: string;
@@ -16,6 +18,8 @@ interface SignaturesSectionProps {
 
 export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
     victim,
+    contractForm,
+    setContractForm,
     existingContrat,
     signatureUrl,
     formattedSignatureDate,
@@ -23,18 +27,51 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
     pendingOfflineContrat,
     setShowSignatureModal,
 }) => {
+    const updateField = (field: keyof ContractForm, value: string) => {
+        setContractForm((prev) => ({ ...prev, [field]: value }));
+    };
+
     return (
         <>
             {/* Section signatures */}
             <div className="mt-8 grid grid-cols-2 gap-8">
                 <div>
                     <p className="text-sm mb-2">
-                        Fait à <span className="border-b border-dotted border-gray-400 inline-block w-32">{victim.territoire || ''}</span>, le <span className="border-b border-dotted border-gray-400 inline-block w-32">{formattedSignatureDate}</span>
+                        Fait à{' '}
+                        <input
+                            type="text"
+                            value={contractForm.lieuSignature}
+                            onChange={(e) => updateField('lieuSignature', e.target.value)}
+                            className="border-b border-dotted border-gray-400 outline-none text-sm bg-transparent px-1 w-40"
+                        />
+                        , le{' '}
+                        <input
+                            type="date"
+                            value={contractForm.dateSignature}
+                            onChange={(e) => updateField('dateSignature', e.target.value)}
+                            className="border-b border-dotted border-gray-400 outline-none text-sm bg-transparent px-1 w-36"
+                        />
                     </p>
                     <div className="mt-6">
                         <p className="font-bold text-sm mb-2">Pour le FONAREV</p>
-                        <p className="text-sm">Nom : FATA MAKUNGA Patrick</p>
-                        <p className="text-sm">Fonction : Directeur Général</p>
+                        <p className="text-sm">
+                            Nom :{' '}
+                            <input
+                                type="text"
+                                value={contractForm.fonarevNom}
+                                onChange={(e) => updateField('fonarevNom', e.target.value)}
+                                className="border-b border-dotted border-gray-400 outline-none text-sm bg-transparent px-1 w-56"
+                            />
+                        </p>
+                        <p className="text-sm">
+                            Fonction :{' '}
+                            <input
+                                type="text"
+                                value={contractForm.fonarevFonction}
+                                onChange={(e) => updateField('fonarevFonction', e.target.value)}
+                                className="border-b border-dotted border-gray-400 outline-none text-sm bg-transparent px-1 w-56"
+                            />
+                        </p>
                         <p className="text-sm mt-4">Signature :</p>
                         <div className="border-b border-gray-400 w-48 mt-8"></div>
                     </div>
@@ -44,7 +81,13 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
                     <div className="mt-12">
                         <p className="font-bold text-sm mb-2">Le/la bénéficiaire</p>
                         <p className="text-sm mb-4">
-                            Nom : <span className="border-b border-dotted border-gray-400 inline-block ">{victim.nom || ''}</span>
+                            Nom :{' '}
+                            <input
+                                type="text"
+                                value={contractForm.nom || victim.nom || ''}
+                                onChange={(e) => updateField('nom', e.target.value)}
+                                className="border-b border-dotted border-gray-400 outline-none text-sm bg-transparent px-1 w-56"
+                            />
                         </p>
                         <div className="mb-2">
                             <p className="text-sm mb-2">Signature ou empreinte :</p>

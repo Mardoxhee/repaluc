@@ -3,9 +3,13 @@ export interface Victim {
     nom?: string;
     prenom?: string;
     dateNaissance?: string;
+    lieuNaissance?: string;
     nationalite?: string;
     nomPere?: string;
     nomMere?: string;
+    pieceIdentite?: string;
+    codeUnique?: string;
+    codeBeneficiaire?: string;
     village?: string;
     groupement?: string;
     territoire?: string;
@@ -60,6 +64,7 @@ export interface Consentements {
     refuseReparation: boolean;
     evaluationJointe: boolean;
     signataire: boolean;
+    recuTelephone: boolean;
 }
 
 export interface Representant {
@@ -67,6 +72,33 @@ export interface Representant {
     qualite: string;
     organisation: string;
     pieceIdentite: string;
+}
+
+export interface ContractForm {
+    nom: string;
+    dateLieuNaissance: string;
+    pieceIdentite: string;
+    adresseResidence: string;
+    nationalite: string;
+    nomPere: string;
+    nomMere: string;
+    village: string;
+    groupement: string;
+    territoire: string;
+    secteur: string;
+    province: string;
+    typeViolation: string;
+    typePrejudices: string;
+    reparationAdministrative: string;
+    reparationJudiciaire: string;
+    codeBeneficiaire: string;
+    decisionJustice: string;
+    prejudiceFinal: string;
+    typeContrat: string;
+    lieuSignature: string;
+    dateSignature: string;
+    fonarevNom: string;
+    fonarevFonction: string;
 }
 
 export interface ContratVictimProps {
