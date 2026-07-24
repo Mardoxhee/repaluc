@@ -90,6 +90,20 @@ interface FilterType {
 
 type VictimTypeFilter = 'all' | 'luc' | 'mpu' | 'medical_urgent';
 
+const victimTypeExportLabels: Record<VictimTypeFilter, string> = {
+    all: 'toutes',
+    luc: 'luc',
+    mpu: 'mpu',
+    medical_urgent: 'urgence_medicale',
+};
+
+const victimTypeDisplayLabels: Record<VictimTypeFilter, string> = {
+    all: 'Toutes les victimes',
+    luc: 'Victimes LUC',
+    mpu: 'Victimes MPU',
+    medical_urgent: 'Urgence médicale',
+};
+
 const prejudiceFinalOptions = [
     "Perte de vie",
     "Perte économique",
@@ -655,27 +669,33 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
     }, [agentReparation, photoNotNull, victimTypeFilter, mention]);
 
     const handleExportExcel = useCallback(async () => {
-        if (!fetchCtx?.fetcher) return;
-        if (!isOnline()) {
-            await Swal.fire({
-                icon: 'warning',
-                title: 'Hors ligne',
-                text: 'Export impossible hors ligne.',
-                confirmButtonColor: '#901c67'
-            });
-            return;
-        }
-
         setExporting(true);
         try {
-            const queryParams = buildExportQueryParams();
-            const endpoint = photoNotNull
-                ? '/victime/paginate/photo-not-null'
-                : agentReparation
-                    ? '/victime/agent-reparation'
-                    : '/victime/paginate/filtered';
-            const response = await fetchCtx.fetcher(`${endpoint}?${queryParams}`);
-            const rows = Array.isArray(response?.data) ? response.data : [];
+            const cached = await getVictimsFromCache('all-victims-cache');
+            let rows: any[] = [];
+
+            if (Array.isArray(cached?.data) && cached.data.length > 0) {
+                rows = applyLocalFilters(cached.data);
+            } else {
+                if (!fetchCtx?.fetcher || !isOnline()) {
+                    await Swal.fire({
+                        icon: 'warning',
+                        title: 'Export indisponible',
+                        text: 'Aucune donnée en cache disponible pour exporter cette liste.',
+                        confirmButtonColor: '#901c67'
+                    });
+                    return;
+                }
+
+                const queryParams = buildExportQueryParams();
+                const endpoint = photoNotNull
+                    ? '/victime/paginate/photo-not-null'
+                    : agentReparation
+                        ? '/victime/agent-reparation'
+                        : '/victime/paginate/filtered';
+                const response = await fetchCtx.fetcher(`${endpoint}?${queryParams}`);
+                rows = Array.isArray(response?.data) ? applyLocalFilters(response.data) : [];
+            }
 
             if (rows.length === 0) {
                 await Swal.fire({
@@ -714,7 +734,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
 
             const date = new Date();
             const pad = (n: number) => String(n).padStart(2, '0');
-            const fileName = `victimes_export_${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}_${pad(date.getHours())}${pad(date.getMinutes())}.xlsx`;
+            const typeLabel = victimTypeExportLabels[victimTypeFilter];
+            const fileName = `victimes_${typeLabel}_${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}_${pad(date.getHours())}${pad(date.getMinutes())}.xlsx`;
             XLSX.writeFile(wb, fileName);
         } catch (e) {
             await Swal.fire({
@@ -726,7 +747,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
         } finally {
             setExporting(false);
         }
-    }, [buildExportQueryParams, fetchCtx?.fetcher, photoNotNull]);
+    }, [agentReparation, applyLocalFilters, buildExportQueryParams, fetchCtx?.fetcher, photoNotNull, victimTypeFilter]);
 
     // Function to check if a specific victim has an evaluation and view it
     const handleViewEvaluation = async (victim: any) => {
@@ -1192,50 +1213,63 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                                 </button>
                             </div>
 
-                            <div className="flex flex-wrap gap-2 mb-4">
+                            <div className="flex flex-col gap-3 mb-4 lg:flex-row lg:items-center lg:justify-between">
+                                <div className="flex flex-wrap gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setVictimTypeFilter('all')}
+                                        className={`px-3 py-2 border text-sm font-medium transition-colors ${victimTypeFilter === 'all'
+                                            ? 'bg-blue-50 border-blue-300 text-blue-700'
+                                            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                                            }`}
+                                    >
+                                        <Users size={16} className="inline-block mr-2" />
+                                        Tous
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setVictimTypeFilter('luc')}
+                                        className={`px-3 py-2 border text-sm font-medium transition-colors ${victimTypeFilter === 'luc'
+                                            ? 'bg-blue-50 border-blue-300 text-blue-700'
+                                            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                                            }`}
+                                    >
+                                        <BadgeCheck size={16} className="inline-block mr-2" />
+                                        LUC
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setVictimTypeFilter('mpu')}
+                                        className={`px-3 py-2 border text-sm font-medium transition-colors ${victimTypeFilter === 'mpu'
+                                            ? 'bg-blue-50 border-blue-300 text-blue-700'
+                                            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                                            }`}
+                                    >
+                                        <AlertCircle size={16} className="inline-block mr-2" />
+                                        MPU
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setVictimTypeFilter('medical_urgent')}
+                                        className={`px-3 py-2 border text-sm font-medium transition-colors ${victimTypeFilter === 'medical_urgent'
+                                            ? 'bg-blue-50 border-blue-300 text-blue-700'
+                                            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                                            }`}
+                                    >
+                                        <Stethoscope size={16} className="inline-block mr-2" />
+                                        Urgence médicale
+                                    </button>
+                                </div>
+
                                 <button
                                     type="button"
-                                    onClick={() => setVictimTypeFilter('all')}
-                                    className={`px-3 py-2 border text-sm font-medium transition-colors ${victimTypeFilter === 'all'
-                                        ? 'bg-blue-50 border-blue-300 text-blue-700'
-                                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                                        }`}
+                                    onClick={handleExportExcel}
+                                    disabled={exporting || loading}
+                                    className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    title={`Exporter la liste: ${victimTypeDisplayLabels[victimTypeFilter]}`}
                                 >
-                                    <Users size={16} className="inline-block mr-2" />
-                                    Tous
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setVictimTypeFilter('luc')}
-                                    className={`px-3 py-2 border text-sm font-medium transition-colors ${victimTypeFilter === 'luc'
-                                        ? 'bg-blue-50 border-blue-300 text-blue-700'
-                                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                                        }`}
-                                >
-                                    <BadgeCheck size={16} className="inline-block mr-2" />
-                                    LUC
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setVictimTypeFilter('mpu')}
-                                    className={`px-3 py-2 border text-sm font-medium transition-colors ${victimTypeFilter === 'mpu'
-                                        ? 'bg-blue-50 border-blue-300 text-blue-700'
-                                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                                        }`}
-                                >
-                                    <AlertCircle size={16} className="inline-block mr-2" />
-                                    MPU
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setVictimTypeFilter('medical_urgent')}
-                                    className={`px-3 py-2 border text-sm font-medium transition-colors ${victimTypeFilter === 'medical_urgent'
-                                        ? 'bg-blue-50 border-blue-300 text-blue-700'
-                                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                                        }`}
-                                >
-                                    <Stethoscope size={16} className="inline-block mr-2" />
-                                    Urgence médicale
+                                    <Download size={16} />
+                                    {exporting ? 'Export...' : `Exporter ${victimTypeDisplayLabels[victimTypeFilter]}`}
                                 </button>
                             </div>
 
@@ -1369,18 +1403,6 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                                             </span>
                                         );
                                     })}
-
-                                    <div className="flex-1" />
-                                    <button
-                                        type="button"
-                                        onClick={handleExportExcel}
-                                        disabled={exporting}
-                                        className="px-4 py-2 bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors flex items-center gap-2"
-                                        title="Exporter en Excel"
-                                    >
-                                        <Download size={16} />
-                                        {exporting ? 'Export...' : 'Exporter Excel'}
-                                    </button>
                                 </div>
                             )}
                         </div>
