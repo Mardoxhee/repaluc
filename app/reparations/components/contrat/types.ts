@@ -1,6 +1,7 @@
 export interface Victim {
     id: number;
     nom?: string;
+    postnom?: string;
     prenom?: string;
     dateNaissance?: string;
     lieuNaissance?: string;
@@ -53,6 +54,59 @@ export interface Contrat {
     lieuSignature: string;
     victimeId: number;
     planIndemnisation: PlanIndemnisation[];
+    mesuresReparationAcceptees?: MesureReparationKey[];
+    mesuresReparationRenoncees?: MesureReparationKey[];
+    paiementMobileMoney?: boolean;
+    paiementInstitutionFinanciere?: boolean;
+    telephoneMarque?: string | null;
+    telephoneModele?: string | null;
+    telephoneImei?: string | null;
+    evaluationJointe?: boolean;
+    signataire?: boolean;
+    consentementRepresentant?: boolean;
+    metadataContrat?: ContractMetadata;
+}
+
+export type ContractTemplateId =
+    | 'perte-vie'
+    | 'vslc'
+    | 'atteinte-grave'
+    | 'atteinte-integrite-physique'
+    | 'perte-economique';
+
+export type MesureReparationKey =
+    | 'indemnisation'
+    | 'reinsertionEconomique'
+    | 'priseEnChargeMedicale'
+    | 'accompagnementPsychosocial';
+
+export type MesuresReparation = Record<MesureReparationKey, boolean>;
+
+export interface ContractTemplate {
+    id: ContractTemplateId;
+    label: string;
+    prejudiceLabel: string;
+    amountUSD: number;
+    amountWords: string;
+    trancheAmountUSD: number;
+    keywords: string[];
+}
+
+export interface ContractMetadata {
+    mesuresReparationAcceptees: MesureReparationKey[];
+    mesuresReparationRenoncees: MesureReparationKey[];
+    paiementMobileMoney: boolean;
+    paiementInstitutionFinanciere: boolean;
+    telephone: {
+        recu: boolean;
+        marque: string;
+        modele: string;
+        imei: string;
+    };
+    evaluationJointe: boolean;
+    signataire: boolean;
+    incapaciteConsentir: boolean;
+    consentementRepresentant: boolean;
 }
 
 export interface Consentements {
@@ -65,6 +119,15 @@ export interface Consentements {
     evaluationJointe: boolean;
     signataire: boolean;
     recuTelephone: boolean;
+    paiementMobileMoney: boolean;
+    paiementInstitutionFinanciere: boolean;
+    telephoneMarque: string;
+    telephoneModele: string;
+    telephoneImei: string;
+    incapaciteConsentir: boolean;
+    consentementRepresentant: boolean;
+    mesuresAcceptees: MesuresReparation;
+    mesuresRenoncees: MesuresReparation;
 }
 
 export interface Representant {
@@ -76,6 +139,8 @@ export interface Representant {
 
 export interface ContractForm {
     nom: string;
+    nomPostnom: string;
+    prenom: string;
     dateLieuNaissance: string;
     pieceIdentite: string;
     adresseResidence: string;

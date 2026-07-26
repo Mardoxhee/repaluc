@@ -1,41 +1,45 @@
 'use client';
 import React from 'react';
-import { Victim, Representant, ContractForm, Consentements } from './types';
+import type { ContractTemplate, Victim, Representant, ContractForm, Consentements } from './types';
+import { CONTRACT_TEMPLATES } from './contractTemplates';
 
 interface VictimInfoProps {
     victim: Victim;
+    selectedTemplate: ContractTemplate;
     contractForm: ContractForm;
     setContractForm: React.Dispatch<React.SetStateAction<ContractForm>>;
     consentements: Consentements;
     setConsentements: React.Dispatch<React.SetStateAction<Consentements>>;
     representant: Representant;
     setRepresentant: React.Dispatch<React.SetStateAction<Representant>>;
-    applyBaremeToTranches: () => void;
     totalMontant: number;
 }
 
 const inputClass = 'border-b border-dotted border-gray-400 outline-none text-sm bg-transparent px-1 py-0.5 min-w-0';
 
-const prejudiceOptions = [
-    'Perte de vie',
-    'VSLC',
-    "Atteinte à l'intégrité physique",
-    'Autres préjudices',
-    'Perte économique',
-];
+const prejudiceOptions = CONTRACT_TEMPLATES.map((template) => template.prejudiceLabel);
 
 export const VictimInfo: React.FC<VictimInfoProps> = ({
+    selectedTemplate,
     contractForm,
     setContractForm,
     consentements,
     setConsentements,
     representant,
     setRepresentant,
-    applyBaremeToTranches,
     totalMontant,
 }) => {
     const updateField = (field: keyof ContractForm, value: string) => {
-        setContractForm((prev) => ({ ...prev, [field]: value }));
+        setContractForm((prev) => {
+            const next = { ...prev, [field]: value };
+            if (field === 'nomPostnom' || field === 'prenom') {
+                return {
+                    ...next,
+                    nom: [next.nomPostnom, next.prenom].filter(Boolean).join(' ').trim(),
+                };
+            }
+            return next;
+        });
     };
 
     return (
@@ -61,22 +65,28 @@ export const VictimInfo: React.FC<VictimInfoProps> = ({
             <div className="mb-6">
                 <div className="mb-3">
                     <span className="font-semibold text-sm mr-2">Type de contrat :</span>
-                    <input
-                        type="text"
-                        value={contractForm.typeContrat}
-                        onChange={(e) => updateField('typeContrat', e.target.value)}
-                        className={`${inputClass} w-80`}
-                    />
+                    <span className="text-sm">{contractForm.typeContrat}</span>
                 </div>
 
-                <div className="mb-3">
-                    <span className="font-semibold text-sm mr-2">Nom :</span>
-                    <input
-                        type="text"
-                        value={contractForm.nom}
-                        onChange={(e) => updateField('nom', e.target.value)}
-                        className={`${inputClass} w-96`}
-                    />
+                <div className="grid grid-cols-2 gap-4 mb-3">
+                    <div>
+                        <span className="font-semibold text-sm mr-2">Nom - Postnom :</span>
+                        <input
+                            type="text"
+                            value={contractForm.nomPostnom}
+                            onChange={(e) => updateField('nomPostnom', e.target.value)}
+                            className={`${inputClass} w-64`}
+                        />
+                    </div>
+                    <div>
+                        <span className="font-semibold text-sm mr-2">Prénom :</span>
+                        <input
+                            type="text"
+                            value={contractForm.prenom}
+                            onChange={(e) => updateField('prenom', e.target.value)}
+                            className={`${inputClass} w-64`}
+                        />
+                    </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 mb-3">
@@ -264,7 +274,7 @@ export const VictimInfo: React.FC<VictimInfoProps> = ({
             {/* Section reconnaissance */}
             <div className="mb-6">
                 <p className="font-bold text-sm mb-2">A été reconnue comme victime du préjudice suivant :</p>
-                <div className="flex flex-col gap-2 mb-4 sm:flex-row sm:items-center">
+                <div className="mb-4">
                     <input
                         type="text"
                         list="prejudice-final-options"
@@ -273,17 +283,11 @@ export const VictimInfo: React.FC<VictimInfoProps> = ({
                         className={`${inputClass} italic w-full sm:w-96`}
                         placeholder="Préjudice final"
                     />
-                    <button
-                        type="button"
-                        onClick={applyBaremeToTranches}
-                        className="no-print px-3 py-1.5 text-xs font-semibold text-blue-700 border border-blue-200 rounded hover:bg-blue-50"
-                    >
-                        Appliquer le barème
-                    </button>
                 </div>
                 <p className="text-sm leading-relaxed mb-4">
                     À ce titre, une indemnisation d'un montant de l'équivalent en Francs Congolais de
-                    <span className="font-semibold"> {totalMontant.toLocaleString()} USD </span> vous est proposée, en tant
+                    <span className="font-semibold"> {totalMontant.toLocaleString('fr-FR')} USD </span>
+                    ({selectedTemplate.amountWords}) vous est proposée, en tant
                     que mesure de réparation administrative versée par le FONAREV, de manière forfaitaire
                     et à titre symbolique en vue de contribuer au soulagement des préjudices subis.
                 </p>
@@ -354,9 +358,11 @@ export const VictimInfo: React.FC<VictimInfoProps> = ({
                     <div className="flex items-start">
                         <input
                             type="checkbox"
-                            checked={representant.nom.trim().length > 0}
+                            checked={consentements.incapaciteConsentir}
                             onChange={(e) => {
-                                if (!e.target.checked) {
+                                const checked = e.target.checked;
+                                setConsentements({ ...consentements, incapaciteConsentir: checked });
+                                if (!checked) {
                                     setRepresentant({ nom: '', qualite: '', organisation: '', pieceIdentite: '' });
                                 }
                             }}
@@ -367,9 +373,11 @@ export const VictimInfo: React.FC<VictimInfoProps> = ({
                     <div className="flex items-start">
                         <input
                             type="checkbox"
-                            checked={representant.nom.trim().length > 0}
+                            checked={consentements.consentementRepresentant}
                             onChange={(e) => {
-                                if (!e.target.checked) {
+                                const checked = e.target.checked;
+                                setConsentements({ ...consentements, consentementRepresentant: checked });
+                                if (!checked) {
                                     setRepresentant({ nom: '', qualite: '', organisation: '', pieceIdentite: '' });
                                 }
                             }}

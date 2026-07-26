@@ -13,7 +13,6 @@ export const ConsentementsSection: React.FC<ConsentementsSectionProps> = ({
 }) => {
     return (
         <>
-            {/* Section accompagnement */}
             <div className="mb-6 text-sm leading-relaxed">
                 <p className="mb-3">
                     La victime aura accès à un accompagnement psychologique et économique dans le
@@ -37,39 +36,10 @@ export const ConsentementsSection: React.FC<ConsentementsSectionProps> = ({
                     l'année et en tranches convenues avec la victime lors des entretiens de mise en œuvre.
                     Aucun versement en faveur de la victime ci-haut désignée ne sera effectué en cash.
                 </p>
-                <p className="mb-3">
-                    La victime déclare avoir été informée de ses droits et des modalités de mise en œuvre
-                    de la mesure.
-                </p>
-                <p className="mb-3">
-                    Elle a pu poser toutes les questions souhaitées et a reçu des réponses complètes et
-                    compréhensibles.
-                </p>
             </div >
 
-            {/* Section consentements */}
-            < div className="mb-6" >
+            <div className="mb-6">
                 <div className="space-y-3">
-                    <div className="flex items-start">
-                        <input
-                            type="checkbox"
-                            checked={consentements.accepteReparation}
-                            onChange={(e) => setConsentements({ ...consentements, accepteReparation: e.target.checked })}
-                            className="mt-1 mr-3"
-                        />
-                        <label className="text-sm">J'accepte de bénéficier des mesures de réparation administrative</label>
-                    </div>
-
-                    <div className="flex items-start">
-                        <input
-                            type="checkbox"
-                            checked={consentements.refuseReparation}
-                            onChange={(e) => setConsentements({ ...consentements, refuseReparation: e.target.checked })}
-                            className="mt-1 mr-3"
-                        />
-                        <label className="text-sm">Je ne souhaite pas bénéficier de cette mesure de réparation administrative</label>
-                    </div>
-
                     <div className="flex items-start">
                         <input
                             type="checkbox"
@@ -107,7 +77,7 @@ export const ConsentementsSection: React.FC<ConsentementsSectionProps> = ({
                         </label>
                     </div>
                 </div>
-            </div >
+            </div>
         </>
     );
 };

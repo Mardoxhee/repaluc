@@ -9,6 +9,8 @@ import { TranchesSection } from './TranchesSection';
 import { ConsentementsSection } from './ConsentementsSection';
 import { SignaturesSection } from './SignaturesSection';
 import { SignatureModal } from './SignatureModal';
+import { ContractTemplateSelector } from './ContractTemplateSelector';
+import { ReparationMeasuresSection } from './ReparationMeasuresSection';
 
 const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
     const {
@@ -16,6 +18,8 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
         consentements,
         representant,
         contractForm,
+        selectedTemplateId,
+        selectedTemplate,
         canvasRef,
         isSaving,
         saveMessage,
@@ -32,6 +36,7 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
         setContractForm,
         setShowContratDetail,
         setShowSignatureModal,
+        selectContractTemplate,
         startDrawing,
         draw,
         stopDrawing,
@@ -39,7 +44,6 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
         addTranche,
         removeTranche,
         updateTranche,
-        applyBaremeToTranches,
         saveContract,
         exportToPDF,
     } = useContrat(victim);
@@ -135,15 +139,20 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                         <div id="contrat-content">
                             <ContratHeader />
 
+                            <ContractTemplateSelector
+                                selectedTemplateId={selectedTemplateId}
+                                onSelectTemplate={selectContractTemplate}
+                            />
+
                             <VictimInfo
                                 victim={victim}
+                                selectedTemplate={selectedTemplate}
                                 contractForm={contractForm}
                                 setContractForm={setContractForm}
                                 consentements={consentements}
                                 setConsentements={setConsentements}
                                 representant={representant}
                                 setRepresentant={setRepresentant}
-                                applyBaremeToTranches={applyBaremeToTranches}
                                 totalMontant={totalMontant}
                             />
 
@@ -153,6 +162,11 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                                 addTranche={addTranche}
                                 removeTranche={removeTranche}
                                 updateTranche={updateTranche}
+                            />
+
+                            <ReparationMeasuresSection
+                                consentements={consentements}
+                                setConsentements={setConsentements}
                             />
 
                             <ConsentementsSection

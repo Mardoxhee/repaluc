@@ -1,41 +1,24 @@
 'use client';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { isOnline } from '../../../utils/victimsCache';
-import { savePendingContract, getAllPendingContracts, deletePendingContract, PendingContract } from '../../../utils/contractsCache';
-import { Victim, Tranche, Contrat, Consentements, Representant, SaveMessage, ContractForm } from './types';
+import { savePendingContract, getAllPendingContracts, deletePendingContract } from '../../../utils/contractsCache';
+import type { PendingContract } from '../../../utils/contractsCache';
+import type { Victim, Tranche, Contrat, Consentements, Representant, SaveMessage, ContractForm, ContractTemplateId, MesureReparationKey } from './types';
+import {
+    cloneMesuresReparation,
+    getContractTemplateById,
+    getContractTemplateForPrejudice,
+    getSelectedMesures,
+    mesuresFromKeys,
+    TRANCHE_LABELS,
+} from './contractTemplates';
 
-const TRANCHE_LABELS = ['1ère tranche', '2ème tranche', '3ème tranche', '4ème tranche', '5ème tranche'];
-
-const BAREME_INDEMNISATION = [
-    { match: ['perte de vie', 'deces', 'décès'], prejudice: 'Perte de vie', total: 2000, tranche: 400 },
-    { match: ['vslc', 'violence sexuelle'], prejudice: 'VSLC', total: 1500, tranche: 300 },
-    { match: ['atteinte a l integrite physique', 'atteinte à l intégrité physique', 'integrite physique', 'intégrité physique', 'physique', 'corporel'], prejudice: "Atteinte à l'intégrité physique", total: 1200, tranche: 240 },
-    { match: ['perte economique', 'perte économique', 'economique', 'économique'], prejudice: 'Perte économique', total: 500, tranche: 100 },
-    { match: ['autres prejudices', 'autres préjudices', 'autre prejudice', 'autre préjudice'], prejudice: 'Autres préjudices', total: 800, tranche: 160 },
-];
-
-const normalizeText = (value?: string): string => {
-    return (value || '')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[’']/g, ' ')
-        .trim()
-        .toLowerCase();
-};
-
-const getBaremeForPrejudice = (prejudiceFinal?: string) => {
-    const normalized = normalizeText(prejudiceFinal);
-    return BAREME_INDEMNISATION.find((item) =>
-        item.match.some((keyword) => normalized.includes(normalizeText(keyword)))
-    ) || BAREME_INDEMNISATION[4];
-};
-
-const createBaremeTranches = (prejudiceFinal?: string): Tranche[] => {
-    const bareme = getBaremeForPrejudice(prejudiceFinal);
+const createTemplateTranches = (templateId: ContractTemplateId): Tranche[] => {
+    const template = getContractTemplateById(templateId);
     return TRANCHE_LABELS.map((periode, index) => ({
         id: String(index + 1),
         periode,
-        montant: String(bareme.tranche),
+        montant: String(template.trancheAmountUSD),
     }));
 };
 
@@ -44,9 +27,14 @@ const getDateLieuNaissance = (victim: Victim): string => {
 };
 
 const getInitialContractForm = (victim: Victim): ContractForm => {
-    const bareme = getBaremeForPrejudice(victim.prejudiceFinal || victim.prejudicesSubis);
+    const template = getContractTemplateForPrejudice(victim.prejudiceFinal || victim.prejudicesSubis);
+    const nomPostnom = [victim.nom, victim.postnom].filter(Boolean).join(' ').trim();
+    const prenom = victim.prenom || '';
+
     return {
-        nom: [victim.nom, victim.prenom].filter(Boolean).join(' ').trim(),
+        nom: [nomPostnom, prenom].filter(Boolean).join(' ').trim(),
+        nomPostnom,
+        prenom,
         dateLieuNaissance: getDateLieuNaissance(victim),
         pieceIdentite: victim.pieceIdentite || '',
         adresseResidence: victim.territoire || '',
@@ -60,11 +48,11 @@ const getInitialContractForm = (victim: Victim): ContractForm => {
         province: victim.province || '',
         typeViolation: victim.typeViolation || '',
         typePrejudices: victim.prejudicesSubis || '',
-        reparationAdministrative: 'Indemnisation financière',
+        reparationAdministrative: 'Programme des Réparations Administratives Intégrales (PRAI)',
         reparationJudiciaire: 'En attente de décision',
         codeBeneficiaire: victim.codeBeneficiaire || victim.codeUnique || '',
         decisionJustice: '',
-        prejudiceFinal: victim.prejudiceFinal || bareme.prejudice,
+        prejudiceFinal: victim.prejudiceFinal || template.prejudiceLabel,
         typeContrat: 'Réparation Administrative',
         lieuSignature: [victim.territoire, victim.province].filter(Boolean).join(', ') || 'Goma',
         dateSignature: new Date().toISOString().split('T')[0],
@@ -73,12 +61,7 @@ const getInitialContractForm = (victim: Victim): ContractForm => {
     };
 };
 
-// Fonction pour obtenir les tranches par défaut selon le préjudice
-function getDefaultTranches(prejudiceFinal?: string): Tranche[] {
-    return createBaremeTranches(prejudiceFinal);
-}
-
-const DEFAULT_CONSENTEMENTS: Consentements = {
+const createDefaultConsentements = (): Consentements => ({
     faireMediateur: false,
     avocat: false,
     exerceDroit: false,
@@ -88,7 +71,16 @@ const DEFAULT_CONSENTEMENTS: Consentements = {
     evaluationJointe: false,
     signataire: false,
     recuTelephone: false,
-};
+    paiementMobileMoney: false,
+    paiementInstitutionFinanciere: false,
+    telephoneMarque: '',
+    telephoneModele: '',
+    telephoneImei: '',
+    incapaciteConsentir: false,
+    consentementRepresentant: false,
+    mesuresAcceptees: cloneMesuresReparation(),
+    mesuresRenoncees: cloneMesuresReparation(),
+});
 
 const DEFAULT_REPRESENTANT: Representant = {
     nom: '',
@@ -97,9 +89,29 @@ const DEFAULT_REPRESENTANT: Representant = {
     pieceIdentite: ''
 };
 
+const MESURE_KEYS: MesureReparationKey[] = [
+    'indemnisation',
+    'reinsertionEconomique',
+    'priseEnChargeMedicale',
+    'accompagnementPsychosocial',
+];
+
+const coerceMesureKeys = (value: unknown): MesureReparationKey[] => {
+    if (!Array.isArray(value)) return [];
+    return value.filter((item): item is MesureReparationKey => (
+        typeof item === 'string' && MESURE_KEYS.includes(item as MesureReparationKey)
+    ));
+};
+
+const getContratTemplateIdFromData = (data: any, fallbackPrejudice?: string): ContractTemplateId => (
+    getContractTemplateForPrejudice(data?.typePrejudiceReconnu || fallbackPrejudice).id
+);
+
 export function useContrat(victim: Victim) {
-    const [tranches, setTranches] = useState<Tranche[]>(() => getDefaultTranches(victim.prejudiceFinal));
-    const [consentements, setConsentements] = useState<Consentements>(DEFAULT_CONSENTEMENTS);
+    const initialTemplate = getContractTemplateForPrejudice(victim.prejudiceFinal || victim.prejudicesSubis);
+    const [selectedTemplateId, setSelectedTemplateId] = useState<ContractTemplateId>(initialTemplate.id);
+    const [tranches, setTranches] = useState<Tranche[]>(() => createTemplateTranches(initialTemplate.id));
+    const [consentements, setConsentements] = useState<Consentements>(() => createDefaultConsentements());
     const [representant, setRepresentant] = useState<Representant>(DEFAULT_REPRESENTANT);
     const [contractForm, setContractForm] = useState<ContractForm>(() => getInitialContractForm(victim));
 
@@ -118,6 +130,7 @@ export function useContrat(victim: Victim) {
         ? new Date(existingContrat.dateSignature).toLocaleDateString('fr-FR')
         : '';
 
+    const selectedTemplate = getContractTemplateById(selectedTemplateId);
     const totalMontant = tranches.reduce((sum, t) => sum + (parseFloat(t.montant) || 0), 0);
 
     // Initialiser le canvas
@@ -146,6 +159,9 @@ export function useContrat(victim: Victim) {
                 if (response.ok) {
                     const data = await response.json();
                     setExistingContrat(data);
+                    const templateId = getContratTemplateIdFromData(data, victim.prejudiceFinal || victim.prejudicesSubis);
+                    const template = getContractTemplateById(templateId);
+                    setSelectedTemplateId(templateId);
 
                     if (data.planIndemnisation && data.planIndemnisation.length > 0) {
                         setTranches(data.planIndemnisation.map((p: any, index: number) => ({
@@ -153,18 +169,28 @@ export function useContrat(victim: Victim) {
                             periode: p.periode,
                             montant: String(p.montantUSD)
                         })));
+                    } else {
+                        setTranches(createTemplateTranches(templateId));
                     }
 
                     setContractForm((prev) => ({
                         ...prev,
+                        nom: data.nomBeneficiaire || prev.nom,
+                        nomPostnom: data.nomPostnom || prev.nomPostnom,
+                        prenom: data.prenom || prev.prenom,
                         typeContrat: data.typeContrat || prev.typeContrat,
                         reparationAdministrative: data.reparationAdministrative || prev.reparationAdministrative,
                         reparationJudiciaire: data.reparationJudiciaire || prev.reparationJudiciaire,
                         typePrejudices: data.typePrejudiceReconnu || prev.typePrejudices,
-                        prejudiceFinal: data.typePrejudiceReconnu || prev.prejudiceFinal,
+                        prejudiceFinal: data.typePrejudiceReconnu || template.prejudiceLabel,
                         lieuSignature: data.lieuSignature || prev.lieuSignature,
                         dateSignature: data.dateSignature ? new Date(data.dateSignature).toISOString().split('T')[0] : prev.dateSignature,
                     }));
+
+                    const metadata = data.metadataContrat || {};
+                    const mesuresAcceptees = coerceMesureKeys(data.mesuresReparationAcceptees || metadata.mesuresReparationAcceptees);
+                    const mesuresRenoncees = coerceMesureKeys(data.mesuresReparationRenoncees || metadata.mesuresReparationRenoncees);
+                    const telephone = metadata.telephone || {};
 
                     setConsentements({
                         faireMediateur: data.serviceMediateurUtilise || false,
@@ -172,10 +198,19 @@ export function useContrat(victim: Victim) {
                         exerceDroit: data.droitAccompagnement || false,
                         comprisDroit: data.comprisCesdroits || false,
                         accepteReparation: data.accepteReparation || false,
-                        refuseReparation: false,
-                        evaluationJointe: false,
-                        signataire: false,
-                        recuTelephone: data.recuTelephone || data.aRecuTelephone || false,
+                        refuseReparation: mesuresRenoncees.length > 0 || data.refuseReparation || false,
+                        evaluationJointe: data.evaluationJointe || metadata.evaluationJointe || false,
+                        signataire: data.signataire || metadata.signataire || false,
+                        recuTelephone: data.recuTelephone || data.aRecuTelephone || telephone.recu || false,
+                        paiementMobileMoney: data.paiementMobileMoney || metadata.paiementMobileMoney || false,
+                        paiementInstitutionFinanciere: data.paiementInstitutionFinanciere || metadata.paiementInstitutionFinanciere || false,
+                        telephoneMarque: data.telephoneMarque || telephone.marque || '',
+                        telephoneModele: data.telephoneModele || telephone.modele || '',
+                        telephoneImei: data.telephoneImei || telephone.imei || '',
+                        incapaciteConsentir: data.incapableConsentir || metadata.incapaciteConsentir || false,
+                        consentementRepresentant: data.consentementRepresentant || metadata.consentementRepresentant || false,
+                        mesuresAcceptees: mesuresFromKeys(mesuresAcceptees.length > 0 ? mesuresAcceptees : data.accepteReparation ? ['indemnisation'] : []),
+                        mesuresRenoncees: mesuresFromKeys(mesuresRenoncees),
                     });
 
                     setRepresentant({
@@ -378,8 +413,20 @@ export function useContrat(victim: Victim) {
         setTranches(tranches.map(t => t.id === id ? { ...t, [field]: value } : t));
     };
 
+    const selectContractTemplate = (templateId: ContractTemplateId) => {
+        const template = getContractTemplateById(templateId);
+        setSelectedTemplateId(templateId);
+        setTranches(createTemplateTranches(templateId));
+        setContractForm((prev) => ({
+            ...prev,
+            prejudiceFinal: template.prejudiceLabel,
+            typePrejudices: template.prejudiceLabel,
+            reparationAdministrative: 'Programme des Réparations Administratives Intégrales (PRAI)',
+        }));
+    };
+
     const applyBaremeToTranches = () => {
-        setTranches(createBaremeTranches(contractForm.prejudiceFinal));
+        setTranches(createTemplateTranches(selectedTemplateId));
     };
 
     // Sauvegarde du contrat
@@ -403,8 +450,29 @@ export function useContrat(victim: Victim) {
                 }
             }
 
+            const mesuresReparationAcceptees = getSelectedMesures(consentements.mesuresAcceptees);
+            const mesuresReparationRenoncees = getSelectedMesures(consentements.mesuresRenoncees);
+            const metadataContrat = {
+                mesuresReparationAcceptees,
+                mesuresReparationRenoncees,
+                paiementMobileMoney: consentements.recuTelephone,
+                paiementInstitutionFinanciere: consentements.paiementInstitutionFinanciere,
+                telephone: {
+                    recu: consentements.recuTelephone,
+                    marque: consentements.telephoneMarque,
+                    modele: consentements.telephoneModele,
+                    imei: consentements.telephoneImei,
+                },
+                evaluationJointe: consentements.evaluationJointe,
+                signataire: consentements.signataire,
+                incapaciteConsentir: consentements.incapaciteConsentir,
+                consentementRepresentant: consentements.consentementRepresentant,
+            };
+
             const contractData = {
-                typeContrat: contractForm.typeContrat,
+                nomBeneficiaire: contractForm.nom,
+                nomPostnom: contractForm.nomPostnom,
+                prenom: contractForm.prenom,
                 reparationAdministrative: contractForm.reparationAdministrative,
                 reparationJudiciaire: contractForm.reparationJudiciaire,
                 typePrejudiceReconnu: contractForm.prejudiceFinal || contractForm.typePrejudices,
@@ -414,11 +482,25 @@ export function useContrat(victim: Victim) {
                 avocatAccompagnement: consentements.avocat,
                 comprisCesdroits: consentements.comprisDroit,
                 organisationAccompagnement: representant.organisation || '',
-                incapableConsentir: representant.nom ? true : false,
+                incapableConsentir: consentements.incapaciteConsentir,
                 nomRepresentant: representant.nom || null,
                 qualiteRepresentant: representant.qualite || null,
                 pieceIdentiteRepresentant: representant.pieceIdentite || null,
-                accepteReparation: consentements.accepteReparation,
+                accepteReparation: mesuresReparationAcceptees.length > 0,
+                refuseReparation: mesuresReparationRenoncees.length > 0,
+                mesuresReparationAcceptees,
+                mesuresReparationRenoncees,
+                recuTelephone: consentements.recuTelephone,
+                aRecuTelephone: consentements.recuTelephone,
+                paiementMobileMoney: consentements.recuTelephone,
+                paiementInstitutionFinanciere: consentements.paiementInstitutionFinanciere,
+                telephoneMarque: consentements.telephoneMarque,
+                telephoneModele: consentements.telephoneModele,
+                telephoneImei: consentements.telephoneImei,
+                evaluationJointe: consentements.evaluationJointe,
+                signataire: consentements.signataire,
+                consentementRepresentant: consentements.consentementRepresentant,
+                metadataContrat,
                 dateSignature: contractForm.dateSignature ? new Date(contractForm.dateSignature).toISOString() : new Date().toISOString(),
                 signature: existingContrat?.signature || 'SIG_ELEC',
                 lieuSignature: contractForm.lieuSignature,
@@ -565,6 +647,8 @@ export function useContrat(victim: Victim) {
         consentements,
         representant,
         contractForm,
+        selectedTemplateId,
+        selectedTemplate,
         canvasRef,
         isSaving,
         saveMessage,
@@ -585,6 +669,7 @@ export function useContrat(victim: Victim) {
         setShowSignatureModal,
 
         // Actions
+        selectContractTemplate,
         startDrawing,
         draw,
         stopDrawing,
