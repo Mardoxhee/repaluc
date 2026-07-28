@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useFetch } from '@/app/context/FetchContext';
 import Swal from 'sweetalert2';
 import EvaluationInput from './EvaluationInput';
+import { getVictimBirthInfo } from '../utils/victimBirthInfo';
 import {
   User,
   Calendar,
@@ -39,16 +40,19 @@ interface EvaluationProps {
     sexe?: string;
     age?: number;
     dateNaissance?: string;
+    lieuNaissance?: string;
     dossier?: string;
     province?: string;
     territoire?: string;
     commune?: string;
     codeUnique?: string;
+    variablesSpecifiques?: Record<string, string | null | undefined>;
   };
 }
 
 const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
   const { fetcher } = useFetch();
+  const birthInfo = getVictimBirthInfo(victim);
   const [currentStep, setCurrentStep] = useState(1);
   const [partenaires, setPartenaires] = useState<Partenaire[]>([]);
   const [loadingPartenaires, setLoadingPartenaires] = useState(false);
@@ -59,7 +63,7 @@ const Evaluation: React.FC<EvaluationProps> = ({ victim }) => {
     victime_NomComplet: victim?.nom || '',
     victime_Sexe: victim?.sexe === 'Homme' ? 'M' : victim?.sexe === 'Femme' ? 'F' : '',
     victime_Age: victim?.age || '',
-    victime_DateNaissance: victim?.dateNaissance || '',
+    victime_DateNaissance: birthInfo.dateNaissance || '',
     lieu_Evaluation: `${victim?.commune || ''} ${victim?.territoire || ''} ${victim?.province || ''}`.trim(),
     date_Evaluation: new Date().toISOString().split('T')[0],
 

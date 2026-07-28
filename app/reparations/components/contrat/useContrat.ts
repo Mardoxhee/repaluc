@@ -4,6 +4,7 @@ import { isOnline } from '../../../utils/victimsCache';
 import { savePendingContract, getAllPendingContracts, deletePendingContract } from '../../../utils/contractsCache';
 import type { PendingContract } from '../../../utils/contractsCache';
 import type { Victim, Tranche, Contrat, Consentements, Representant, SaveMessage, ContractForm, ContractTemplateId, MesureReparationKey } from './types';
+import { getVictimBirthInfo } from '../../utils/victimBirthInfo';
 import {
     cloneMesuresReparation,
     getContractTemplateById,
@@ -23,7 +24,7 @@ const createTemplateTranches = (templateId: ContractTemplateId): Tranche[] => {
 };
 
 const getDateLieuNaissance = (victim: Victim): string => {
-    return [victim.dateNaissance, victim.lieuNaissance].filter(Boolean).join(' à ');
+    return getVictimBirthInfo(victim).dateLieuNaissance;
 };
 
 const getInitialContractForm = (victim: Victim): ContractForm => {

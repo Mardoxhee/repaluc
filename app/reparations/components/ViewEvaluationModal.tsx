@@ -3,6 +3,7 @@ import { Modal } from 'flowbite-react';
 import { X, Download, FileText, User, Stethoscope, AlertTriangle, Target, Shield, Award } from 'lucide-react';
 import { useFetch } from '@/app/context/FetchContext';
 import jsPDF from 'jspdf';
+import { getVictimBirthInfo } from '../utils/victimBirthInfo';
 
 interface ViewEvaluationModalProps {
   victim: any;
@@ -11,6 +12,7 @@ interface ViewEvaluationModalProps {
 
 const ViewEvaluationModal: React.FC<ViewEvaluationModalProps> = ({ victim, onClose }) => {
   const { fetcher } = useFetch();
+  const birthInfo = getVictimBirthInfo(victim);
   const [evaluation, setEvaluation] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [partenaire, setPartenaire] = useState<any>(null);
@@ -68,6 +70,8 @@ const ViewEvaluationModal: React.FC<ViewEvaluationModalProps> = ({ victim, onClo
     doc.text(`Sexe: ${victim.sexe || 'N/A'}`, 20, yPosition);
     yPosition += 7;
     doc.text(`Âge: ${victim.age || 'N/A'}`, 20, yPosition);
+    yPosition += 7;
+    doc.text(`Date de naissance: ${birthInfo.dateNaissance || 'N/A'}`, 20, yPosition);
     yPosition += 7;
     doc.text(`Lieu: ${evaluation.lieuEvaluation || 'N/A'}`, 20, yPosition);
     yPosition += 7;
@@ -244,7 +248,7 @@ const ViewEvaluationModal: React.FC<ViewEvaluationModalProps> = ({ victim, onClo
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-600">Date de naissance</label>
-                <p className="text-gray-900">{victim.dateNaissance || 'N/A'}</p>
+                <p className="text-gray-900">{birthInfo.dateNaissance || 'N/A'}</p>
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-600">Lieu d'évaluation</label>

@@ -20,6 +20,7 @@ export interface Victim {
     prejudicesSubis?: string;
     indemnisation?: number;
     prejudiceFinal?: string;
+    variablesSpecifiques?: Record<string, string | null | undefined>;
 }
 
 export interface Tranche {

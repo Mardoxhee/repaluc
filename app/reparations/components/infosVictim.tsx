@@ -4,12 +4,14 @@ import Swal from 'sweetalert2';
 import { isOnline } from '@/app/utils/victimsCache';
 import { savePendingVictimPhoto, getLatestVictimPhoto } from '@/app/utils/victimPhotosCache';
 import { syncPendingVictimPhotos } from '@/app/utils/victimPhotosSyncService';
+import { getVictimBirthInfo } from '../utils/victimBirthInfo';
 
 interface InfosVictimProps {
     victim: {
         id: number;
         nom?: string;
         dateNaissance?: string;
+        lieuNaissance?: string;
         age?: number;
         sexe?: string;
         categorie?: string;
@@ -78,7 +80,6 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
     const {
         id,
         nom,
-        dateNaissance,
         age,
         sexe,
         categorie,
@@ -113,6 +114,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
         avatar,
         photo,
     } = victim;
+    const birthInfo = getVictimBirthInfo(victim);
     const { isDirect } = victim;
     const campName = getSpecificValue(victim.variablesSpecifiques, ['CAMP', 'NOM DU CAMP/ SITE', 'NOM DU CAMP/SITE', 'NOM DU SITE']);
     const locality = getSpecificValue(victim.variablesSpecifiques, ['LOCALITE', 'LOCALITÉ']);
@@ -802,7 +804,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
                                 <div className="p-4 space-y-3">
                                     <div className="flex">
                                         <span className="text-sm font-semibold text-gray-600 uppercase w-32 flex-shrink-0">Date naissance :</span>
-                                        <span className="text-sm text-gray-800 ml-2">{dateNaissance || "-"}</span>
+                                        <span className="text-sm text-gray-800 ml-2">{birthInfo.dateNaissance || "-"}</span>
                                     </div>
                                     <div className="flex">
                                         <span className="text-sm font-semibold text-gray-600 uppercase w-32 flex-shrink-0">État civil :</span>
