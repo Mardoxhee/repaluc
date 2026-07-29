@@ -25,7 +25,7 @@ type DashboardOption = {
 };
 
 const DashboardReparations: React.FC<DashboardReparationsProps> = ({
-  defaultDashboard = 'luc',
+  defaultDashboard = 'toutes',
   onSelectAgentReparation,
   onShowRecontactedVictims,
   onSelectMention,

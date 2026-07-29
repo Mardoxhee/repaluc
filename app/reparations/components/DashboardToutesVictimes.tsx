@@ -89,6 +89,7 @@ const DashboardToutesVictimes: React.FC<DashboardToutesVictimesProps> = ({
 
   return (
     <DashboardVictimsLuc
+      dashboardScope="all"
       title="Tableau de bord — Toutes les victimes"
       description="Vue globale de toutes les catégories des victimes"
       onSelectAgentReparation={onSelectAgentReparation}

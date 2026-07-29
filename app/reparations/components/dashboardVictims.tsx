@@ -17,10 +17,60 @@ import { buildIndemnisationDashboardStats, normalizeApiList } from '../utils/ind
 interface DashboardVictimsProps {
   onSelectAgentReparation?: (fullName: string) => void;
   onShowRecontactedVictims?: () => void;
+  dashboardScope?: 'all' | 'luc';
   extraSection?: React.ReactNode;
 }
 
-const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentReparation, onShowRecontactedVictims, extraSection }) => {
+const normalizeText = (value: unknown) => String(value ?? '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .trim()
+  .toLowerCase();
+
+const isLucLabel = (value: unknown) => normalizeText(value).includes('luc');
+
+const getNumericTotal = (item: any) => {
+  const total = Number(item?.total ?? item?.count ?? item?.nombre ?? item?.value ?? 0);
+  return Number.isFinite(total) ? total : 0;
+};
+
+const getTotalForLucFromMentions = (payload: any): number | null => {
+  const rows: any[] = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.parMention)
+      ? payload.parMention
+      : Array.isArray(payload?.data?.parMention)
+        ? payload.data.parMention
+        : Array.isArray(payload?.data)
+          ? payload.data
+          : [];
+
+  const total = rows.reduce((sum, item) => {
+    const label = item?.mention ?? item?.label ?? item?.name ?? item?.programme ?? item?.categorie;
+    return isLucLabel(label) ? sum + getNumericTotal(item) : sum;
+  }, 0);
+
+  return total > 0 ? total : null;
+};
+
+const getTotalForLucFromStats = (stats: { programme: any[]; categorie: any[] }) => {
+  const fromProgramme = stats.programme.reduce((sum, item) => (
+    isLucLabel(item?.programme ?? item?.label ?? item?.name) ? sum + getNumericTotal(item) : sum
+  ), 0);
+  if (fromProgramme > 0) return fromProgramme;
+
+  const fromCategorie = stats.categorie.reduce((sum, item) => (
+    isLucLabel(item?.categorie ?? item?.label ?? item?.name) ? sum + getNumericTotal(item) : sum
+  ), 0);
+  return fromCategorie > 0 ? fromCategorie : 0;
+};
+
+const getPaginatedTotal = (payload: any): number | null => {
+  const total = Number(payload?.meta?.total ?? payload?.total ?? payload?.data?.total);
+  return Number.isFinite(total) ? total : null;
+};
+
+const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentReparation, onShowRecontactedVictims, dashboardScope = 'all', extraSection }) => {
   const { fetcher } = useFetch();
   const [loading, setLoading] = useState(true);
   const [loadingRecontact, setLoadingRecontact] = useState(true);
@@ -41,6 +91,7 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
   const [victimesIndemnisationCommencee, setVictimesIndemnisationCommencee] = useState(0);
   const [montantIndemnisationsDejaVersees, setMontantIndemnisationsDejaVersees] = useState(0);
   const [totalVictimesGlobal, setTotalVictimesGlobal] = useState<number | null>(null);
+  const [totalVictimesLuc, setTotalVictimesLuc] = useState(0);
   type SexeStat = { sexe: string; total: number };
   const [stats, setStats] = useState<{
     sexe: SexeStat[];
@@ -79,7 +130,7 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
         const indemnCommencee = typeof globalData?.indemnisation?.commencee === 'number' ? globalData.indemnisation.commencee : 0;
 
         setTotalVictimesGlobal(totalFromGlobal);
-        setVictimesRecontactees(withPhoto);
+        setVictimesRecontactees(dashboardScope === 'luc' ? 0 : withPhoto);
         setVictimesAvecContratSigne(withContrat);
         setVictimesIndemnisationCommencee(indemnCommencee);
         setLoadingRecontact(false);
@@ -96,7 +147,10 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
           prejudiceData,
           contratsData,
           plansIndemnisationData,
-          indemnisationsData
+          indemnisationsData,
+          mentionsData,
+          lucRecontactedData,
+          lucProgressResp
         ] = await Promise.all([
           fetcher('/victime/stats/sexe'),
           fetcher('/victime/stats/tranche-age'),
@@ -109,7 +163,10 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
           fetcher('/victime/stats/prejudice'),
           fetcher('/contrat'),
           fetcher('/plan-indemnisation'),
-          fetcher('/indemnisation')
+          fetcher('/indemnisation'),
+          fetcher('/victime/stats/mentions').catch(() => null),
+          fetcher('/victime/paginate/photo-not-null?page=1&limit=1&mention=luc').catch(() => null),
+          fetcher('/victime/stats/reparation/globalProgress?mention=luc').catch(() => null)
         ]);
 
         const indemnisationStats = buildIndemnisationDashboardStats({
@@ -130,8 +187,31 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
           prejudice: prejudiceData || []
         };
 
-        setVictimesAvecContratSigne(indemnisationStats.totalContrats || withContrat);
-        setVictimesIndemnisationCommencee(indemnisationStats.contratsAvecPaiement || indemnCommencee);
+        const scopedTotalLuc = getTotalForLucFromMentions(mentionsData) ?? getTotalForLucFromStats(newStats);
+        const lucRecontactedTotal = getPaginatedTotal(lucRecontactedData);
+        const lucProgressData = lucProgressResp?.data;
+        const lucProgressTotal = typeof lucProgressData?.total === 'number' ? lucProgressData.total : null;
+        const hasScopedLucProgress = lucProgressTotal !== null && lucProgressTotal === scopedTotalLuc;
+        const lucProgressWithPhoto = typeof lucProgressData?.photo?.withPhoto === 'number' ? lucProgressData.photo.withPhoto : null;
+        const lucProgressWithContrat = typeof lucProgressData?.contrat?.withContrat === 'number' ? lucProgressData.contrat.withContrat : null;
+        const lucProgressIndemnCommencee = typeof lucProgressData?.indemnisation?.commencee === 'number' ? lucProgressData.indemnisation.commencee : null;
+
+        setVictimesAvecContratSigne(
+          dashboardScope === 'luc' && hasScopedLucProgress && lucProgressWithContrat !== null
+            ? lucProgressWithContrat
+            : indemnisationStats.totalContrats || withContrat
+        );
+        setVictimesIndemnisationCommencee(
+          dashboardScope === 'luc' && hasScopedLucProgress && lucProgressIndemnCommencee !== null
+            ? lucProgressIndemnCommencee
+            : indemnisationStats.contratsAvecPaiement || indemnCommencee
+        );
+        setVictimesRecontactees(
+          dashboardScope === 'luc'
+            ? (hasScopedLucProgress && lucProgressWithPhoto !== null ? lucProgressWithPhoto : lucRecontactedTotal ?? 0)
+            : withPhoto
+        );
+        setTotalVictimesLuc(scopedTotalLuc);
         setMontantIndemnisationsDejaVersees(indemnisationStats.totalVerseUSD);
         setStats(newStats);
       } catch (error) {
@@ -141,6 +221,7 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
         setVictimesAvecContratSigne(0);
         setVictimesIndemnisationCommencee(0);
         setMontantIndemnisationsDejaVersees(0);
+        setTotalVictimesLuc(0);
       } finally {
         setLoading(false);
         setLoadingRecontact(false);
@@ -163,7 +244,7 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [fetcher]);
+  }, [fetcher, dashboardScope]);
 
   useEffect(() => {
     const fetchAgents = async () => {
@@ -283,6 +364,8 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
 
   // Calculs des totaux
   const totalVictimes = totalVictimesGlobal ?? stats?.sexe?.reduce((acc, item: any) => acc + parseInt(item.total), 0);
+  const scopedTotalVictimes = dashboardScope === 'luc' ? totalVictimesLuc : totalVictimes;
+  const scopedTotalLabel = dashboardScope === 'luc' ? 'Victimes LUC enregistrées' : 'Victimes enregistrées';
   const totalFemmes = stats?.sexe
     ?.filter((item: any) => ['f', 'femme'].includes(String(item.sexe).trim().toLowerCase()))
     .reduce((acc: number, item: any) => acc + Number(item.total), 0) || 0;
@@ -372,10 +455,10 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
 
         <StatCard
           title="Total Victimes"
-          value={loading ? "..." : totalVictimes.toLocaleString()}
+          value={loading ? "..." : scopedTotalVictimes.toLocaleString()}
           icon={<FiUsers className="text-white text-xl" />}
           color="bg-gradient-to-br from-blue-500 to-blue-600"
-          subtitle="Victimes enregistrées"
+          subtitle={scopedTotalLabel}
           loading={loading}
         />
 
@@ -411,7 +494,7 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
         <ProgressCard
           title="Victimes recontactées"
           current={victimesRecontactees}
-          total={totalVictimes || 0}
+          total={scopedTotalVictimes || 0}
           icon={<FiCheckCircle className="text-white text-xl" />}
           color="bg-gradient-to-br from-indigo-500 to-indigo-600"
           subtitle=""
@@ -422,7 +505,7 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
         <ProgressCard
           title="Contrats signés"
           current={victimesAvecContratSigne}
-          total={totalVictimes || 0}
+          total={scopedTotalVictimes || 0}
           icon={<FiFileText className="text-white text-xl" />}
           color="bg-gradient-to-br from-emerald-500 to-emerald-600"
           subtitle=""
@@ -432,7 +515,7 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
         <ProgressCard
           title="Indemnisation commencée"
           current={victimesIndemnisationCommencee}
-          total={totalVictimes || 0}
+          total={scopedTotalVictimes || 0}
           icon={<FiTrendingUp className="text-white text-xl" />}
           color="bg-gradient-to-br from-amber-500 to-amber-600"
           subtitle=""
@@ -868,13 +951,13 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
           </div>
           <div>
             <h3 className="text-xl font-bold">Résumé Exécutif</h3>
-            <p className="text-blue-100">Aperçu global du système FONAREV</p>
+            <p className="text-blue-100">{dashboardScope === 'luc' ? 'Aperçu des victimes LUC' : 'Aperçu global du système FONAREV'}</p>
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
           <div className="bg-white/10 rounded-lg p-4">
-            <div className="text-2xl font-bold">{loading ? "..." : totalVictimes}</div>
-            <div className="text-blue-100 text-sm">Victimes totales enregistrées</div>
+            <div className="text-2xl font-bold">{loading ? "..." : scopedTotalVictimes}</div>
+            <div className="text-blue-100 text-sm">{dashboardScope === 'luc' ? 'Victimes LUC enregistrées' : 'Victimes totales enregistrées'}</div>
           </div>
           <div className="bg-white/10 rounded-lg p-4">
             <div className="text-2xl font-bold">{loading ? "..." : `${stats.totalIndemnisation.toLocaleString()} USD`}</div>
