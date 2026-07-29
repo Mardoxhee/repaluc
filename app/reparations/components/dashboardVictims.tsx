@@ -19,6 +19,7 @@ interface DashboardVictimsProps {
   onShowRecontactedVictims?: () => void;
   dashboardScope?: 'all' | 'luc';
   extraSection?: React.ReactNode;
+  afterMainStats?: React.ReactNode;
 }
 
 const normalizeText = (value: unknown) => String(value ?? '')
@@ -70,7 +71,15 @@ const getPaginatedTotal = (payload: any): number | null => {
   return Number.isFinite(total) ? total : null;
 };
 
-const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentReparation, onShowRecontactedVictims, dashboardScope = 'all', extraSection }) => {
+const normalizeSexeLabel = (value: unknown): 'Femme' | 'Homme' | null => {
+  const normalized = normalizeText(value);
+  if (!normalized || normalized === '0' || normalized === 'null' || normalized === 'undefined') return null;
+  if (['f', 'femme', 'femmes', 'feminin', 'feminins', 'female', 'women', 'woman'].includes(normalized)) return 'Femme';
+  if (['h', 'homme', 'hommes', 'm', 'masculin', 'masculins', 'male', 'men', 'man'].includes(normalized)) return 'Homme';
+  return null;
+};
+
+const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentReparation, onShowRecontactedVictims, dashboardScope = 'all', extraSection, afterMainStats }) => {
   const { fetcher } = useFetch();
   const [loading, setLoading] = useState(true);
   const [loadingRecontact, setLoadingRecontact] = useState(true);
@@ -367,10 +376,10 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
   const scopedTotalVictimes = dashboardScope === 'luc' ? totalVictimesLuc : totalVictimes;
   const scopedTotalLabel = dashboardScope === 'luc' ? 'Victimes LUC enregistrées' : 'Victimes enregistrées';
   const totalFemmes = stats?.sexe
-    ?.filter((item: any) => ['f', 'femme'].includes(String(item.sexe).trim().toLowerCase()))
+    ?.filter((item: any) => normalizeSexeLabel(item.sexe) === 'Femme')
     .reduce((acc: number, item: any) => acc + Number(item.total), 0) || 0;
   const totalHommes = stats?.sexe
-    ?.filter((item: any) => ['h', 'homme', 'm'].includes(String(item.sexe).trim().toLowerCase()))
+    ?.filter((item: any) => normalizeSexeLabel(item.sexe) === 'Homme')
     .reduce((acc: number, item: any) => acc + Number(item.total), 0) || 0;
   const totalProvinces = stats?.province?.length;
   const totalTerritoires = stats?.territoire?.length;
@@ -383,17 +392,9 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
 
   // Préparation des données pour les graphiques
   const sexeChartData = (() => {
-    const normalizeSexe = (s: string | null | undefined): string | null => {
-      if (!s) return null;
-      const v = s.trim().toLowerCase();
-      if (!v || v === 'null') return null;
-      if (v === 'h' || v === 'homme' || v === 'm') return 'Homme';
-      if (v === 'f' || v === 'femme') return 'Femme';
-      return s.trim();
-    };
     const grouped = new Map<string, number>();
     for (const item of stats.sexe) {
-      const key = normalizeSexe(item.sexe);
+      const key = normalizeSexeLabel(item.sexe);
       if (!key) continue;
       grouped.set(key, (grouped.get(key) || 0) + Number(item.total));
     }
@@ -450,7 +451,7 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
       />
       {extraSection}
       {/* Cartes de statistiques principales */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
 
 
         <StatCard
@@ -489,7 +490,7 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
         />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
 
         <ProgressCard
           title="Victimes recontactées"
@@ -532,6 +533,12 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
           loading={loading || loadingRecontact}
         />
       </div>
+
+      {afterMainStats && (
+        <div className="mb-12">
+          {afterMainStats}
+        </div>
+      )}
 
       {/* Cartes de répartition par sexe */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">

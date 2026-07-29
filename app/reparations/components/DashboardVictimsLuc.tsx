@@ -42,6 +42,10 @@ const DashboardVictimsLuc: React.FC<DashboardVictimsLucProps> = ({
             </div>
           </div>
           {beforeProgression}
+        </>
+      }
+      afterMainStats={
+        <>
           <ProgressionMesuresLuc />
           <div className="mt-8">
             <ProgressionDetailLuc />
