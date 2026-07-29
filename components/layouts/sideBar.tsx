@@ -1,8 +1,7 @@
 "use client"
 
 import React from 'react';
-import { FiGrid, FiBox, FiUsers, FiRepeat, FiSettings, FiShield } from 'react-icons/fi';
-import Image from 'next/image';
+import { FiBox, FiRepeat, FiSettings, FiShield } from 'react-icons/fi';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -13,7 +12,6 @@ interface SideBarProps {
 const navItems = [
   { label: 'LUC', icon: <FiBox size={20} />, href: '/luc' },
   { label: 'Réparations', icon: <FiRepeat size={20} />, href: '/reparations' },
-  { label: 'Accès à la justice', icon: <FiUsers size={20} />, href: '/#' },
 ];
 
 const SideBar: React.FC<SideBarProps> = ({ onNavigate }) => {

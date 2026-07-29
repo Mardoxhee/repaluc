@@ -1,6 +1,5 @@
-import Image from "next/image";
 import MainLayout from "@/components/layouts/MainLayout";
-import { FiShield, FiUsers, FiFileText, FiTrendingUp, FiCheck, FiArrowRight } from 'react-icons/fi';
+import { FiShield, FiUsers, FiFileText, FiCheck, FiArrowRight } from 'react-icons/fi';
 
 export default function Home() {
   return (
@@ -93,31 +92,6 @@ export default function Home() {
                   <a
                     href="/reparations"
                     className="inline-flex items-center gap-2 bg-green-600 text-white px-3 py-2 rounded-lg font-semibold shadow-md hover:bg-green-700 hover:shadow-lg transition-all duration-200 group-hover:scale-105 text-xs"
-                  >
-                    Accéder au module
-                    <FiArrowRight className="group-hover:translate-x-1 transition-transform" />
-                  </a>
-                </div>
-              </div>
-              {/* Module Justice */}
-              <div className="group relative bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden hover:shadow-xl transition-all duration-500 min-h-[140px]">
-                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-500 to-indigo-600"></div>
-                <div className="p-3">
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-md group-hover:scale-105 transition-transform duration-300">
-                      <FiTrendingUp className="text-white text-2xl" />
-                    </div>
-                    <div>
-                      <h3 className="text-[14px] font-bold text-gray-900">Accès à la Justice</h3>
-                      <p className="text-purple-600 font-medium text-xs">Module Justice</p>
-                    </div>
-                  </div>
-                  <p className="text-[12px] text-gray-600 mb-2 leading-snug">
-                    Accompagnement juridique des victimes.
-                  </p>
-                  <a
-                    href="/justice"
-                    className="inline-flex items-center gap-2 bg-purple-600 text-white px-3 py-2 rounded-lg font-semibold shadow-md hover:bg-purple-700 hover:shadow-lg transition-all duration-200 group-hover:scale-105 text-xs"
                   >
                     Accéder au module
                     <FiArrowRight className="group-hover:translate-x-1 transition-transform" />
