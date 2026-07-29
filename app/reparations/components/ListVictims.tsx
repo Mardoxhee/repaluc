@@ -260,7 +260,6 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
     const [isOffline, setIsOffline] = useState(false);
     const [usingCache, setUsingCache] = useState(false);
     const [showOfflineIndicator, setShowOfflineIndicator] = useState(true);
-    const [initialLoading, setInitialLoading] = useState(false);
     const [loadingProgress, setLoadingProgress] = useState({ current: 0, total: 1 });
     const [backgroundLoading, setBackgroundLoading] = useState(false);
     const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false);
@@ -448,6 +447,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
 
                 setUsingCache(true);
                 setHasLoadedInitialData(true);
+                setLoading(false);
             }
 
             // Si on est hors ligne
@@ -455,7 +455,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                 // Si on a tout téléchargé, on reste sur le cache
                 if (progress?.completed) {
                     console.log('[LoadAllPages] Mode hors ligne - utilisation du cache complet');
-                    setInitialLoading(false);
+                    setLoading(false);
                     setIncompleteLoadingMessage("");
                     return;
                 }
@@ -467,8 +467,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                 setIncompleteLoadingMessage(
                     `Le chargement des données s'est arrêté à ${percentage}% (page ${progress?.lastPage || 0}/${progress?.totalPages || '?'}). Reconnectez-vous pour continuer.`
                 );
-                setInitialLoading(false);
                 setBackgroundLoading(false);
+                setLoading(false);
                 return;
             }
 
@@ -479,8 +479,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
             // IMPORTANT: Si le chargement est déjà complété, NE PAS relancer la synchronisation
             if (progress?.completed) {
                 console.log('[LoadAllPages] Synchronisation déjà terminée - pas de rechargement');
-                setInitialLoading(false);
                 setBackgroundLoading(false);
+                setLoading(false);
                 return;
             }
 
@@ -494,9 +494,13 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
             if (hasCachedData) {
                 console.log('[LoadAllPages] Activation du mode background loading');
                 setBackgroundLoading(true);
-                setInitialLoading(false);
             } else {
-                setInitialLoading(true);
+                setLoading(true);
+                setBackgroundLoading(true);
+                setLoadingProgress({
+                    current: Math.max(1, progress?.lastPage || startPage),
+                    total: progress?.totalPages || 1
+                });
             }
 
             await loadAllPagesWithResume(cacheKey, progressKey, startPage, existingData);
@@ -506,7 +510,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
 
         } catch (error) {
             console.error('[LoadAllPages] Erreur:', error);
-            setInitialLoading(false);
+            setBackgroundLoading(false);
+            setLoading(false);
         }
     }, [fetchCtx?.fetcher, meta.page, meta.limit, applyLocalFilters]);
 
@@ -517,7 +522,11 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
         startPage: number,
         existingData: any[]
     ): Promise<void> => {
-        if (!fetchCtx?.fetcher) return;
+        if (!fetchCtx?.fetcher) {
+            setBackgroundLoading(false);
+            setLoading(false);
+            return;
+        }
 
         try {
             // Charger la première page pour connaître le total
@@ -528,7 +537,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                     : '/victime/paginate/filtered';
             const firstPage = await fetchCtx.fetcher(`${firstEndpoint}?page=1&limit=20`);
             if (!firstPage?.data) {
-                setInitialLoading(false);
+                setBackgroundLoading(false);
+                setLoading(false);
                 return;
             }
 
@@ -557,10 +567,10 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                 setVictims(firstPage.data);
                 setMeta(firstPage.meta);
                 setHasLoadedInitialData(true);
-                setInitialLoading(false);
+                setLoading(false);
             } else {
                 console.log(`[Resume] Reprise à partir de la page ${startPage}/${totalPages}`);
-                setInitialLoading(false);
+                setLoading(false);
             }
 
             // Charger les pages restantes en arrière-plan
@@ -623,6 +633,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
 
         } catch (error) {
             console.error('[LoadAllPagesWithResume] Erreur:', error);
+            setLoading(false);
         } finally {
             setLoadingProgress({ current: 0, total: 1 });
             setBackgroundLoading(false);
@@ -1026,61 +1037,10 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
         }
     }, []);
 
-    // Afficher le loader de chargement initial
-    if (initialLoading) {
-        const progressPercentage = Math.round((loadingProgress.current / loadingProgress.total) * 100);
-
-        return (
-            <div className="fixed inset-0 bg-white/95 flex items-center justify-center z-50">
-                <div className="text-center max-w-md w-full px-4">
-                    {/* Logo ou icône */}
-                    <div className="flex justify-center mb-8">
-                        <div className="relative w-28 h-28">
-                            {/* Cercle de fond */}
-                            <div className="absolute inset-0 border-4 border-primary-100 rounded-full"></div>
-
-                            {/* Cercle animé */}
-                            <div
-                                className="absolute inset-0 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"
-                                style={{
-                                    borderWidth: '6px',
-                                    borderColor: '#007fba',
-                                    borderTopColor: 'transparent'
-                                }}
-                            ></div>
-
-                            {/* Pourcentage */}
-                            <div className="absolute inset-0 flex items-center justify-center">
-                                <span className="text-primary-600 font-bold text-2xl">{progressPercentage}%</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Texte */}
-                    <h2 className="text-2xl font-bold text-primary-700 mb-3">Chargement des données</h2>
-                    <p className="text-primary-600 font-medium mb-6">
-                        Page {loadingProgress.current} sur {loadingProgress.total}
-                    </p>
-
-                    {/* Barre de progression */}
-                    <div className="w-full max-w-xs h-2.5 bg-primary-100 rounded-full overflow-hidden mx-auto">
-                        <div
-                            className="h-full bg-primary-500 transition-all duration-300 ease-out"
-                            style={{
-                                width: `${progressPercentage}%`,
-                                boxShadow: '0 0 12px rgba(0, 127, 186, 0.4)'
-                            }}
-                        ></div>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
     return (
         <>
             {/* Barre de progression en arrière-plan */}
-            {backgroundLoading && loadingProgress.total > 0 && (
+            {backgroundLoading && loadingProgress.current > 0 && loadingProgress.total > 0 && (
                 <div className="  left-0 right-0 z-50 bg-white shadow-md border-b border-gray-200">
                     <div className="px-6 py-3">
                         <div className="flex items-center justify-between mb-2">
