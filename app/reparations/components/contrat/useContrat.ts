@@ -565,15 +565,19 @@ export function useContrat(victim: Victim) {
 
         const buttons = element.querySelectorAll('.no-print');
         buttons.forEach(btn => (btn as HTMLElement).style.display = 'none');
+        element.classList.add('pdf-export-mode');
 
         try {
+            await new Promise((resolve) => requestAnimationFrame(resolve));
+
             const canvas = await html2canvas(element, {
-                scale: 3,
+                scale: 2,
                 useCORS: true,
                 logging: false,
                 allowTaint: true,
                 backgroundColor: '#ffffff',
-                windowWidth: 1200,
+                windowWidth: element.scrollWidth,
+                windowHeight: element.scrollHeight,
                 imageTimeout: 0
             });
 
@@ -585,10 +589,10 @@ export function useContrat(victim: Victim) {
                 compress: true
             });
 
-            const marginLeft = 15;
-            const marginTop = 20;
-            const marginRight = 15;
-            const marginBottom = 20;
+            const marginLeft = 0;
+            const marginTop = 0;
+            const marginRight = 0;
+            const marginBottom = 0;
 
             const pdfWidth = 210;
             const pdfHeight = 297;
@@ -638,6 +642,7 @@ export function useContrat(victim: Victim) {
 
             pdf.save(`Contrat_${victim.nom || 'Victime'}_${new Date().toISOString().split('T')[0]}.pdf`);
         } finally {
+            element.classList.remove('pdf-export-mode');
             buttons.forEach(btn => (btn as HTMLElement).style.display = '');
         }
     };

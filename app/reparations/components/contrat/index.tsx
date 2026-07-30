@@ -51,24 +51,116 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
     return (
         <>
             <style jsx global>{`
+                #contrat-content {
+                    width: 210mm;
+                    max-width: 100%;
+                    margin: 0 auto;
+                    background: #ffffff;
+                    color: #111827;
+                    font-family: Arial, Helvetica, sans-serif;
+                    font-size: 12px;
+                    line-height: 1.45;
+                    padding: 14mm 16mm;
+                    box-shadow: 0 24px 70px -48px rgba(15, 23, 42, 0.65);
+                }
+                #contrat-content .contract-section {
+                    margin-bottom: 18px;
+                }
+                #contrat-content .contract-grid {
+                    display: grid;
+                    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+                    column-gap: 22px;
+                    row-gap: 9px;
+                }
+                #contrat-content .contract-field {
+                    display: grid;
+                    grid-template-columns: max-content minmax(0, 1fr);
+                    align-items: end;
+                    gap: 7px;
+                    min-width: 0;
+                }
+                #contrat-content .contract-field.contract-field-stacked {
+                    display: block;
+                }
+                #contrat-content .contract-label {
+                    font-weight: 700;
+                    color: #111827;
+                    white-space: nowrap;
+                }
+                #contrat-content .contract-field-value,
+                #contrat-content input[type='text'],
+                #contrat-content input[type='number'],
+                #contrat-content input[type='date'] {
+                    min-width: 0;
+                    width: 100%;
+                    border: 0;
+                    border-bottom: 1px dotted #9ca3af;
+                    background: transparent;
+                    color: #111827;
+                    font: inherit;
+                    font-weight: 600;
+                    line-height: 1.35;
+                    min-height: 20px;
+                    padding: 0 3px 2px;
+                    outline: none;
+                    overflow: visible;
+                    text-overflow: ellipsis;
+                }
+                #contrat-content input[type='date'].contract-field-value {
+                    min-width: 120px;
+                }
+                #contrat-content input[type='checkbox'] {
+                    width: 12px;
+                    height: 12px;
+                    accent-color: #1d4ed8;
+                    flex: 0 0 auto;
+                }
+                #contrat-content .contract-soft-title {
+                    margin: 20px 0 10px;
+                    padding: 7px 10px;
+                    border-left: 4px solid #1d4ed8;
+                    background: #eff6ff;
+                    color: #172554;
+                    font-weight: 800;
+                    letter-spacing: 0.01em;
+                }
+                #contrat-content .signature-box {
+                    width: 100%;
+                    min-height: 92px;
+                    max-height: 118px;
+                    border: 1.5px solid #9ca3af;
+                    padding: 8px;
+                    background: white;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    overflow: hidden;
+                }
+                #contrat-content .signature-box img {
+                    max-width: 100% !important;
+                    max-height: 98px !important;
+                    object-fit: contain;
+                }
                 @media print {
                     .no-print {
                         display: none !important;
                     }
                     #contrat-content {
-                        max-width: 100%;
-                        padding: 20px;
+                        width: 210mm;
+                        max-width: 210mm;
+                        padding: 12mm 14mm;
+                        box-shadow: none;
                     }
+                }
+                #contrat-content.pdf-export-mode {
+                    width: 210mm !important;
+                    max-width: 210mm !important;
+                    box-shadow: none !important;
+                    padding: 12mm 14mm !important;
                 }
                 .page-break-avoid {
                     page-break-inside: avoid;
                     break-inside: avoid;
-                }
-                .signature-box {
-                    border: 2px solid #9ca3af;
-                    padding: 8px;
-                    background: white;
-                    display: inline-block;
                 }
             `}</style>
 
@@ -107,7 +199,7 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
 
                 {/* Affichage du détail du contrat ou formulaire de création */}
                 {!loadingContrat && (!existingContrat || showContratDetail) && (
-                    <div className="max-w-5xl mx-auto p-8">
+                    <div className="mx-auto max-w-[calc(210mm+4rem)] p-4 sm:p-6">
                         {/* Boutons d'action */}
                         <div className="flex justify-between items-center mb-4 no-print">
                             {existingContrat && (

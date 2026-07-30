@@ -34,84 +34,83 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
     return (
         <>
             {/* Section signatures */}
-            <div className="mt-8">
-                <div className="mb-6">
-                    <div className="flex flex-wrap items-end gap-x-24 gap-y-2 text-sm">
-                        <label className="flex min-w-[28rem] max-w-[36rem] flex-1 items-end gap-2">
+            <div className="mt-8 page-break-avoid">
+                <div className="mb-5">
+                    <div className="grid grid-cols-2 gap-8 text-sm">
+                        <label className="flex min-w-0 items-end gap-2">
                             <span className="shrink-0">Fait à</span>
                             <input
                                 type="text"
                                 value={contractForm.lieuSignature}
                                 onChange={(e) => updateField('lieuSignature', e.target.value)}
-                                className="min-w-48 flex-1 border-b border-dotted border-gray-400 bg-transparent px-1 py-0.5 text-sm outline-none"
+                                className="min-w-0 flex-1 border-b border-dotted border-gray-400 bg-transparent px-1 py-0.5 text-sm outline-none"
                             />
                         </label>
-                        <label className="ml-8 flex shrink-0 items-end gap-3">
+                        <label className="flex min-w-0 items-end gap-3">
                             <span>, le</span>
                             <input
                                 type="date"
                                 value={contractForm.dateSignature}
                                 onChange={(e) => updateField('dateSignature', e.target.value)}
-                                className="w-40 border-b border-dotted border-gray-400 bg-transparent px-1 py-0.5 text-sm outline-none"
+                                className="min-w-0 flex-1 border-b border-dotted border-gray-400 bg-transparent px-1 py-0.5 text-sm outline-none"
                             />
                         </label>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-12 gap-8">
-                    <div className="col-span-5">
-                        <div className="mt-6">
-                            <p className="font-bold text-sm mb-2">Pour le FONAREV</p>
-                            <p className="text-sm">
-                                Nom :{' '}
+                <div className="grid grid-cols-2 gap-12">
+                    <div>
+                        <div className="border-t-2 border-blue-700 pt-3">
+                            <p className="font-bold text-sm mb-3 text-blue-950">Pour le FONAREV</p>
+                            <label className="mb-2 flex items-end gap-2 text-sm">
+                                <span>Nom :</span>
                                 <input
                                     type="text"
                                     value={contractForm.fonarevNom}
                                     onChange={(e) => updateField('fonarevNom', e.target.value)}
-                                    className="border-b border-dotted border-gray-400 outline-none text-sm bg-transparent px-1 w-56"
+                                    className="min-w-0 flex-1 border-b border-dotted border-gray-400 bg-transparent px-1 outline-none"
                                 />
-                            </p>
-                            <p className="text-sm">
-                                Fonction :{' '}
+                            </label>
+                            <label className="mb-5 flex items-end gap-2 text-sm">
+                                <span>Fonction :</span>
                                 <input
                                     type="text"
                                     value={contractForm.fonarevFonction}
                                     onChange={(e) => updateField('fonarevFonction', e.target.value)}
-                                    className="border-b border-dotted border-gray-400 outline-none text-sm bg-transparent px-1 w-56"
+                                    className="min-w-0 flex-1 border-b border-dotted border-gray-400 bg-transparent px-1 outline-none"
                                 />
-                            </p>
+                            </label>
                             <p className="text-sm mt-4">Signature :</p>
-                            <div className="border-b border-gray-400 w-48 mt-8"></div>
+                            <div className="mt-10 w-56 border-b border-gray-400"></div>
                         </div>
                     </div>
 
-                    <div className="col-span-4 col-start-9">
-                        <div className="mt-12">
-                            <p className="font-bold text-sm mb-2">Le/la bénéficiaire</p>
-                            <p className="text-sm mb-4">
-                                Nom :{' '}
+                    <div>
+                        <div className="border-t-2 border-blue-700 pt-3">
+                            <p className="font-bold text-sm mb-3 text-blue-950">Le/la bénéficiaire</p>
+                            <label className="mb-4 flex items-end gap-2 text-sm">
+                                <span>Nom :</span>
                                 <input
                                     type="text"
                                     value={contractForm.nom || victim.nom || ''}
                                     onChange={(e) => updateField('nom', e.target.value)}
-                                    className="border-b border-dotted border-gray-400 outline-none text-sm bg-transparent px-1 w-56"
+                                    className="min-w-0 flex-1 border-b border-dotted border-gray-400 bg-transparent px-1 outline-none"
                                 />
-                            </p>
+                            </label>
                             <div className="mb-2">
-                                <p className="text-sm mb-2">Signature ou empreinte :</p>
-                                <p className="text-xs italic text-gray-600 mb-2">(précédée de la mention LU ET APPROUVÉ)</p>
+                                <p className="text-sm font-semibold">Signature ou empreinte</p>
+                                <p className="text-xs italic text-gray-600 mb-2">Précédée de la mention « LU ET APPROUVÉ »</p>
 
                                 {existingContrat && signatureUrl ? (
-                                    <div className="signature-box inline-block">
+                                    <div className="signature-box">
                                         <img
                                             src={signatureUrl}
                                             alt="Signature"
-                                            className="max-w-full h-auto"
-                                            style={{ maxWidth: '500px', maxHeight: '300px' }}
+                                            className="h-auto max-w-full"
                                         />
                                     </div>
                                 ) : pendingOfflineContrat ? (
-                                    <div className="no-print p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                                    <div className="no-print p-4 bg-amber-50 border border-amber-200">
                                         <div className="flex items-center gap-3 mb-2">
                                             <div className="flex items-center justify-center w-10 h-10 bg-amber-100 rounded-full">
                                                 <Clock className="w-5 h-5 text-amber-600" />
@@ -132,7 +131,7 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
                                     <button
                                         type="button"
                                         onClick={() => setShowSignatureModal(true)}
-                                        className="no-print inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors"
+                                        className="no-print inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
                                     >
                                         Signer le contrat
                                     </button>
