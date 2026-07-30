@@ -1,14 +1,14 @@
 export const COLORS = [
-  "#007fba",
-  "#7f2360",
-  "#0066cc",
-  "#cc3366",
-  "#0080ff",
-  "#ff6b9d",
-  "#4da6ff",
-  "#ff8fab",
-  "#80bfff",
-  "#ffb3d1",
+  "#0f766e",
+  "#2563eb",
+  "#7c3aed",
+  "#c2410c",
+  "#be185d",
+  "#64748b",
+  "#0891b2",
+  "#9333ea",
+  "#ca8a04",
+  "#475569",
 ];
 
-export const TRANCHE_AGE_ORDER = ['0-17', '18-35', '36-60', '60+'];
+export const TRANCHE_AGE_ORDER = ['0-4', '5-17', '18-34', '35-59', '60+', 'INCONNU'];

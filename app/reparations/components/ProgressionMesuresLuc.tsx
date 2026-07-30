@@ -98,10 +98,12 @@ const getVisual = (nom: string): Visual => {
 };
 
 const isLucVictim = (victim: any): boolean => {
+  const mentionValue = typeof victim?.mention === 'string' ? victim.mention.trim().toLowerCase() : '';
   const statusValue = typeof victim?.status === 'string' ? victim.status.trim().toLowerCase() : '';
   const categorieValue = typeof victim?.categorie === 'string' ? victim.categorie.trim().toLowerCase() : '';
   const programmeValue = typeof victim?.programme === 'string' ? victim.programme.trim().toLowerCase() : '';
   return (
+    mentionValue === 'luc' ||
     statusValue.includes('luc') ||
     categorieValue.includes('luc') ||
     programmeValue.includes('luc')
@@ -134,7 +136,7 @@ const ProgressionMesuresLuc: React.FC = () => {
     const loadGlobalProgress = async () => {
       try {
         if (!isOnline() || !fetcher) return;
-        const resp = await fetcher('/victime/stats/reparation/globalProgress');
+        const resp = await fetcher('/victime/stats/reparation/globalProgress/LUC');
         const commencee = Number(resp?.data?.indemnisation?.commencee);
         if (mounted) setIndemnisationBeneficiaires(Number.isFinite(commencee) ? commencee : 0);
       } catch {

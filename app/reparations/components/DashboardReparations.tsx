@@ -35,7 +35,7 @@ const DashboardReparations: React.FC<DashboardReparationsProps> = ({
       {
         key: 'toutes',
         label: 'Toutes les victimes',
-        description: 'Vue globale reprise du dashboard LUC.',
+        description: 'Vue consolidée multi-mentions.',
         icon: <FiUsers size={18} className="text-indigo-600" />,
       },
       {
@@ -70,15 +70,16 @@ const DashboardReparations: React.FC<DashboardReparationsProps> = ({
 
   return (
     <div className="w-full">
-      <div className="mb-6">
+      <div className="mb-7 rounded-[1.6rem] border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-primary-50/40 p-5 shadow-[0_20px_55px_-42px_rgba(15,23,42,0.75)]">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <h2 className="text-xl font-bold text-gray-900">Dashboard Réparations</h2>
-            <p className="text-sm text-gray-600">Choisis le type de dashboard à consulter.</p>
+            <div className="text-[11px] font-black uppercase tracking-[0.18em] text-primary-700">Centre de suivi</div>
+            <h2 className="text-2xl font-black tracking-tight text-slate-950">Dashboard Réparations</h2>
+            <p className="text-sm text-slate-600">Chaque mention garde maintenant ses propres chiffres et son propre rythme.</p>
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           {options.map((o) => {
             const active = o.key === selected;
             return (
@@ -86,16 +87,16 @@ const DashboardReparations: React.FC<DashboardReparationsProps> = ({
                 key={o.key}
                 type="button"
                 onClick={() => setSelected(o.key)}
-                className={`text-left p-4 rounded-xl border transition-all ${active
-                  ? 'bg-white border-primary-300 shadow-sm'
-                  : 'bg-gray-50 border-gray-200 hover:bg-white hover:border-gray-300'
+                className={`group text-left p-4 rounded-2xl border transition-all ${active
+                  ? 'bg-slate-950 border-slate-950 shadow-[0_18px_35px_-26px_rgba(15,23,42,0.9)] text-white'
+                  : 'bg-white/75 border-slate-200 hover:bg-white hover:border-primary-200 hover:-translate-y-0.5'
                   }`}
               >
                 <div className="flex items-start gap-3">
-                  <div className="mt-0.5">{o.icon}</div>
+                  <div className={`mt-0.5 rounded-xl p-2 ${active ? 'bg-white/10' : 'bg-slate-50 group-hover:bg-primary-50'}`}>{o.icon}</div>
                   <div className="min-w-0">
-                    <div className="text-sm font-semibold text-gray-900 truncate">{o.label}</div>
-                    <div className="text-xs text-gray-600">{o.description}</div>
+                    <div className={`text-sm font-bold truncate ${active ? 'text-white' : 'text-slate-950'}`}>{o.label}</div>
+                    <div className={`text-xs leading-snug ${active ? 'text-white/70' : 'text-slate-500'}`}>{o.description}</div>
                   </div>
                 </div>
               </button>

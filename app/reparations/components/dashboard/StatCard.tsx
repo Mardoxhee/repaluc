@@ -13,26 +13,27 @@ export interface StatCardProps {
 }
 
 const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color, subtitle, trend, loading }) => (
-  <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-all duration-300 group">
+  <div className="relative overflow-hidden bg-white/95 rounded-2xl shadow-[0_14px_40px_-28px_rgba(15,23,42,0.55)] border border-slate-200/70 p-5 hover:-translate-y-0.5 hover:shadow-[0_18px_44px_-26px_rgba(15,23,42,0.62)] transition-all duration-300 group">
+    <div className={`absolute inset-x-0 top-0 h-1 ${color}`} />
     <div className="flex items-start justify-between">
       <div className="flex-1">
-        <div className="flex items-center gap-3 mb-3">
-          <div className={`p-3 rounded-xl ${color} shadow-md group-hover:scale-110 transition-transform duration-300`}>
+        <div className="flex items-start gap-3 mb-4">
+          <div className={`p-2.5 rounded-xl ${color} shadow-sm ring-1 ring-white/40 group-hover:scale-105 transition-transform duration-300`}>
             {icon}
           </div>
-          <div>
-            <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">{title}</h3>
-            {subtitle && <p className="text-xs text-gray-500 mt-1">{subtitle}</p>}
+          <div className="min-w-0">
+            <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-[0.16em]">{title}</h3>
+            {subtitle && <p className="text-xs text-slate-500 mt-1 leading-snug">{subtitle}</p>}
           </div>
         </div>
         <div className="flex items-end gap-2">
           {loading ? (
-            <div className="h-8 w-16 bg-gray-200 animate-pulse rounded"></div>
+            <div className="h-8 w-20 bg-slate-100 animate-pulse rounded-lg"></div>
           ) : (
-            <span className="text-3xl font-bold text-gray-900">{value}</span>
+            <span className="text-3xl font-black tracking-tight text-slate-950">{value}</span>
           )}
           {trend && (
-            <span className="text-sm font-medium text-green-600 mb-1">{trend}</span>
+            <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full mb-1">{trend}</span>
           )}
         </div>
       </div>

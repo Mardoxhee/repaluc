@@ -6,6 +6,11 @@ import { FaHospitalSymbol, FaUserCheck, FaBalanceScale } from "react-icons/fa";
 import { GiInjustice } from "react-icons/gi";
 import { BsFillHousesFill } from "react-icons/bs";
 import { useFetch } from '../../context/FetchContext';
+import {
+  normalizeRowsByField,
+  normalizeSexeRows,
+  totalIndemnisationFromPayload,
+} from '../../reparations/utils/mentionStats';
 
 const COLORS = ["#007fba", "#7f2360", "#0066cc", "#cc3366", "#0080ff", "#ff6b9d", "#4da6ff", "#ff8fab", "#80bfff", "#ffb3d1"];
 
@@ -130,13 +135,13 @@ const DashboardVictims = () => {
           categorieData,
           prejudiceData
         ] = await Promise.all([
-          safeFetch('/victime/stats/sexe', []),
-          safeFetch('/victime/stats/tranche-age', []),
-          safeFetch('/victime/stats/province', []),
+          safeFetch('/victime/stats/sexe/LUC', []),
+          safeFetch('/victime/stats/tranche-age/LUC', []),
+          safeFetch('/victime/stats/province/LUC', []),
           safeFetch('/victime/stats/programme', []),
-          safeFetch('/victime/stats/territoire', []),
+          safeFetch('/victime/stats/territoire/LUC', []),
           safeFetch('/victime/stats/prejudice-final', []),
-          safeFetch('/victime/stats/total-indemnisation', { totalIndemnisation: 0 }),
+          safeFetch('/victime/stats/total-indemnisation/LUC', { totalIndemnisation: 0 }),
           safeFetch('/victime/stats/categorie', []),
           safeFetch('/victime/stats/prejudice', [])
         ]);
@@ -152,13 +157,13 @@ const DashboardVictims = () => {
         }
 
         setStats({
-          sexe: sexeData || [],
+          sexe: normalizeSexeRows(sexeData).map((item) => ({ sexe: item.name, total: item.value })),
           trancheAge: trancheAgeData || [],
-          province: provinceData || [],
+          province: normalizeRowsByField(provinceData, 'province').map((item) => ({ province: item.name, total: item.value })),
           programme: programmeData || [],
-          territoire: territoireData || [],
+          territoire: normalizeRowsByField(territoireData, 'territoire').map((item) => ({ territoire: item.name, total: item.value })),
           prejudiceFinal: prejudiceFinalData || [],
-          totalIndemnisation: totalIndemnisationData?.totalIndemnisation || 0,
+          totalIndemnisation: totalIndemnisationFromPayload(totalIndemnisationData),
           categorie: categorieData || [],
           prejudice: prejudiceData || []
         });

@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   FiActivity,
   FiAlertCircle,
+  FiCamera,
   FiBookOpen,
   FiCheckCircle,
   FiFileText,
@@ -19,6 +20,8 @@ import {
 } from 'react-icons/fi';
 import { getVictimsFromCache } from '../../utils/victimsCache';
 import MpuCliniquesSection from './MpuCliniquesSection';
+import { useFetch } from '../../context/FetchContext';
+import { normalizeGlobalProgress, normalizeText, type GlobalProgressStats } from '../utils/mentionStats';
 
 interface DashboardVictimsMpuProps {
   onSelectAgentReparation?: (fullName: string) => void;
@@ -26,10 +29,12 @@ interface DashboardVictimsMpuProps {
 }
 
 const isMpuVictim = (victim: any): boolean => {
-  const statusValue = typeof victim?.status === 'string' ? victim.status.trim().toLowerCase() : '';
-  const categorieValue = typeof victim?.categorie === 'string' ? victim.categorie.trim().toLowerCase() : '';
-  const programmeValue = typeof victim?.programme === 'string' ? victim.programme.trim().toLowerCase() : '';
+  const mentionValue = normalizeText(victim?.mention);
+  const statusValue = normalizeText(victim?.status);
+  const categorieValue = normalizeText(victim?.categorie);
+  const programmeValue = normalizeText(victim?.programme);
   return (
+    mentionValue === 'mpu' ||
     statusValue.includes('mpu') ||
     statusValue.includes('mesure provisoire') ||
     statusValue.includes('provisoire urgente') ||
@@ -193,28 +198,61 @@ const KpiCard: React.FC<KpiProps> = ({ title, value, icon, color, subtitle, load
     type="button"
     onClick={onClick}
     disabled={!onClick}
-    className={`text-left bg-white rounded-2xl shadow-sm border border-gray-100 p-5 transition-all duration-200 ${onClick ? 'hover:shadow-md hover:-translate-y-0.5 cursor-pointer' : 'cursor-default'
+    className={`relative overflow-hidden text-left bg-white/95 rounded-2xl shadow-[0_14px_40px_-30px_rgba(15,23,42,0.58)] border border-slate-200/70 p-5 transition-all duration-200 ${onClick ? 'hover:shadow-[0_18px_44px_-28px_rgba(15,23,42,0.64)] hover:-translate-y-0.5 cursor-pointer' : 'cursor-default'
       }`}
   >
-    <div className="flex items-center gap-3 mb-3">
-      <div className={`p-2.5 rounded-xl ${color} shadow-sm`}>{icon}</div>
+    <div className={`absolute inset-x-0 top-0 h-1 ${color}`} />
+    <div className="flex items-start gap-3 mb-4">
+      <div className={`p-2.5 rounded-xl ${color} shadow-sm ring-1 ring-white/40`}>{icon}</div>
       <div className="min-w-0 flex-1">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{title}</h3>
-        {subtitle ? <p className="text-[11px] text-gray-500 truncate">{subtitle}</p> : null}
+        <h3 className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">{title}</h3>
+        {subtitle ? <p className="text-[11px] text-slate-500 leading-snug">{subtitle}</p> : null}
       </div>
     </div>
     {loading ? (
-      <div className="h-8 w-24 bg-gray-100 animate-pulse rounded" />
+      <div className="h-8 w-24 bg-slate-100 animate-pulse rounded-lg" />
     ) : (
-      <div className="text-2xl font-bold text-gray-900">{value}</div>
+      <div className="text-2xl font-black tracking-tight text-slate-950">{value}</div>
     )}
   </button>
 );
 
+const EMPTY_PROGRESS: GlobalProgressStats = {
+  total: 0,
+  photo: { withPhoto: 0, withoutPhoto: 0 },
+  piece: { withPiece: 0, withoutPiece: 0 },
+  contrat: { withContrat: 0, withoutContrat: 0 },
+  indemnisation: { commencee: 0, nonCommencee: 0, montantTotalIndemnise: 0 },
+};
+
 const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = () => {
+  const { fetcher } = useFetch();
   const [victims, setVictims] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [progressLoading, setProgressLoading] = useState<boolean>(true);
+  const [progress, setProgress] = useState<GlobalProgressStats>(EMPTY_PROGRESS);
   const [showConsultationsModal, setShowConsultationsModal] = useState<boolean>(false);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadProgress = async () => {
+      setProgressLoading(true);
+      try {
+        const resp = await fetcher('/victime/stats/reparation/globalProgress/MPU');
+        if (mounted) setProgress(normalizeGlobalProgress(resp));
+      } catch {
+        if (mounted) setProgress(EMPTY_PROGRESS);
+      } finally {
+        if (mounted) setProgressLoading(false);
+      }
+    };
+
+    loadProgress();
+    return () => {
+      mounted = false;
+    };
+  }, [fetcher]);
 
   useEffect(() => {
     let mounted = true;
@@ -237,7 +275,9 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = () => {
 
   const mpuVictims = useMemo(() => victims.filter(isMpuVictim), [victims]);
 
-  const totalMpu = mpuVictims.length;
+  const totalMpuFromCache = mpuVictims.length;
+  const totalMpu = progress.total > 0 ? progress.total : totalMpuFromCache;
+  const officialLoading = progressLoading;
 
   const provinces = useMemo(() => {
     const set = new Set<string>();
@@ -370,26 +410,61 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
         <KpiCard
           title="Total victimes MPU"
-          value={loading ? '…' : totalMpu.toLocaleString()}
+          value={officialLoading ? '…' : totalMpu.toLocaleString()}
           icon={<FiUsers className="text-white" size={18} />}
           color="bg-orange-500"
-          subtitle="Victimes enregistrées"
-          loading={loading}
+          subtitle="Source officielle MPU"
+          loading={officialLoading}
+        />
+        <KpiCard
+          title="Avec photo"
+          value={officialLoading ? '…' : progress.photo.withPhoto.toLocaleString()}
+          icon={<FiCamera className="text-white" size={18} />}
+          color="bg-sky-500"
+          subtitle={`${totalMpu > 0 ? Math.round((progress.photo.withPhoto / totalMpu) * 100) : 0}% des MPU`}
+          loading={officialLoading}
+        />
+        <KpiCard
+          title="Contrats liés"
+          value={officialLoading ? '…' : `${progress.contrat.withContrat.toLocaleString()}`}
+          icon={<FiFileText className="text-white" size={18} />}
+          color="bg-emerald-500"
+          subtitle={`${totalMpu > 0 ? Math.round((progress.contrat.withContrat / totalMpu) * 100) : 0}% des MPU`}
+          loading={officialLoading}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <KpiCard
+          title="Avec pièce"
+          value={officialLoading ? '…' : progress.piece.withPiece.toLocaleString()}
+          icon={<FiShield className="text-white" size={18} />}
+          color="bg-indigo-500"
+          subtitle={`${totalMpu > 0 ? Math.round((progress.piece.withPiece / totalMpu) * 100) : 0}% dossiers documentés`}
+          loading={officialLoading}
+        />
+        <KpiCard
+          title="Indemnisation commencée"
+          value={officialLoading ? '…' : progress.indemnisation.commencee.toLocaleString()}
+          icon={<FiTrendingUp className="text-white" size={18} />}
+          color="bg-amber-500"
+          subtitle={`${totalMpu > 0 ? Math.round((progress.indemnisation.commencee / totalMpu) * 100) : 0}% des MPU`}
+          loading={officialLoading}
+        />
+        <KpiCard
+          title="Montant déjà indemnisé"
+          value={officialLoading ? '…' : `${progress.indemnisation.montantTotalIndemnise.toLocaleString()} USD`}
+          icon={<FiCheckCircle className="text-white" size={18} />}
+          color="bg-teal-500"
+          subtitle="Plans avec paiement effectif"
+          loading={officialLoading}
         />
         <KpiCard
           title="Provinces couvertes"
           value={loading ? '…' : provinces}
           icon={<FiMapPin className="text-white" size={18} />}
           color="bg-purple-500"
-          subtitle="Zones géographiques"
-          loading={loading}
-        />
-        <KpiCard
-          title="Acte de consentement signé"
-          value={loading ? '…' : `${totalConsentement.toLocaleString()}`}
-          icon={<FiFileText className="text-white" size={18} />}
-          color="bg-emerald-500"
-          subtitle={`${percentConsentement}% des victimes MPU`}
+          subtitle="Depuis le cache terrain"
           loading={loading}
         />
       </div>

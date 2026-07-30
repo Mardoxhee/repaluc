@@ -1,8 +1,12 @@
 "use client";
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   FiActivity,
+  FiCamera,
+  FiCreditCard,
+  FiDollarSign,
+  FiFileText,
   FiHeart,
   FiScissors,
   FiHome,
@@ -17,15 +21,97 @@ import { ProgressionBreakdownCard } from './shared';
 import { ProgressionTimeline } from './shared';
 import { getMockPecmuKpis, getMockPecmuTimeline } from '../mocks/data';
 import { COLORS } from './dashboard/constants';
+import { useFetch } from '../../context/FetchContext';
+import { getVictimsFromCache } from '../../utils/victimsCache';
+import { normalizeApiList, normalizeGlobalProgress, normalizeText, type GlobalProgressStats } from '../utils/mentionStats';
 
 interface DashboardVictimesPecmuProps {
   onSelectAgentReparation?: (fullName: string) => void;
   onShowRecontactedVictims?: () => void;
 }
 
+const EMPTY_PROGRESS: GlobalProgressStats = {
+  total: 0,
+  photo: { withPhoto: 0, withoutPhoto: 0 },
+  piece: { withPiece: 0, withoutPiece: 0 },
+  contrat: { withContrat: 0, withoutContrat: 0 },
+  indemnisation: { commencee: 0, nonCommencee: 0, montantTotalIndemnise: 0 },
+};
+
+const isPecmuVictim = (victim: any): boolean => {
+  const mentionValue = normalizeText(victim?.mention);
+  const statusValue = normalizeText(victim?.status);
+  const categorieValue = normalizeText(victim?.categorie);
+  const programmeValue = normalizeText(victim?.programme);
+  return (
+    mentionValue === 'pecmu' ||
+    statusValue.includes('pecmu') ||
+    statusValue.includes('prise en charge medicale urgente') ||
+    categorieValue.includes('pecmu') ||
+    programmeValue.includes('pecmu')
+  );
+};
+
 const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = () => {
+  const { fetcher } = useFetch();
   const kpis = useMemo(() => getMockPecmuKpis(), []);
   const timeline = useMemo(() => getMockPecmuTimeline(), []);
+  const [progress, setProgress] = useState<GlobalProgressStats>(EMPTY_PROGRESS);
+  const [contractsCount, setContractsCount] = useState(0);
+  const [victimsFromCache, setVictimsFromCache] = useState<any[]>([]);
+  const [loadingOfficial, setLoadingOfficial] = useState(true);
+  const [loadingCache, setLoadingCache] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadOfficialStats = async () => {
+      setLoadingOfficial(true);
+      try {
+        const [progressResp, contratsResp] = await Promise.all([
+          fetcher('/victime/stats/reparation/globalProgress/PECMU'),
+          fetcher('/contrat/PECMU'),
+        ]);
+        if (!mounted) return;
+        setProgress(normalizeGlobalProgress(progressResp));
+        setContractsCount(normalizeApiList(contratsResp).length);
+      } catch {
+        if (!mounted) return;
+        setProgress(EMPTY_PROGRESS);
+        setContractsCount(0);
+      } finally {
+        if (mounted) setLoadingOfficial(false);
+      }
+    };
+
+    loadOfficialStats();
+    return () => {
+      mounted = false;
+    };
+  }, [fetcher]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadCache = async () => {
+      setLoadingCache(true);
+      try {
+        const cached = await getVictimsFromCache('all-victims-cache');
+        if (mounted) setVictimsFromCache(Array.isArray(cached?.data) ? cached!.data.filter(isPecmuVictim) : []);
+      } catch {
+        if (mounted) setVictimsFromCache([]);
+      } finally {
+        if (mounted) setLoadingCache(false);
+      }
+    };
+
+    loadCache();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const totalPecmu = progress.total > 0 ? progress.total : victimsFromCache.length;
 
   const etatData = useMemo(() =>
     kpis.parEtatVictimisation.map((e, i) => ({
@@ -45,6 +131,15 @@ const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = () => {
     [kpis]
   );
 
+  const provinceCount = useMemo(() => {
+    const provinces = new Set<string>();
+    victimsFromCache.forEach((v) => {
+      const province = typeof v?.province === 'string' ? v.province.trim() : '';
+      if (province) provinces.add(province);
+    });
+    return provinces.size;
+  }, [victimsFromCache]);
+
   return (
     <div className="w-full">
       {/* Header */}
@@ -63,35 +158,62 @@ const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = () => {
       </div>
 
       {/* KPIs principaux */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         <StatCard
           title="Total victimes PECMU"
-          value={kpis.totalVictimes}
+          value={loadingOfficial && !victimsFromCache.length ? '...' : totalPecmu.toLocaleString()}
           icon={<FiUsers className="text-white text-xl" />}
           color="bg-gradient-to-br from-red-500 to-red-600"
-          subtitle="Prises en charge médicale urgente"
+          subtitle="Source officielle PECMU"
+          loading={loadingOfficial && !victimsFromCache.length}
         />
         <StatCard
-          title="Chirurgies"
-          value={kpis.chirurgies.enCours + kpis.chirurgies.terminees}
-          icon={<FiScissors className="text-white text-xl" />}
-          color="bg-gradient-to-br from-purple-500 to-purple-600"
-          subtitle={`${kpis.chirurgies.terminees} terminées · ${kpis.chirurgies.enCours} en cours`}
+          title="Avec photo"
+          value={loadingOfficial ? '...' : progress.photo.withPhoto.toLocaleString()}
+          icon={<FiCamera className="text-white text-xl" />}
+          color="bg-gradient-to-br from-sky-500 to-blue-600"
+          subtitle={`${totalPecmu > 0 ? Math.round((progress.photo.withPhoto / totalPecmu) * 100) : 0}% des PECMU`}
+          loading={loadingOfficial}
         />
         <StatCard
-          title="Soins à domicile"
-          value={kpis.soinsDomicile.enCours + kpis.soinsDomicile.terminees}
-          icon={<FiHome className="text-white text-xl" />}
-          color="bg-gradient-to-br from-teal-500 to-teal-600"
-          subtitle={`${kpis.soinsDomicile.terminees} terminés · ${kpis.soinsDomicile.enCours} en cours`}
+          title="Avec pièce"
+          value={loadingOfficial ? '...' : progress.piece.withPiece.toLocaleString()}
+          icon={<FiFileText className="text-white text-xl" />}
+          color="bg-gradient-to-br from-violet-500 to-purple-600"
+          subtitle={`${totalPecmu > 0 ? Math.round((progress.piece.withPiece / totalPecmu) * 100) : 0}% documentées`}
+          loading={loadingOfficial}
         />
         <StatCard
-          title="Suivis médicaux"
-          value={kpis.suivis.enCours + kpis.suivis.terminees}
-          icon={<FiEye className="text-white text-xl" />}
-          color="bg-gradient-to-br from-blue-500 to-blue-600"
-          subtitle={`${kpis.suivis.terminees} terminés · ${kpis.suivis.enCours} en cours`}
+          title="Contrats PECMU"
+          value={loadingOfficial ? '...' : (progress.contrat.withContrat || contractsCount).toLocaleString()}
+          icon={<FiCreditCard className="text-white text-xl" />}
+          color="bg-gradient-to-br from-emerald-500 to-teal-600"
+          subtitle={`${totalPecmu > 0 ? Math.round(((progress.contrat.withContrat || contractsCount) / totalPecmu) * 100) : 0}% des PECMU`}
+          loading={loadingOfficial}
         />
+        <StatCard
+          title="Déjà indemnisé"
+          value={loadingOfficial ? '...' : `${progress.indemnisation.montantTotalIndemnise.toLocaleString()} USD`}
+          icon={<FiDollarSign className="text-white text-xl" />}
+          color="bg-gradient-to-br from-amber-500 to-orange-600"
+          subtitle={`${progress.indemnisation.commencee.toLocaleString()} paiement(s) démarré(s)`}
+          loading={loadingOfficial}
+        />
+      </div>
+
+      <div className="mb-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="rounded-2xl border border-red-100 bg-red-50/70 p-4">
+          <div className="text-xs font-bold uppercase tracking-[0.16em] text-red-700">PECMU séparé</div>
+          <div className="mt-1 text-sm text-red-900">Les chiffres ci-dessus viennent des endpoints filtrés par mention.</div>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Provinces cache</div>
+          <div className="mt-1 text-2xl font-black text-slate-950">{loadingCache ? '...' : provinceCount.toLocaleString()}</div>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Victimes cache</div>
+          <div className="mt-1 text-2xl font-black text-slate-950">{loadingCache ? '...' : victimsFromCache.length.toLocaleString()}</div>
+        </div>
       </div>
 
       {/* Aspects médicaux breakdown + Psychologique */}

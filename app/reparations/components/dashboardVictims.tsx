@@ -13,6 +13,16 @@ import OfflineIndicator from './dashboard/OfflineIndicator';
 import { COLORS, TRANCHE_AGE_ORDER } from './dashboard/constants';
 import { AgentCore, getAgentFullName, getAgentPrenomNom, isReparationsAgent } from './dashboard/agents';
 import { buildIndemnisationDashboardStats, normalizeApiList } from '../utils/indemnisationDashboard';
+import {
+  endpointForMention,
+  normalizeGlobalProgress,
+  normalizeRowsByField,
+  normalizeSexeRows,
+  normalizeTrancheAgeRows,
+  totalIndemnisationFromPayload,
+  type CountRow,
+  type MentionCode,
+} from '../utils/mentionStats';
 
 interface DashboardVictimsProps {
   onSelectAgentReparation?: (fullName: string) => void;
@@ -35,25 +45,6 @@ const getNumericTotal = (item: any) => {
   return Number.isFinite(total) ? total : 0;
 };
 
-const getTotalForLucFromMentions = (payload: any): number | null => {
-  const rows: any[] = Array.isArray(payload)
-    ? payload
-    : Array.isArray(payload?.parMention)
-      ? payload.parMention
-      : Array.isArray(payload?.data?.parMention)
-        ? payload.data.parMention
-        : Array.isArray(payload?.data)
-          ? payload.data
-          : [];
-
-  const total = rows.reduce((sum, item) => {
-    const label = item?.mention ?? item?.label ?? item?.name ?? item?.programme ?? item?.categorie;
-    return isLucLabel(label) ? sum + getNumericTotal(item) : sum;
-  }, 0);
-
-  return total > 0 ? total : null;
-};
-
 const getTotalForLucFromStats = (stats: { programme: any[]; categorie: any[] }) => {
   const fromProgramme = stats.programme.reduce((sum, item) => (
     isLucLabel(item?.programme ?? item?.label ?? item?.name) ? sum + getNumericTotal(item) : sum
@@ -64,19 +55,6 @@ const getTotalForLucFromStats = (stats: { programme: any[]; categorie: any[] }) 
     isLucLabel(item?.categorie ?? item?.label ?? item?.name) ? sum + getNumericTotal(item) : sum
   ), 0);
   return fromCategorie > 0 ? fromCategorie : 0;
-};
-
-const getPaginatedTotal = (payload: any): number | null => {
-  const total = Number(payload?.meta?.total ?? payload?.total ?? payload?.data?.total);
-  return Number.isFinite(total) ? total : null;
-};
-
-const normalizeSexeLabel = (value: unknown): 'Femme' | 'Homme' | null => {
-  const normalized = normalizeText(value);
-  if (!normalized || normalized === '0' || normalized === 'null' || normalized === 'undefined') return null;
-  if (['f', 'femme', 'femmes', 'feminin', 'feminins', 'female', 'women', 'woman'].includes(normalized)) return 'Femme';
-  if (['h', 'homme', 'hommes', 'm', 'masculin', 'masculins', 'male', 'men', 'man'].includes(normalized)) return 'Homme';
-  return null;
 };
 
 const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentReparation, onShowRecontactedVictims, dashboardScope = 'all', extraSection, afterMainStats }) => {
@@ -101,13 +79,12 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
   const [montantIndemnisationsDejaVersees, setMontantIndemnisationsDejaVersees] = useState(0);
   const [totalVictimesGlobal, setTotalVictimesGlobal] = useState<number | null>(null);
   const [totalVictimesLuc, setTotalVictimesLuc] = useState(0);
-  type SexeStat = { sexe: string; total: number };
   const [stats, setStats] = useState<{
-    sexe: SexeStat[];
-    trancheAge: any[];
-    province: any[];
+    sexe: CountRow[];
+    trancheAge: CountRow[];
+    province: CountRow[];
     programme: any[];
-    territoire: any[];
+    territoire: CountRow[];
     prejudiceFinal: any[];
     totalIndemnisation: number;
     categorie: any[];
@@ -131,17 +108,19 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
       setIsOffline(typeof navigator !== 'undefined' ? !navigator.onLine : false);
 
       try {
-        const globalProgressResp = await fetcher('/victime/stats/reparation/globalProgress');
-        const globalData = globalProgressResp?.data;
-        const totalFromGlobal = typeof globalData?.total === 'number' ? globalData.total : null;
-        const withPhoto = typeof globalData?.photo?.withPhoto === 'number' ? globalData.photo.withPhoto : 0;
-        const withContrat = typeof globalData?.contrat?.withContrat === 'number' ? globalData.contrat.withContrat : 0;
-        const indemnCommencee = typeof globalData?.indemnisation?.commencee === 'number' ? globalData.indemnisation.commencee : 0;
+        const mention: MentionCode | null = dashboardScope === 'luc' ? 'LUC' : null;
+        const globalProgressResp = await fetcher(endpointForMention('/victime/stats/reparation/globalProgress', mention));
+        const globalData = normalizeGlobalProgress(globalProgressResp);
+        const totalFromGlobal = globalData.total > 0 ? globalData.total : null;
+        const withPhoto = globalData.photo.withPhoto;
+        const withContrat = globalData.contrat.withContrat;
+        const indemnCommencee = globalData.indemnisation.commencee;
 
         setTotalVictimesGlobal(totalFromGlobal);
-        setVictimesRecontactees(dashboardScope === 'luc' ? 0 : withPhoto);
+        setVictimesRecontactees(withPhoto);
         setVictimesAvecContratSigne(withContrat);
         setVictimesIndemnisationCommencee(indemnCommencee);
+        setMontantIndemnisationsDejaVersees(globalData.indemnisation.montantTotalIndemnise);
         setLoadingRecontact(false);
 
         const [
@@ -157,25 +136,19 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
           contratsData,
           plansIndemnisationData,
           indemnisationsData,
-          mentionsData,
-          lucRecontactedData,
-          lucProgressResp
         ] = await Promise.all([
-          fetcher('/victime/stats/sexe'),
-          fetcher('/victime/stats/tranche-age'),
-          fetcher('/victime/stats/province'),
+          fetcher(endpointForMention('/victime/stats/sexe', mention)),
+          fetcher(endpointForMention('/victime/stats/tranche-age', mention)),
+          fetcher(endpointForMention('/victime/stats/province', mention)),
           fetcher('/victime/stats/programme'),
-          fetcher('/victime/stats/territoire'),
+          fetcher(endpointForMention('/victime/stats/territoire', mention)),
           fetcher('/victime/stats/prejudice-final'),
-          fetcher('/victime/stats/total-indemnisation'),
+          fetcher(endpointForMention('/victime/stats/total-indemnisation', mention)),
           fetcher('/victime/stats/categorie'),
           fetcher('/victime/stats/prejudice'),
-          fetcher('/contrat'),
+          fetcher(endpointForMention('/contrat', mention)),
           fetcher('/plan-indemnisation'),
           fetcher('/indemnisation'),
-          fetcher('/victime/stats/mentions').catch(() => null),
-          fetcher('/victime/paginate/photo-not-null?page=1&limit=1&mention=luc').catch(() => null),
-          fetcher('/victime/stats/reparation/globalProgress?mention=luc').catch(() => null)
         ]);
 
         const indemnisationStats = buildIndemnisationDashboardStats({
@@ -185,43 +158,24 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
         });
 
         const newStats = {
-          sexe: sexeData || [],
-          trancheAge: trancheAgeData || [],
-          province: provinceData || [],
+          sexe: normalizeSexeRows(sexeData),
+          trancheAge: normalizeTrancheAgeRows(trancheAgeData),
+          province: normalizeRowsByField(provinceData, 'province'),
           programme: programmeData || [],
-          territoire: territoireData || [],
+          territoire: normalizeRowsByField(territoireData, 'territoire'),
           prejudiceFinal: prejudiceFinalData || [],
-          totalIndemnisation: indemnisationStats.totalPlanifieUSD || totalIndemnisationData?.totalIndemnisation || 0,
+          totalIndemnisation: mention === 'LUC'
+            ? totalIndemnisationFromPayload(totalIndemnisationData)
+            : (indemnisationStats.totalPlanifieUSD || totalIndemnisationFromPayload(totalIndemnisationData)),
           categorie: categorieData || [],
           prejudice: prejudiceData || []
         };
 
-        const scopedTotalLuc = getTotalForLucFromMentions(mentionsData) ?? getTotalForLucFromStats(newStats);
-        const lucRecontactedTotal = getPaginatedTotal(lucRecontactedData);
-        const lucProgressData = lucProgressResp?.data;
-        const lucProgressTotal = typeof lucProgressData?.total === 'number' ? lucProgressData.total : null;
-        const hasScopedLucProgress = lucProgressTotal !== null && lucProgressTotal === scopedTotalLuc;
-        const lucProgressWithPhoto = typeof lucProgressData?.photo?.withPhoto === 'number' ? lucProgressData.photo.withPhoto : null;
-        const lucProgressWithContrat = typeof lucProgressData?.contrat?.withContrat === 'number' ? lucProgressData.contrat.withContrat : null;
-        const lucProgressIndemnCommencee = typeof lucProgressData?.indemnisation?.commencee === 'number' ? lucProgressData.indemnisation.commencee : null;
-
-        setVictimesAvecContratSigne(
-          dashboardScope === 'luc' && hasScopedLucProgress && lucProgressWithContrat !== null
-            ? lucProgressWithContrat
-            : indemnisationStats.totalContrats || withContrat
-        );
-        setVictimesIndemnisationCommencee(
-          dashboardScope === 'luc' && hasScopedLucProgress && lucProgressIndemnCommencee !== null
-            ? lucProgressIndemnCommencee
-            : indemnisationStats.contratsAvecPaiement || indemnCommencee
-        );
-        setVictimesRecontactees(
-          dashboardScope === 'luc'
-            ? (hasScopedLucProgress && lucProgressWithPhoto !== null ? lucProgressWithPhoto : lucRecontactedTotal ?? 0)
-            : withPhoto
-        );
-        setTotalVictimesLuc(scopedTotalLuc);
-        setMontantIndemnisationsDejaVersees(indemnisationStats.totalVerseUSD);
+        setVictimesAvecContratSigne(withContrat || indemnisationStats.totalContrats);
+        setVictimesIndemnisationCommencee(indemnCommencee || indemnisationStats.contratsAvecPaiement);
+        setVictimesRecontactees(withPhoto);
+        setTotalVictimesLuc(mention === 'LUC' ? (globalData.total || getTotalForLucFromStats(newStats)) : 0);
+        setMontantIndemnisationsDejaVersees(globalData.indemnisation.montantTotalIndemnise || indemnisationStats.totalVerseUSD);
         setStats(newStats);
       } catch (error) {
         console.log('[Dashboard] Erreur chargement serveur:', error);
@@ -372,15 +326,15 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
   };
 
   // Calculs des totaux
-  const totalVictimes = totalVictimesGlobal ?? stats?.sexe?.reduce((acc, item: any) => acc + parseInt(item.total), 0);
+  const totalVictimes = totalVictimesGlobal ?? stats?.sexe?.reduce((acc, item) => acc + item.value, 0);
   const scopedTotalVictimes = dashboardScope === 'luc' ? totalVictimesLuc : totalVictimes;
   const scopedTotalLabel = dashboardScope === 'luc' ? 'Victimes LUC enregistrées' : 'Victimes enregistrées';
   const totalFemmes = stats?.sexe
-    ?.filter((item: any) => normalizeSexeLabel(item.sexe) === 'Femme')
-    .reduce((acc: number, item: any) => acc + Number(item.total), 0) || 0;
+    ?.filter((item) => item.name === 'Femme')
+    .reduce((acc: number, item) => acc + item.value, 0) || 0;
   const totalHommes = stats?.sexe
-    ?.filter((item: any) => normalizeSexeLabel(item.sexe) === 'Homme')
-    .reduce((acc: number, item: any) => acc + Number(item.total), 0) || 0;
+    ?.filter((item) => item.name === 'Homme')
+    .reduce((acc: number, item) => acc + item.value, 0) || 0;
   const totalProvinces = stats?.province?.length;
   const totalTerritoires = stats?.territoire?.length;
 
@@ -392,22 +346,17 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
 
   // Préparation des données pour les graphiques
   const sexeChartData = (() => {
-    const grouped = new Map<string, number>();
-    for (const item of stats.sexe) {
-      const key = normalizeSexeLabel(item.sexe);
-      if (!key) continue;
-      grouped.set(key, (grouped.get(key) || 0) + Number(item.total));
-    }
-    return Array.from(grouped.entries()).map(([name, value], index) => ({
-      name,
-      value,
+    return stats.sexe.map((item, index) => ({
+      name: item.name,
+      value: item.value,
       color: COLORS[index % COLORS.length],
     }));
   })();
 
-  const provinceChartData = stats.province.map((item: any, index) => ({
-    name: item.province,
-    value: parseInt(item.total),
+  const provinceChartData = stats.province.map((item, index) => ({
+    name: item.name,
+    fullName: item.fullName,
+    value: item.value,
     color: COLORS[index % COLORS.length]
   }));
 
@@ -420,13 +369,13 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
 
   const trancheAgeChartData = (() => {
     const raw = Array.isArray(stats.trancheAge) ? stats.trancheAge : [];
-    const map = new Map<string, number>(raw.map((item: any) => [String(item?.tranche ?? ''), Number(item?.total) || 0]));
+    const map = new Map<string, number>(raw.map((item) => [String(item.name ?? ''), Number(item.value) || 0]));
     const ordered = TRANCHE_AGE_ORDER
       .filter((k) => map.has(k))
       .map((k) => ({ tranche: k, total: map.get(k) || 0 }));
     const extras = raw
-      .filter((item: any) => !TRANCHE_AGE_ORDER.includes(String(item?.tranche)))
-      .map((item: any) => ({ tranche: String(item?.tranche ?? ''), total: Number(item?.total) || 0 }));
+      .filter((item) => !TRANCHE_AGE_ORDER.includes(String(item.name)))
+      .map((item) => ({ tranche: String(item.name ?? ''), total: Number(item.value) || 0 }));
     return [...ordered, ...extras].map((entry, index) => ({
       name: `${entry.tranche} ans`,
       fullName: `${entry.tranche} ans`,
@@ -726,14 +675,14 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
             </div>
           ) : (
             <div className="space-y-3 max-h-80 overflow-y-auto">
-              {stats.territoire.map((item: any, index) => (
+              {stats.territoire.map((item, index) => (
                 <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
                   <div className="flex items-center gap-3">
                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
-                    <span className="font-medium text-gray-800">{item.territoire}</span>
+                    <span className="font-medium text-gray-800">{item.name}</span>
                   </div>
                   <span className="bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full text-sm font-semibold">
-                    {item.total}
+                    {item.value.toLocaleString()}
                   </span>
                 </div>
               ))}

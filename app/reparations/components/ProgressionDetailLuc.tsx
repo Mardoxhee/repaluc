@@ -37,17 +37,13 @@ const ProgressionDetailLuc: React.FC = () => {
     const loadIndemnisationStats = async () => {
       setLoadingIndemnisation(true);
       try {
-        const [contratsResp, plansResp, indemnisationsResp] = await Promise.all([
-          fetcher('/contrat'),
-          fetcher('/plan-indemnisation'),
-          fetcher('/indemnisation'),
-        ]);
+        const contratsResp = await fetcher('/contrat/LUC');
 
         if (!mounted) return;
         setIndemnStats(buildIndemnisationDashboardStats({
           contrats: normalizeApiList(contratsResp),
-          plans: normalizeApiList(plansResp),
-          indemnisations: normalizeApiList(indemnisationsResp),
+          plans: [],
+          indemnisations: [],
         }));
       } catch {
         if (mounted) setIndemnStats(emptyIndemnisationStats());
