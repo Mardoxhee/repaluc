@@ -65,8 +65,9 @@ const PWAInstaller: React.FC = () => {
 
           const pagesToCache = [
             '/',
-            '/reparations',
-            '/luc',
+            '/reparations/dashboard',
+            '/reparations/victimes',
+            '/reparations/sources',
           ];
 
           caches.open('manual-precache-v1').then((cache) => {

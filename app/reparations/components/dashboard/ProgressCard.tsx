@@ -29,7 +29,7 @@ const ProgressCard: React.FC<ProgressCardProps> = ({
 
   return (
     <div
-      className={`relative overflow-hidden bg-white/95 rounded-2xl shadow-[0_14px_40px_-28px_rgba(15,23,42,0.55)] border border-slate-200/70 p-5 hover:-translate-y-0.5 hover:shadow-[0_18px_44px_-26px_rgba(15,23,42,0.62)] transition-all duration-300 group ${onClick ? 'cursor-pointer' : ''}`}
+      className={`relative overflow-hidden bg-white/95 rounded-lg shadow-[0_14px_40px_-28px_rgba(15,23,42,0.55)] border border-slate-200/70 p-5 hover:-translate-y-0.5 hover:shadow-[0_18px_44px_-26px_rgba(15,23,42,0.62)] transition-all duration-300 group ${onClick ? 'cursor-pointer' : ''}`}
       onClick={onClick}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
@@ -42,7 +42,7 @@ const ProgressCard: React.FC<ProgressCardProps> = ({
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <div className="flex items-start gap-3 mb-4">
-            <div className={`p-2.5 rounded-xl ${color} shadow-sm ring-1 ring-white/40 group-hover:scale-105 transition-transform duration-300`}>
+            <div className={`p-2.5 rounded-md ${color} shadow-sm ring-1 ring-white/40 group-hover:scale-105 transition-transform duration-300`}>
               {icon}
             </div>
             <div className="min-w-0">

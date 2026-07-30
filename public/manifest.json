@@ -2,7 +2,7 @@
   "name": "Suivi des Victimes",
   "short_name": "Victimes",
   "description": "Application de suivi et gestion des victimes",
-  "start_url": "/",
+  "start_url": "/reparations/dashboard",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#2563eb",
@@ -27,7 +27,7 @@
       "name": "Liste des victimes",
       "short_name": "Victimes",
       "description": "Accéder à la liste des victimes",
-      "url": "/reparations",
+      "url": "/reparations/victimes",
       "icons": [{ "src": "/icon-192x192.png", "sizes": "192x192" }]
     }
   ]

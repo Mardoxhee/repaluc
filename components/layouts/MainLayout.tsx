@@ -165,8 +165,10 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, noZoom }) => {
 
       <div className={`flex-1 ${!isMobile ? 'md:ml-64' : ''} transition-all duration-300`}>
         <Header onMenuToggle={toggleMenu} isMobile={isMobile} />
-        <main className={`${noZoom ? '' : 'zoom-90 pt-20'} transition-all duration-300`}>
-          {children}
+        <main className={`${noZoom ? '' : 'pt-24'} transition-all duration-300`}>
+          <div className={noZoom ? '' : 'zoom-90'}>
+            {children}
+          </div>
         </main>
       </div>
     </div>

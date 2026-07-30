@@ -1,7 +1,7 @@
 "use client"
 
 import React from 'react';
-import { FiBox, FiRepeat, FiSettings, FiShield } from 'react-icons/fi';
+import { FiBarChart2, FiDatabase, FiSettings, FiShield, FiUsers } from 'react-icons/fi';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -10,8 +10,24 @@ interface SideBarProps {
 }
 
 const navItems = [
-  { label: 'LUC', icon: <FiBox size={20} />, href: '/luc' },
-  { label: 'Réparations', icon: <FiRepeat size={20} />, href: '/reparations' },
+  {
+    label: 'Dashboard',
+    description: 'Indicateurs par mention',
+    icon: <FiBarChart2 size={20} />,
+    href: '/reparations/dashboard',
+  },
+  {
+    label: 'Victimes',
+    description: 'Registre et filtres',
+    icon: <FiUsers size={20} />,
+    href: '/reparations/victimes',
+  },
+  {
+    label: 'Source de données',
+    description: 'Import et historique',
+    icon: <FiDatabase size={20} />,
+    href: '/reparations/sources',
+  },
 ];
 
 const SideBar: React.FC<SideBarProps> = ({ onNavigate }) => {
@@ -24,19 +40,25 @@ const SideBar: React.FC<SideBarProps> = ({ onNavigate }) => {
   };
 
   return (
-    <aside className="h-screen w-64 min-w-64 max-w-64 bg-white border-r border-gray-200 flex flex-col shadow-lg fixed top-0 left-0 z-30">
+    <aside className="h-screen w-64 min-w-64 max-w-64 bg-white border-r border-primary-100 flex flex-col shadow-[18px_0_45px_-38px_rgba(0,127,186,0.65)] fixed top-0 left-0 z-30">
       {/* En-tête institutionnel */}
-      <div className="bg-gradient-to-r from-primary-500 to-primary-600 px-6 py-4 h-20 flex items-center justify-center">
-        <div className="flex flex-col items-center text-center">
-          {/* Logo institutionnel */}
-          <div className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center shadow-lg border border-white/20 mb-2">
+      <div className="bg-gradient-to-br from-primary-500 to-primary-700 px-5 py-4 h-20 flex items-center">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-lg bg-white/12 backdrop-blur-sm flex items-center justify-center shadow-lg border border-white/20">
             <FiShield className="text-white text-xl" />
+          </div>
+          <div>
+            <div className="text-sm font-black tracking-wide text-white">REPAREV</div>
+            <div className="text-[11px] font-semibold text-white/75">Réparations</div>
           </div>
         </div>
       </div>
 
       {/* Navigation principale */}
       <div className="flex-1 px-4 py-6 overflow-y-auto">
+        <div className="mb-3 px-3 text-[10px] font-black uppercase tracking-[0.18em] text-primary-600">
+          Modules
+        </div>
         <nav className="space-y-2">
           {navItems.map(item => {
             const isActive = pathname === item.href || (item.href !== '/' && pathname?.startsWith(item.href));
@@ -46,23 +68,29 @@ const SideBar: React.FC<SideBarProps> = ({ onNavigate }) => {
                 key={item.label}
                 onClick={handleNavigation}
                 className={`
-                  flex items-center gap-3 px-3 py-3 rounded-lg font-medium transition-all duration-200 group relative
+                  flex items-start gap-3 px-3 py-3 rounded-lg font-medium transition-all duration-200 group relative
                   ${isActive
-                    ? 'bg-primary-50 text-primary-700 border-r-3 border-primary-500 shadow-sm'
-                    : 'text-gray-700 hover:bg-gray-50 hover:text-primary-600'
+                    ? 'bg-primary-50 text-primary-700 ring-1 ring-primary-100 shadow-sm'
+                    : 'text-slate-700 hover:bg-primary-50/60 hover:text-primary-700'
                   }
                 `}
               >
                 {isActive && (
-                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary-500"></div>
+                  <div className="absolute left-0 top-3 bottom-3 w-1 rounded-r-full bg-primary-500"></div>
                 )}
                 <span className={`
+                  rounded-md p-2 -mt-1
                   transition-colors duration-200
-                  ${isActive ? 'text-primary-600' : 'text-gray-500 group-hover:text-primary-500'}
+                  ${isActive ? 'bg-white text-primary-600' : 'bg-slate-50 text-slate-500 group-hover:bg-white group-hover:text-primary-600'}
                 `}>
                   {item.icon}
                 </span>
-                <span className="font-medium text-sm">{item.label}</span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-black">{item.label}</span>
+                  <span className={`mt-0.5 block text-[11px] leading-snug ${isActive ? 'text-primary-700/75' : 'text-slate-500'}`}>
+                    {item.description}
+                  </span>
+                </span>
               </Link>
             );
           })}
@@ -72,12 +100,12 @@ const SideBar: React.FC<SideBarProps> = ({ onNavigate }) => {
       {/* Section inférieure */}
       <div className="border-t border-gray-200 p-4">
         {/* Informations système */}
-        <div className="bg-gray-50 rounded-lg p-3 mb-4">
+        <div className="bg-primary-50/70 rounded-lg p-3 mb-4 border border-primary-100">
           <div className="flex items-center gap-2 mb-2">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-            <span className="text-xs font-medium text-gray-700">Système opérationnel</span>
+            <span className="text-xs font-bold text-primary-800">Système opérationnel</span>
           </div>
-          <div className="text-xs text-gray-500">
+          <div className="text-xs text-primary-700/70">
             Version 2.1.0 • Dernière sync: 14:32
           </div>
         </div>
@@ -87,10 +115,10 @@ const SideBar: React.FC<SideBarProps> = ({ onNavigate }) => {
           href="/reglages"
           onClick={handleNavigation}
           className={`
-            flex items-center gap-3 px-3 py-2 rounded-lg font-medium transition-all duration-200 group relative
+            flex items-center gap-3 px-3 py-2 rounded-md font-medium transition-all duration-200 group relative
             ${pathname === '/reglages'
               ? 'bg-primary-50 text-primary-700 shadow-sm'
-              : 'text-gray-600 hover:bg-gray-50 hover:text-primary-600'
+              : 'text-slate-600 hover:bg-primary-50 hover:text-primary-600'
             }
           `}
         >

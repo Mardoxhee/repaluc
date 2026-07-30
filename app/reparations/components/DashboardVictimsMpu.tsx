@@ -198,12 +198,12 @@ const KpiCard: React.FC<KpiProps> = ({ title, value, icon, color, subtitle, load
     type="button"
     onClick={onClick}
     disabled={!onClick}
-    className={`relative overflow-hidden text-left bg-white/95 rounded-2xl shadow-[0_14px_40px_-30px_rgba(15,23,42,0.58)] border border-slate-200/70 p-5 transition-all duration-200 ${onClick ? 'hover:shadow-[0_18px_44px_-28px_rgba(15,23,42,0.64)] hover:-translate-y-0.5 cursor-pointer' : 'cursor-default'
+    className={`relative overflow-hidden text-left bg-white/95 rounded-lg shadow-[0_14px_40px_-30px_rgba(15,23,42,0.58)] border border-slate-200/70 p-5 transition-all duration-200 ${onClick ? 'hover:shadow-[0_18px_44px_-28px_rgba(15,23,42,0.64)] hover:-translate-y-0.5 cursor-pointer' : 'cursor-default'
       }`}
   >
     <div className={`absolute inset-x-0 top-0 h-1 ${color}`} />
     <div className="flex items-start gap-3 mb-4">
-      <div className={`p-2.5 rounded-xl ${color} shadow-sm ring-1 ring-white/40`}>{icon}</div>
+      <div className={`p-2.5 rounded-md ${color} shadow-sm ring-1 ring-white/40`}>{icon}</div>
       <div className="min-w-0 flex-1">
         <h3 className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">{title}</h3>
         {subtitle ? <p className="text-[11px] text-slate-500 leading-snug">{subtitle}</p> : null}
@@ -470,7 +470,7 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = () => {
       </div>
 
       {/* Progression par site de déplacés */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
+      <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 mb-8">
         <div className="flex items-center gap-3 mb-5">
           <div className="p-2 rounded-lg bg-primary-50">
             <FiActivity className="text-primary-600" size={20} />
@@ -586,7 +586,7 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = () => {
       {/* Tendance maladies + Répartition sexe + âge */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         {/* Top maladies */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 lg:col-span-2">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 lg:col-span-2">
           <div className="flex items-center gap-3 mb-5">
             <div className="p-2 rounded-lg bg-red-50">
               <FiTrendingUp className="text-red-600" size={20} />
@@ -636,7 +636,7 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = () => {
         </div>
 
         {/* Répartition sexe */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
           <div className="flex items-center gap-3 mb-5">
             <div className="p-2 rounded-lg bg-pink-50">
               <FiUser className="text-pink-600" size={20} />
@@ -676,7 +676,7 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = () => {
       </div>
 
       {/* Tranches d'âge */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
+      <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 mb-8">
         <div className="flex items-center gap-3 mb-5">
           <div className="p-2 rounded-lg bg-amber-50">
             <FiUsers className="text-amber-600" size={20} />
@@ -694,7 +694,7 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = () => {
               const pct = totalMpu > 0 ? Math.round((b.count / totalMpu) * 100) : 0;
               const heightPct = maxAge > 0 ? Math.round((b.count / maxAge) * 100) : 0;
               return (
-                <div key={b.bucket} className="rounded-xl border border-gray-100 bg-gray-50 p-3 flex flex-col">
+                <div key={b.bucket} className="rounded-md border border-gray-100 bg-gray-50 p-3 flex flex-col">
                   <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{b.bucket}</div>
                   <div className="text-xl font-bold text-gray-900 mt-1 leading-none">{b.count.toLocaleString()}</div>
                   <div className="text-[11px] text-gray-500 mt-0.5">{pct}% des MPU</div>
@@ -711,7 +711,7 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = () => {
       {/* Modal consultations médicales */}
       {showConsultationsModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-lg bg-rose-50">

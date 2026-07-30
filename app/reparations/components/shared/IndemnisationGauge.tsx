@@ -15,52 +15,38 @@ const IndemnisationGauge: React.FC<IndemnisationGaugeProps> = ({
   title = 'Progression des indemnisations',
   className = '',
 }) => {
-  const total = data.reduce((s, d) => s + d.count, 0);
+  const maxCount = Math.max(1, ...data.map((d) => d.count));
 
   return (
-    <div className={`bg-white rounded-2xl shadow-lg border border-gray-100 p-6 ${className}`}>
+    <div className={`rounded-lg border border-primary-100 bg-white p-5 shadow-[0_18px_50px_-40px_rgba(0,127,186,0.45)] ${className}`}>
       {title && (
-        <h3 className="text-lg font-bold text-gray-900 mb-6">{title}</h3>
+        <h3 className="mb-5 text-lg font-black tracking-tight text-slate-950">{title}</h3>
       )}
 
-      {/* Barre segmentée */}
-      <div className="h-5 w-full rounded-full overflow-hidden flex bg-gray-100 mb-6">
+      <div className="space-y-3">
         {data.map((d) => {
-          const pct = total > 0 ? (d.count / total) * 100 : 0;
-          if (pct <= 0) return null;
-          return (
-            <div
-              key={d.label}
-              className="h-full transition-all duration-500 first:rounded-l-full last:rounded-r-full"
-              style={{ width: `${pct}%`, backgroundColor: d.color }}
-              title={`${d.label}: ${d.count} (${pct.toFixed(1)}%)`}
-            />
-          );
-        })}
-      </div>
+          const barPct = (d.count / maxCount) * 100;
 
-      {/* Légende / paliers */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        {data.map((d) => {
-          const pct = total > 0 ? ((d.count / total) * 100).toFixed(1) : '0';
           return (
-            <div key={d.label} className="flex flex-col items-center p-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors">
-              <div
-                className="w-3 h-3 rounded-full mb-2"
-                style={{ backgroundColor: d.color }}
-              />
-              <span className="text-lg font-bold text-gray-900">{d.count.toLocaleString()}</span>
-              <span className="text-xs text-gray-500 font-medium">{d.label}</span>
-              <span className="text-[10px] text-gray-400 mt-0.5">{pct}%</span>
+            <div key={d.label} className="grid grid-cols-[56px_minmax(0,1fr)_120px] items-center gap-4 border border-slate-200 bg-slate-50/60 px-4 py-3">
+              <div className="text-sm font-black text-slate-950">{d.label}</div>
+
+              <div className="min-w-0">
+                <div className="h-3 overflow-hidden bg-white shadow-inner">
+                  <div
+                    className="h-full transition-all duration-700"
+                    style={{ width: `${barPct}%`, backgroundColor: d.color }}
+                  />
+                </div>
+              </div>
+
+              <div className="text-right text-sm font-black text-slate-950">
+                {d.count.toLocaleString()}
+                <span className="ml-1 text-xs font-semibold text-slate-500">victimes</span>
+              </div>
             </div>
           );
         })}
-      </div>
-
-      {/* Total */}
-      <div className="mt-4 pt-4 border-t border-gray-100 text-center">
-        <span className="text-sm text-gray-500">Total: </span>
-        <span className="text-sm font-bold text-gray-900">{total.toLocaleString()} victimes</span>
       </div>
     </div>
   );

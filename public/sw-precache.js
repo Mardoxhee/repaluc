@@ -1,8 +1,9 @@
 // Liste des URLs à pré-cacher pour fonctionnement offline
 const PRECACHE_URLS = [
   '/',
-  '/reparations',
-  '/luc',
+  '/reparations/dashboard',
+  '/reparations/victimes',
+  '/reparations/sources',
   '/offline.html',
 ];
 

@@ -16,8 +16,9 @@ self.addEventListener('install', (event) => {
     caches.open(CACHE_NAMES.pages).then((cache) => {
       return cache.addAll([
         '/',
-        '/reparations',
-        '/luc',
+        '/reparations/dashboard',
+        '/reparations/victimes',
+        '/reparations/sources',
         '/offline.html',
       ]).catch((err) => {
        console.log('[SW] Erreur lors du pré-cache:', err);
