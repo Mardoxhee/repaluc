@@ -28,6 +28,7 @@ import { normalizeApiList, normalizeGlobalProgress, normalizeText, type GlobalPr
 interface DashboardVictimesPecmuProps {
   onSelectAgentReparation?: (fullName: string) => void;
   onShowRecontactedVictims?: () => void;
+  onShowSignedContractVictims?: () => void;
 }
 
 const EMPTY_PROGRESS: GlobalProgressStats = {
@@ -52,7 +53,7 @@ const isPecmuVictim = (victim: any): boolean => {
   );
 };
 
-const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = () => {
+const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = ({ onShowSignedContractVictims }) => {
   const { fetcher } = useFetch();
   const kpis = useMemo(() => getMockPecmuKpis(), []);
   const timeline = useMemo(() => getMockPecmuTimeline(), []);
@@ -190,6 +191,7 @@ const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = () => {
           color="bg-gradient-to-br from-emerald-500 to-teal-600"
           subtitle={`${totalPecmu > 0 ? Math.round(((progress.contrat.withContrat || contractsCount) / totalPecmu) * 100) : 0}% des PECMU`}
           loading={loadingOfficial}
+          onClick={onShowSignedContractVictims}
         />
         <StatCard
           title="Déjà indemnisé"

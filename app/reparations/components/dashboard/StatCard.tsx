@@ -10,10 +10,20 @@ export interface StatCardProps {
   subtitle?: string;
   trend?: string;
   loading?: boolean;
+  onClick?: () => void;
 }
 
-const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color, subtitle, trend, loading }) => (
-  <div className="relative overflow-hidden bg-white/95 rounded-lg shadow-[0_14px_40px_-28px_rgba(15,23,42,0.55)] border border-slate-200/70 p-5 hover:-translate-y-0.5 hover:shadow-[0_18px_44px_-26px_rgba(15,23,42,0.62)] transition-all duration-300 group">
+const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color, subtitle, trend, loading, onClick }) => (
+  <div
+    className={`relative overflow-hidden bg-white/95 rounded-lg shadow-[0_14px_40px_-28px_rgba(15,23,42,0.55)] border border-slate-200/70 p-5 hover:-translate-y-0.5 hover:shadow-[0_18px_44px_-26px_rgba(15,23,42,0.62)] transition-all duration-300 group ${onClick ? 'cursor-pointer' : ''}`}
+    onClick={onClick}
+    role={onClick ? 'button' : undefined}
+    tabIndex={onClick ? 0 : undefined}
+    onKeyDown={(e) => {
+      if (!onClick) return;
+      if (e.key === 'Enter' || e.key === ' ') onClick();
+    }}
+  >
     <div className={`absolute inset-x-0 top-0 h-1 ${color}`} />
     <div className="flex items-start justify-between">
       <div className="flex-1">

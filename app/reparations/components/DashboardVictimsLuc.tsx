@@ -9,6 +9,7 @@ import ProgressionDetailLuc from './ProgressionDetailLuc';
 interface DashboardVictimsLucProps {
   onSelectAgentReparation?: (fullName: string) => void;
   onShowRecontactedVictims?: () => void;
+  onShowSignedContractVictims?: () => void;
   dashboardScope?: 'all' | 'luc';
   title?: string;
   description?: string;
@@ -18,6 +19,7 @@ interface DashboardVictimsLucProps {
 const DashboardVictimsLuc: React.FC<DashboardVictimsLucProps> = ({
   onSelectAgentReparation,
   onShowRecontactedVictims,
+  onShowSignedContractVictims,
   dashboardScope = 'luc',
   title = 'Tableau de bord — Victimes LUC',
   description = 'vue d’ensemble et indicateurs clés.',
@@ -27,6 +29,7 @@ const DashboardVictimsLuc: React.FC<DashboardVictimsLucProps> = ({
     <DashboardVictims
       onSelectAgentReparation={onSelectAgentReparation}
       onShowRecontactedVictims={onShowRecontactedVictims}
+      onShowSignedContractVictims={onShowSignedContractVictims}
       dashboardScope={dashboardScope}
       extraSection={
         <>

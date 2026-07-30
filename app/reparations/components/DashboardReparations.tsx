@@ -14,6 +14,7 @@ interface DashboardReparationsProps {
   defaultDashboard?: ReparationsDashboardKey;
   onSelectAgentReparation?: (fullName: string) => void;
   onShowRecontactedVictims?: () => void;
+  onShowSignedContractVictims?: (mention?: string) => void;
   onSelectMention?: (mention: string) => void;
   showIntro?: boolean;
 }
@@ -29,6 +30,7 @@ const DashboardReparations: React.FC<DashboardReparationsProps> = ({
   defaultDashboard = 'toutes',
   onSelectAgentReparation,
   onShowRecontactedVictims,
+  onShowSignedContractVictims,
   onSelectMention,
   showIntro = true,
 }) => {
@@ -122,6 +124,7 @@ const DashboardReparations: React.FC<DashboardReparationsProps> = ({
         <DashboardToutesVictimes
           onSelectAgentReparation={onSelectAgentReparation}
           onShowRecontactedVictims={onShowRecontactedVictims}
+          onShowSignedContractVictims={onShowSignedContractVictims}
           onSelectMention={onSelectMention}
         />
       )}
@@ -130,6 +133,7 @@ const DashboardReparations: React.FC<DashboardReparationsProps> = ({
         <DashboardVictimsLuc
           onSelectAgentReparation={onSelectAgentReparation}
           onShowRecontactedVictims={onShowRecontactedVictims}
+          onShowSignedContractVictims={() => onShowSignedContractVictims?.('LUC')}
         />
       )}
 
@@ -137,6 +141,7 @@ const DashboardReparations: React.FC<DashboardReparationsProps> = ({
         <DashboardVictimsMpu
           onSelectAgentReparation={onSelectAgentReparation}
           onShowRecontactedVictims={onShowRecontactedVictims}
+          onShowSignedContractVictims={() => onShowSignedContractVictims?.('MPU')}
         />
       )}
 
@@ -144,6 +149,7 @@ const DashboardReparations: React.FC<DashboardReparationsProps> = ({
         <DashboardVictimesPecmu
           onSelectAgentReparation={onSelectAgentReparation}
           onShowRecontactedVictims={onShowRecontactedVictims}
+          onShowSignedContractVictims={() => onShowSignedContractVictims?.('PECMU')}
         />
       )}
 

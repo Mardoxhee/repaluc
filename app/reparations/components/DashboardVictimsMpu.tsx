@@ -26,6 +26,7 @@ import { normalizeGlobalProgress, normalizeText, type GlobalProgressStats } from
 interface DashboardVictimsMpuProps {
   onSelectAgentReparation?: (fullName: string) => void;
   onShowRecontactedVictims?: () => void;
+  onShowSignedContractVictims?: () => void;
 }
 
 const isMpuVictim = (victim: any): boolean => {
@@ -225,7 +226,7 @@ const EMPTY_PROGRESS: GlobalProgressStats = {
   indemnisation: { commencee: 0, nonCommencee: 0, montantTotalIndemnise: 0 },
 };
 
-const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = () => {
+const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onShowSignedContractVictims }) => {
   const { fetcher } = useFetch();
   const [victims, setVictims] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -431,6 +432,7 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = () => {
           color="bg-emerald-500"
           subtitle={`${totalMpu > 0 ? Math.round((progress.contrat.withContrat / totalMpu) * 100) : 0}% des MPU`}
           loading={officialLoading}
+          onClick={onShowSignedContractVictims}
         />
       </div>
 

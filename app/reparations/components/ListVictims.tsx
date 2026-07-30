@@ -22,6 +22,7 @@ interface ReglagesProps {
     agentReparation?: string;
     photoNotNull?: boolean;
     mention?: string;
+    signedContractsOnly?: boolean;
 }
 
 const provincesRDC = [
@@ -52,6 +53,47 @@ const ProgressionCells: React.FC<{ done?: number; total?: number }> = ({ done, t
     );
 };
 
+const hasSignedContract = (victim: any): boolean => {
+    const asArray = (value: any): any[] => Array.isArray(value) ? value : [];
+    const nestedContracts = [
+        victim?.contrat,
+        victim?.contract,
+        ...asArray(victim?.contrats),
+        ...asArray(victim?.contracts),
+    ].filter(Boolean);
+
+    const hasDirectContractMarker = Boolean(
+        victim?.contratSigne === true ||
+        victim?.contractSigned === true ||
+        victim?.hasContrat === true ||
+        victim?.hasContract === true ||
+        victim?.contratId ||
+        victim?.contractId ||
+        victim?.dateContrat ||
+        victim?.dateSignatureContrat ||
+        victim?.signatureContrat
+    );
+
+    if (hasDirectContractMarker) return true;
+
+    if (
+        victim?.progression?.hasContrat === true ||
+        victim?.progression?.hasContract === true ||
+        victim?.progression?.hasContratSigne === true ||
+        victim?.progression?.hasSignedContract === true
+    ) {
+        return true;
+    }
+
+    return nestedContracts.some((contract: any) => Boolean(
+        contract?.id ||
+        contract?.dateSignature ||
+        contract?.signature ||
+        contract?.accepteReparation === true ||
+        contract?.metadataContrat
+    ));
+};
+
 const getProgressionDone = (victim: any): number => {
     const hasPhoto = typeof victim?.photo === 'string' && victim.photo.trim().length > 0;
     const hasPieceIdentiteFromProgress = victim?.progression?.hasPieceIdentite === true;
@@ -62,9 +104,90 @@ const getProgressionDone = (victim: any): number => {
         })
         : false;
     const hasPieceIdentite = hasPieceIdentiteFromProgress || hasPieceIdentiteFromDocs;
-    const computed = (hasPhoto ? 1 : 0) + (hasPieceIdentite ? 1 : 0);
+    const hasContract = hasSignedContract(victim);
+    const computed = (hasPhoto ? 1 : 0) + (hasPieceIdentite ? 1 : 0) + (hasContract ? 1 : 0);
     const existing = typeof victim?.progression?.done === 'number' ? victim.progression.done : 0;
-    return Math.max(existing, computed);
+    return Math.max(existing + (hasContract ? 1 : 0), computed);
+};
+
+const getProgressionTotal = (victim: any): number => {
+    const rawTotal = victim?.progression?.total;
+    const baseTotal = Number.isFinite(rawTotal) && rawTotal > 0 ? rawTotal : 5;
+    return hasSignedContract(victim) ? Math.max(baseTotal, 6) : baseTotal;
+};
+
+const normalizeApiList = (payload: any): any[] => {
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.data)) return payload.data;
+    if (Array.isArray(payload?.items)) return payload.items;
+    if (Array.isArray(payload?.results)) return payload.results;
+    return [];
+};
+
+const SIGNED_CONTRACT_MENTIONS = ['LUC', 'MPU', 'PECMU'] as const;
+
+const getSignedContractMention = (mention?: string): string => {
+    const normalized = String(mention ?? '').trim().toUpperCase();
+    return SIGNED_CONTRACT_MENTIONS.includes(normalized as any) ? normalized : '';
+};
+
+const getSignedContractsEndpoint = (mention?: string): string => {
+    const normalized = getSignedContractMention(mention);
+    return normalized ? `/contrat/${normalized}` : '/contrat';
+};
+
+const getContractVictimId = (item: any): number | string | null => {
+    const id = item?.victimeId ?? item?.victimId ?? item?.victime?.id ?? item?.victim?.id ?? item?.id;
+    if (typeof id === 'number' && Number.isFinite(id)) return id;
+    if (typeof id === 'string' && id.trim().length > 0) return id.trim();
+    return null;
+};
+
+const getVictimFromContractItem = (item: any): any => {
+    const nestedVictim = item?.victime ?? item?.victim;
+    if (nestedVictim && typeof nestedVictim === 'object') return nestedVictim;
+    return item;
+};
+
+const contractFilterFieldMap: Record<string, string> = {
+    nom: 'victime.nom',
+    categorie: 'victime.categorie',
+    province: 'victime.province',
+    territoire: 'victime.territoire',
+    commune: 'victime.commune',
+    sexe: 'victime.sexe',
+    prejudiceFinal: 'victime.prejudiceFinal',
+    indemnisation: 'victime.indemnisation',
+};
+
+const buildContractFilters = (rules: FilterRule[]): { champ: string; valeur: string }[] | null => {
+    const filters: { champ: string; valeur: string }[] = [];
+
+    for (const rule of rules) {
+        if (!rule.value) continue;
+        if (rule.operator !== 'equals') return null;
+
+        const champ = contractFilterFieldMap[rule.field];
+        if (!champ) return null;
+
+        filters.push({ champ, valeur: rule.value });
+    }
+
+    return filters;
+};
+
+const buildContractQuery = (page: number, limit: number, filters: { champ: string; valeur: string }[] = []) => {
+    const params = new URLSearchParams({
+        page: String(page),
+        limit: String(Math.min(Math.max(limit, 1), 100)),
+    });
+
+    filters.forEach(({ champ, valeur }) => {
+        params.append('champ', champ);
+        params.append('valeur', valeur);
+    });
+
+    return params.toString();
 };
 
 const statusOptions = [
@@ -134,7 +257,7 @@ const operators = [
     { key: 'between', label: 'Entre', types: ['number', 'date'] },
 ];
 
-const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation, photoNotNull, mention }) => {
+const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation, photoNotNull, mention, signedContractsOnly }) => {
     // Charger les questions du formulaire plan de vie au démarrage
     useEffect(() => {
         const loadQuestions = async () => {
@@ -677,7 +800,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
 
     useEffect(() => {
         setMeta(prev => ({ ...prev, page: 1 }));
-    }, [agentReparation, photoNotNull, victimTypeFilter, mention]);
+    }, [agentReparation, photoNotNull, victimTypeFilter, mention, signedContractsOnly]);
 
     const handleExportExcel = useCallback(async () => {
         setExporting(true);
@@ -800,6 +923,143 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
 
         const cacheKey = 'all-victims-cache';
 
+        if (signedContractsOnly) {
+            try {
+                const cachedResult = await getVictimsFromCache(cacheKey).catch(() => null);
+                const cachedRows = Array.isArray(cachedResult?.data) ? cachedResult.data : [];
+                const cacheById = new Map<string, any>(
+                    cachedRows
+                        .filter((victim: any) => victim?.id !== undefined && victim?.id !== null)
+                        .map((victim: any) => [String(victim.id), victim])
+                );
+
+                let signedVictims: any[] = [];
+                const selectedContractMention = getSignedContractMention(effectiveMention);
+                const serverFilters = buildContractFilters(filterRules);
+                const canUseContractServerPagination = Boolean(
+                    selectedContractMention &&
+                    !searchTerm &&
+                    serverFilters
+                );
+
+                const mapContractsToVictims = (contractRows: any[], endpointMention = '') => {
+                    const seen = new Set<string>();
+
+                    return contractRows.reduce((acc: any[], item: any) => {
+                        const victimId = getContractVictimId(item);
+                        if (victimId === null) return acc;
+
+                        const victimKey = String(victimId);
+                        if (seen.has(victimKey)) return acc;
+                        seen.add(victimKey);
+
+                        const victimFromContract = getVictimFromContractItem(item);
+                        const cachedVictim = cacheById.get(victimKey);
+                        const mergedVictim = {
+                            ...victimFromContract,
+                            ...cachedVictim,
+                            id: cachedVictim?.id ?? victimFromContract?.id ?? victimId,
+                            mention: cachedVictim?.mention ?? victimFromContract?.mention ?? endpointMention,
+                            contratId: item?.id ?? victimFromContract?.contratId,
+                            contratSigne: true,
+                        };
+
+                        acc.push(mergedVictim);
+                        return acc;
+                    }, []);
+                };
+
+                const loadAllContractsForMention = async (contractMention: string) => {
+                    const rows: any[] = [];
+                    const limit = 100;
+                    let page = 1;
+                    let hasNextPage = true;
+
+                    while (hasNextPage) {
+                        const endpoint = `${getSignedContractsEndpoint(contractMention)}?${buildContractQuery(page, limit)}`;
+                        const payload = await fetchCtx.fetcher(endpoint);
+                        rows.push(...normalizeApiList(payload));
+
+                        const metaPayload = payload?.meta;
+                        hasNextPage = Boolean(metaPayload?.hasNextPage);
+                        if (!metaPayload && normalizeApiList(payload).length < limit) hasNextPage = false;
+                        page += 1;
+                    }
+
+                    return rows;
+                };
+
+                if (isOffline) {
+                    signedVictims = cachedRows
+                        .filter(hasSignedContract)
+                        .map((victim: any) => ({ ...victim, contratSigne: true }));
+                } else if (canUseContractServerPagination && serverFilters) {
+                    const query = buildContractQuery(meta.page, meta.limit, serverFilters);
+                    const endpoint = `${getSignedContractsEndpoint(selectedContractMention)}?${query}`;
+                    const contratsPayload = await fetchCtx.fetcher(endpoint);
+                    const contractRows = normalizeApiList(contratsPayload);
+                    const pageData = mapContractsToVictims(contractRows, selectedContractMention);
+                    const metaPayload = contratsPayload?.meta;
+                    const totalItems = Number(metaPayload?.total ?? pageData.length);
+                    const totalPages = Number(metaPayload?.totalPages ?? Math.max(1, Math.ceil(totalItems / meta.limit)));
+                    const currentPage = Number(metaPayload?.page ?? meta.page);
+
+                    setVictims(pageData);
+                    setMeta(prev => ({
+                        ...prev,
+                        page: Number.isFinite(currentPage) && currentPage > 0 ? currentPage : prev.page,
+                        total: Number.isFinite(totalItems) ? totalItems : pageData.length,
+                        totalPages: Number.isFinite(totalPages) ? totalPages : Math.max(1, Math.ceil(pageData.length / meta.limit)),
+                        hasNextPage: Boolean(metaPayload?.hasNextPage),
+                        hasPreviousPage: Boolean(metaPayload?.hasPreviousPage),
+                    }));
+                    setUsingCache(false);
+                    setLoading(false);
+                    return;
+                } else {
+                    const mentionsToLoad = selectedContractMention
+                        ? [selectedContractMention]
+                        : [...SIGNED_CONTRACT_MENTIONS];
+                    const contractsByMention = await Promise.all(
+                        mentionsToLoad.map(async (contractMention) => ({
+                            mention: contractMention,
+                            rows: await loadAllContractsForMention(contractMention),
+                        }))
+                    );
+
+                    signedVictims = contractsByMention.flatMap(({ mention: contractMention, rows }) => (
+                        mapContractsToVictims(rows, contractMention)
+                    ));
+                }
+
+                const filteredData = applyLocalFilters(signedVictims);
+                const totalItems = filteredData.length;
+                const totalPages = Math.max(1, Math.ceil(totalItems / meta.limit));
+                const currentPage = Math.min(meta.page, totalPages);
+                const start = (currentPage - 1) * meta.limit;
+                const end = start + meta.limit;
+                const pageData = filteredData.slice(start, end);
+
+                setVictims(pageData);
+                setMeta(prev => ({
+                    ...prev,
+                    page: currentPage,
+                    total: totalItems,
+                    totalPages,
+                    hasNextPage: end < totalItems,
+                    hasPreviousPage: currentPage > 1,
+                }));
+                setUsingCache(isOffline);
+                setLoading(false);
+                return;
+            } catch (err) {
+                console.error('Erreur lors du chargement des victimes avec contrat signé:', err);
+                setError('Impossible de charger les victimes ayant signé un contrat.');
+                setLoading(false);
+                return;
+            }
+        }
+
         // Fonction pour afficher les données avec pagination
         // 1. Si on est hors ligne, on utilise uniquement le cache SANS SAUVEGARDER
         if (isOffline) {
@@ -911,7 +1171,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
             setError('Impossible de charger les données. Vérifiez votre connexion Internet.');
             setLoading(false);
         }
-    }, [buildQueryParams, fetchCtx?.fetcher, meta.page, meta.limit, filters, searchTerm, applyLocalFilters]);
+    }, [buildQueryParams, fetchCtx?.fetcher, meta.page, meta.limit, filters, searchTerm, applyLocalFilters, signedContractsOnly, effectiveMention]);
 
     useEffect(() => {
         const debounceTimeout = setTimeout(() => {
@@ -926,7 +1186,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
         let isMounted = true;
 
         const initializeData = async () => {
-            if (isMounted) {
+            if (isMounted && !signedContractsOnly) {
                 await loadAllPages();
             }
         };
@@ -936,7 +1196,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
         return () => {
             isMounted = false;
         };
-    }, []);
+    }, [signedContractsOnly]);
 
     // Écouter les changements de connexion
     useEffect(() => {
@@ -1465,7 +1725,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                                             <td className="px-6 py-4">
                                                 <ProgressionCells
                                                     done={getProgressionDone(victim)}
-                                                    total={victim?.progression?.total ?? 5}
+                                                    total={getProgressionTotal(victim)}
                                                 />
                                             </td>
                                             <td className="px-6 py-4 text-left">

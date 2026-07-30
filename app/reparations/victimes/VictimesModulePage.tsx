@@ -13,6 +13,7 @@ type InitialFilters = {
   mention?: string;
   agent?: string;
   photo?: boolean;
+  signedContracts?: boolean;
 };
 
 interface VictimesModulePageProps {
@@ -29,8 +30,9 @@ const VictimesModulePage: React.FC<VictimesModulePageProps> = ({ initialFilters 
       mention: ['LUC', 'MPU', 'PECMU'].includes(mention) ? mention : '',
       photoNotNull: Boolean(initialFilters?.photo),
       agentReparation: initialFilters?.agent || '',
+      signedContractsOnly: Boolean(initialFilters?.signedContracts),
     };
-  }, [initialFilters?.agent, initialFilters?.mention, initialFilters?.photo]);
+  }, [initialFilters?.agent, initialFilters?.mention, initialFilters?.photo, initialFilters?.signedContracts]);
 
   return (
     <div className="min-h-[calc(100vh-5rem)] bg-slate-50 px-4 py-6 md:px-6">
@@ -52,7 +54,7 @@ const VictimesModulePage: React.FC<VictimesModulePageProps> = ({ initialFilters 
 
       <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-[0_18px_50px_-42px_rgba(15,23,42,0.7)]">
         <ListVictims
-          key={`${activeConfig.mention}-${activeConfig.agentReparation}-${activeConfig.photoNotNull ? 'photo' : 'all'}`}
+          key={`${activeConfig.mention}-${activeConfig.agentReparation}-${activeConfig.photoNotNull ? 'photo' : 'all'}-${activeConfig.signedContractsOnly ? 'contrats-signes' : 'toutes'}`}
           mockPrejudices={mockPrejudices}
           mockMesures={mockMesures}
           mockProgrammes={mockProgrammes}
@@ -60,6 +62,7 @@ const VictimesModulePage: React.FC<VictimesModulePageProps> = ({ initialFilters 
           agentReparation={activeConfig.agentReparation}
           photoNotNull={activeConfig.photoNotNull}
           mention={activeConfig.mention}
+          signedContractsOnly={activeConfig.signedContractsOnly}
         />
       </div>
     </div>

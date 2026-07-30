@@ -27,6 +27,7 @@ import {
 interface DashboardVictimsProps {
   onSelectAgentReparation?: (fullName: string) => void;
   onShowRecontactedVictims?: () => void;
+  onShowSignedContractVictims?: () => void;
   dashboardScope?: 'all' | 'luc';
   extraSection?: React.ReactNode;
   afterMainStats?: React.ReactNode;
@@ -57,7 +58,7 @@ const getTotalForLucFromStats = (stats: { programme: any[]; categorie: any[] }) 
   return fromCategorie > 0 ? fromCategorie : 0;
 };
 
-const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentReparation, onShowRecontactedVictims, dashboardScope = 'all', extraSection, afterMainStats }) => {
+const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentReparation, onShowRecontactedVictims, onShowSignedContractVictims, dashboardScope = 'all', extraSection, afterMainStats }) => {
   const { fetcher } = useFetch();
   const [loading, setLoading] = useState(true);
   const [loadingRecontact, setLoadingRecontact] = useState(true);
@@ -460,6 +461,7 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
           color="bg-gradient-to-br from-emerald-500 to-emerald-600"
           subtitle=""
           loading={loading || loadingRecontact}
+          onClick={onShowSignedContractVictims}
         />
 
         <ProgressCard

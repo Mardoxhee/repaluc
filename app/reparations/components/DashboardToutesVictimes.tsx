@@ -14,6 +14,7 @@ type MentionStat = {
 interface DashboardToutesVictimesProps {
   onSelectAgentReparation?: (fullName: string) => void;
   onShowRecontactedVictims?: () => void;
+  onShowSignedContractVictims?: () => void;
   onSelectMention?: (mention: string) => void;
 }
 
@@ -57,6 +58,7 @@ const getTotalVictimes = (payload: any, mentions: MentionStat[]) => {
 const DashboardToutesVictimes: React.FC<DashboardToutesVictimesProps> = ({
   onSelectAgentReparation,
   onShowRecontactedVictims,
+  onShowSignedContractVictims,
   onSelectMention,
 }) => {
   const { fetcher } = useFetch();
@@ -94,6 +96,7 @@ const DashboardToutesVictimes: React.FC<DashboardToutesVictimesProps> = ({
       description="Vue globale de toutes les catégories des victimes"
       onSelectAgentReparation={onSelectAgentReparation}
       onShowRecontactedVictims={onShowRecontactedVictims}
+      onShowSignedContractVictims={onShowSignedContractVictims}
       beforeProgression={
         <div className="mb-8 bg-white border border-gray-100 rounded-2xl shadow-lg p-6">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-5">

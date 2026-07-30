@@ -17,6 +17,7 @@ export default async function Page({ searchParams }: PageProps) {
         mention: first(params?.mention),
         agent: first(params?.agent),
         photo: first(params?.photo) === '1',
+        signedContracts: first(params?.contrats) === 'signes',
       }}
     />
   );
