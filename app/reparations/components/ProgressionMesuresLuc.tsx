@@ -3,7 +3,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   FiActivity,
-  FiBookOpen,
   FiBriefcase,
   FiCheckCircle,
   FiClock,
@@ -13,16 +12,33 @@ import {
   FiUsers,
 } from 'react-icons/fi';
 import { useFetch } from '../../context/FetchContext';
-import { getVictimsFromCache, isOnline } from '../../utils/victimsCache';
+import { isOnline } from '../../utils/victimsCache';
 
-type Mesure = { id: number; nom: string };
+type MesureStatsKey =
+  | 'indemnisation'
+  | 'reinsertionEconomique'
+  | 'priseEnChargeMedicale'
+  | 'accompagnementPsychosocial';
 
-const FALLBACK_MESURES: Mesure[] = [
-  { id: 1, nom: 'Prise en charge médicale' },
-  { id: 3, nom: 'Accompagnement psychologique' },
-  { id: 5, nom: 'Indemnisation financière' },
-  { id: 6, nom: 'Appui économique' },
-  { id: 9, nom: 'Formation professionnelle' },
+type Mesure = { id: MesureStatsKey; nom: string; apiKey: MesureStatsKey };
+
+type MesuresReparationStats = {
+  totalContrats: number;
+  mesuresReparationAcceptees: Record<MesureStatsKey, number>;
+};
+
+const EMPTY_MESURE_COUNTS: Record<MesureStatsKey, number> = {
+  indemnisation: 0,
+  reinsertionEconomique: 0,
+  priseEnChargeMedicale: 0,
+  accompagnementPsychosocial: 0,
+};
+
+const LUC_MESURES: Mesure[] = [
+  { id: 'indemnisation', apiKey: 'indemnisation', nom: 'Indemnisation financière' },
+  { id: 'reinsertionEconomique', apiKey: 'reinsertionEconomique', nom: 'Réinsertion économique' },
+  { id: 'priseEnChargeMedicale', apiKey: 'priseEnChargeMedicale', nom: 'Prise en charge médicale' },
+  { id: 'accompagnementPsychosocial', apiKey: 'accompagnementPsychosocial', nom: 'Accompagnement psychosocial' },
 ];
 
 const normalizeMeasureName = (nom: string): string => {
@@ -31,18 +47,6 @@ const normalizeMeasureName = (nom: string): string => {
     .replace(/[\u0300-\u036f]/g, '')
     .trim()
     .toLowerCase();
-};
-
-const ALLOWED_MESURE_KEYS = new Set([
-  'prise en charge medicale',
-  'accompagnement psychologique',
-  'indemnisation financiere',
-  'appui economique',
-  'formation professionnelle',
-]);
-
-const filterLucMesures = (items: Mesure[]): Mesure[] => {
-  return items.filter((m) => ALLOWED_MESURE_KEYS.has(normalizeMeasureName(m.nom)));
 };
 
 type Visual = {
@@ -69,6 +73,11 @@ const MESURE_VISUALS: Record<string, Visual> = {
     gradient: 'from-purple-500 to-fuchsia-600',
     pill: 'bg-purple-50 text-purple-700',
   },
+  'accompagnement psychosocial': {
+    icon: <FiActivity size={20} className="text-white" />,
+    gradient: 'from-purple-500 to-fuchsia-600',
+    pill: 'bg-purple-50 text-purple-700',
+  },
   'indemnisation financiere': {
     icon: <FiDollarSign size={20} className="text-white" />,
     gradient: 'from-emerald-500 to-green-600',
@@ -85,10 +94,10 @@ const MESURE_VISUALS: Record<string, Visual> = {
     gradient: 'from-orange-500 to-amber-600',
     pill: 'bg-orange-50 text-orange-700',
   },
-  'formation professionnelle': {
-    icon: <FiBookOpen size={20} className="text-white" />,
-    gradient: 'from-yellow-500 to-amber-600',
-    pill: 'bg-yellow-50 text-yellow-700',
+  'reinsertion economique': {
+    icon: <FiBriefcase size={20} className="text-white" />,
+    gradient: 'from-amber-500 to-orange-600',
+    pill: 'bg-amber-50 text-amber-700',
   },
 };
 
@@ -97,129 +106,92 @@ const getVisual = (nom: string): Visual => {
   return MESURE_VISUALS[key] || DEFAULT_VISUAL;
 };
 
-const isLucVictim = (victim: any): boolean => {
-  const mentionValue = typeof victim?.mention === 'string' ? victim.mention.trim().toLowerCase() : '';
-  const statusValue = typeof victim?.status === 'string' ? victim.status.trim().toLowerCase() : '';
-  const categorieValue = typeof victim?.categorie === 'string' ? victim.categorie.trim().toLowerCase() : '';
-  const programmeValue = typeof victim?.programme === 'string' ? victim.programme.trim().toLowerCase() : '';
-  return (
-    mentionValue === 'luc' ||
-    statusValue.includes('luc') ||
-    categorieValue.includes('luc') ||
-    programmeValue.includes('luc')
-  );
+const toNumber = (value: unknown): number => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : 0;
 };
 
-const extractMesureIds = (victim: any): number[] => {
-  const ids: number[] = [];
-  const prejudices = Array.isArray(victim?.prejudices) ? victim.prejudices : [];
-  prejudices.forEach((p: any) => {
-    const mesures = Array.isArray(p?.mesures) ? p.mesures : [];
-    mesures.forEach((m: any) => {
-      const id = typeof m?.id === 'number' ? m.id : Number(m?.id);
-      if (Number.isFinite(id)) ids.push(id);
-    });
-  });
-  return Array.from(new Set(ids));
+const normalizeMesuresStats = (payload: any): MesuresReparationStats => {
+  const data = payload?.data ?? payload ?? {};
+  const mesures = data?.mesuresReparationAcceptees ?? {};
+  return {
+    totalContrats: toNumber(data?.totalContrats),
+    mesuresReparationAcceptees: {
+      indemnisation: toNumber(mesures?.indemnisation),
+      reinsertionEconomique: toNumber(mesures?.reinsertionEconomique),
+      priseEnChargeMedicale: toNumber(mesures?.priseEnChargeMedicale),
+      accompagnementPsychosocial: toNumber(mesures?.accompagnementPsychosocial),
+    },
+  };
 };
 
 const ProgressionMesuresLuc: React.FC = () => {
   const { fetcher } = useFetch();
-  const [mesures, setMesures] = useState<Mesure[]>([]);
-  const [loadingMesures, setLoadingMesures] = useState<boolean>(true);
-  const [victims, setVictims] = useState<any[]>([]);
-  const [loadingVictims, setLoadingVictims] = useState<boolean>(true);
+  const [mesuresStats, setMesuresStats] = useState<MesuresReparationStats>({
+    totalContrats: 0,
+    mesuresReparationAcceptees: EMPTY_MESURE_COUNTS,
+  });
+  const [totalVictimesLuc, setTotalVictimesLuc] = useState<number>(0);
   const [indemnisationBeneficiaires, setIndemnisationBeneficiaires] = useState<number>(0);
-
-  useEffect(() => {
-    let mounted = true;
-    const loadGlobalProgress = async () => {
-      try {
-        if (!isOnline() || !fetcher) return;
-        const resp = await fetcher('/victime/stats/reparation/globalProgress/LUC');
-        const commencee = Number(resp?.data?.indemnisation?.commencee);
-        if (mounted) setIndemnisationBeneficiaires(Number.isFinite(commencee) ? commencee : 0);
-      } catch {
-        if (mounted) setIndemnisationBeneficiaires(0);
-      }
-    };
-    loadGlobalProgress();
-    return () => {
-      mounted = false;
-    };
-  }, [fetcher]);
+  const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
     let mounted = true;
 
-    const loadMesures = async () => {
-      setLoadingMesures(true);
+    const loadStats = async () => {
+      setLoading(true);
       try {
         if (!isOnline() || !fetcher) {
-          if (mounted) setMesures(FALLBACK_MESURES);
+          if (mounted) {
+            setMesuresStats({
+              totalContrats: 0,
+              mesuresReparationAcceptees: EMPTY_MESURE_COUNTS,
+            });
+            setTotalVictimesLuc(0);
+            setIndemnisationBeneficiaires(0);
+          }
           return;
         }
-        const data = await fetcher('/mesures-reparation');
-        const mapped: Mesure[] = Array.isArray(data)
-          ? data
-            .map((item: any) => ({
-              id: Number(item?.id),
-              nom: typeof item?.mesure === 'string' && item.mesure.trim().length > 0
-                ? item.mesure
-                : (typeof item?.nom === 'string' ? item.nom : ''),
-            }))
-            .filter((m) => Number.isFinite(m.id) && m.nom.length > 0)
-          : [];
-        const allowedMapped = filterLucMesures(mapped);
-        if (mounted) setMesures(allowedMapped.length > 0 ? allowedMapped : FALLBACK_MESURES);
+
+        const [mesuresResp, progressResp] = await Promise.all([
+          fetcher('/contrat/stats/mesures-reparation/LUC'),
+          fetcher('/victime/stats/reparation/globalProgress/LUC'),
+        ]);
+        if (!mounted) return;
+
+        const normalizedStats = normalizeMesuresStats(mesuresResp);
+        const progressData = progressResp?.data ?? progressResp ?? {};
+        setMesuresStats(normalizedStats);
+        setTotalVictimesLuc(toNumber(progressData?.total));
+        setIndemnisationBeneficiaires(toNumber(progressData?.indemnisation?.commencee));
       } catch {
-        if (mounted) setMesures(FALLBACK_MESURES);
+        if (mounted) {
+          setMesuresStats({
+            totalContrats: 0,
+            mesuresReparationAcceptees: EMPTY_MESURE_COUNTS,
+          });
+          setTotalVictimesLuc(0);
+          setIndemnisationBeneficiaires(0);
+        }
       } finally {
-        if (mounted) setLoadingMesures(false);
+        if (mounted) setLoading(false);
       }
     };
 
-    loadMesures();
+    loadStats();
     return () => {
       mounted = false;
     };
   }, [fetcher]);
 
-  useEffect(() => {
-    let mounted = true;
-
-    const loadVictims = async () => {
-      setLoadingVictims(true);
-      try {
-        const cached = await getVictimsFromCache('all-victims-cache');
-        if (mounted) {
-          setVictims(Array.isArray(cached?.data) ? cached!.data : []);
-        }
-      } catch {
-        if (mounted) setVictims([]);
-      } finally {
-        if (mounted) setLoadingVictims(false);
-      }
-    };
-
-    loadVictims();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const lucVictims = useMemo(() => victims.filter(isLucVictim), [victims]);
-
   const perMesure = useMemo(() => {
-    return mesures.map((m) => {
-      const concernees = lucVictims.reduce((acc, v) => {
-        return extractMesureIds(v).includes(m.id) ? acc + 1 : acc;
-      }, 0);
-      const key = m.nom.trim().toLowerCase();
+    return LUC_MESURES.map((m) => {
+      const concernees = mesuresStats.mesuresReparationAcceptees[m.apiKey] ?? 0;
       let beneficiaires = 0;
-      if (key.includes('indemnisation')) {
+      if (m.apiKey === 'indemnisation') {
         beneficiaires = Math.min(indemnisationBeneficiaires, concernees || indemnisationBeneficiaires);
       }
+      const hasBeneficiaireStats = m.apiKey === 'indemnisation';
       const percent = concernees > 0 ? Math.round((beneficiaires / concernees) * 100) : 0;
       const enAttente = Math.max(0, concernees - beneficiaires);
       return {
@@ -227,15 +199,20 @@ const ProgressionMesuresLuc: React.FC = () => {
         nom: m.nom,
         concernees,
         beneficiaires,
+        beneficiaireNote: hasBeneficiaireStats ? 'ont déjà perçu un paiement' : 'suivi bénéficiaire à confirmer',
+        attenteLabel: hasBeneficiaireStats ? 'en attente' : 'à confirmer',
         percent,
         enAttente,
         visual: getVisual(m.nom),
       };
     });
-  }, [mesures, lucVictims, indemnisationBeneficiaires]);
+  }, [mesuresStats, indemnisationBeneficiaires]);
 
-  const loading = loadingMesures || loadingVictims;
-  const totalLuc = lucVictims.length;
+  const baseLabel = totalVictimesLuc > 0
+    ? `${totalVictimesLuc.toLocaleString()} victime${totalVictimesLuc > 1 ? 's' : ''} LUC`
+    : mesuresStats.totalContrats > 0
+      ? `${mesuresStats.totalContrats.toLocaleString()} contrat${mesuresStats.totalContrats > 1 ? 's' : ''} LUC`
+      : '';
 
   const totalConcernees = perMesure.reduce((acc, r) => acc + r.concernees, 0);
   const totalBeneficiaires = perMesure.reduce((acc, r) => acc + r.beneficiaires, 0);
@@ -257,9 +234,9 @@ const ProgressionMesuresLuc: React.FC = () => {
               </h3>
               <p className="text-white/85 text-sm mt-1 max-w-2xl">
                 Suivi humanitaire: victimes concernées par chaque mesure vs bénéficiaires effectifs.
-                {totalLuc > 0 ? (
+                {baseLabel ? (
                   <span className="ml-1 font-semibold text-white">
-                    Base: {totalLuc.toLocaleString()} victime{totalLuc > 1 ? 's' : ''} LUC.
+                    Base: {baseLabel}.
                   </span>
                 ) : null}
               </p>
@@ -321,7 +298,7 @@ const ProgressionMesuresLuc: React.FC = () => {
       {/* Cartes par mesure */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
         {(loading
-          ? Array.from({ length: 6 }).map((_, i) => ({ skeleton: true as const, id: `s-${i}` }))
+          ? Array.from({ length: LUC_MESURES.length }).map((_, i) => ({ skeleton: true as const, id: `s-${i}` }))
           : perMesure.map((r) => ({ skeleton: false as const, ...r }))
         ).map((row: any) => (
           <div
@@ -372,7 +349,7 @@ const ProgressionMesuresLuc: React.FC = () => {
                       <div className="text-2xl font-bold text-emerald-700 mt-0.5 leading-tight">
                         {row.beneficiaires.toLocaleString()}
                       </div>
-                      <div className="text-[11px] text-emerald-700/80">déjà pris en charge</div>
+                      <div className="text-[11px] text-emerald-700/80">{row.beneficiaireNote}</div>
                     </div>
                   </div>
 
@@ -392,7 +369,7 @@ const ProgressionMesuresLuc: React.FC = () => {
                     </div>
                     <div className="mt-2 flex items-center justify-between text-[11px]">
                       <span className="inline-flex items-center gap-1 text-gray-500">
-                        <FiClock size={12} /> {row.enAttente.toLocaleString()} en attente
+                        <FiClock size={12} /> {row.enAttente.toLocaleString()} {row.attenteLabel}
                       </span>
                       {row.concernees === 0 ? (
                         <span className="text-gray-400 italic">Aucune victime assignée</span>
