@@ -14,6 +14,7 @@ interface SignaturesSectionProps {
     saveMessage: SaveMessage | null;
     pendingOfflineContrat: PendingContract | null;
     setShowSignatureModal: (show: boolean) => void;
+    useLegacyContractText?: boolean;
 }
 
 export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
@@ -26,6 +27,7 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
     saveMessage,
     pendingOfflineContrat,
     setShowSignatureModal,
+    useLegacyContractText = false,
 }) => {
     const updateField = (field: keyof ContractForm, value: string) => {
         setContractForm((prev) => ({ ...prev, [field]: value }));
@@ -98,8 +100,14 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
                                 />
                             </label>
                             <div className="mb-2">
-                                <p className="text-sm font-semibold">Signature ou empreinte</p>
-                                <p className="text-xs italic text-gray-600 mb-2">Précédée de la mention « LU ET APPROUVÉ »</p>
+                                <p className="text-sm font-semibold">
+                                    Signature ou empreinte{useLegacyContractText ? ' :' : ''}
+                                </p>
+                                <p className="text-xs italic text-gray-600 mb-2">
+                                    {useLegacyContractText
+                                        ? '(précédée de la mention LU ET APPROUVÉ)'
+                                        : 'Précédée de la mention « LU ET APPROUVÉ »'}
+                                </p>
 
                                 {existingContrat && signatureUrl ? (
                                     <div className="signature-box">

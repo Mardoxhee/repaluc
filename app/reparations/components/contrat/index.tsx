@@ -19,7 +19,7 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
         representant,
         contractForm,
         selectedTemplateId,
-        selectedTemplate,
+        selectedTemplateBareme,
         canvasRef,
         isSaving,
         saveMessage,
@@ -44,24 +44,37 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
         addTranche,
         removeTranche,
         updateTranche,
+        applyBaremeToTranches,
         saveContract,
         exportToPDF,
     } = useContrat(victim);
+    const usesLegacyContractText = selectedTemplateId === 'luc-decision-justice';
 
     return (
         <>
             <style jsx global>{`
                 #contrat-content {
-                    width: 210mm;
-                    max-width: 100%;
-                    margin: 0 auto;
+                    width: 100%;
+                    max-width: none;
+                    margin: 0;
                     background: #ffffff;
                     color: #111827;
                     font-family: Arial, Helvetica, sans-serif;
                     font-size: 12px;
+                    font-weight: 600;
                     line-height: 1.45;
-                    padding: 14mm 16mm;
-                    box-shadow: 0 24px 70px -48px rgba(15, 23, 42, 0.65);
+                    padding: 18px 24px 28px;
+                    box-shadow: none;
+                }
+                #contrat-content .font-semibold {
+                    font-weight: 600 !important;
+                }
+                #contrat-content .font-bold {
+                    font-weight: 700 !important;
+                }
+                #contrat-content .font-extrabold,
+                #contrat-content .font-black {
+                    font-weight: 700 !important;
                 }
                 #contrat-content .contract-section {
                     margin-bottom: 18px;
@@ -96,9 +109,11 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                     border: 0;
                     border-bottom: 1px dotted #9ca3af;
                     background: transparent;
-                    color: #111827;
-                    font: inherit;
-                    font-weight: 600;
+                    color: #374151;
+                    font-family: 'Courier New', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+                    font-size: 15px;
+                    font-weight: 400;
+                    letter-spacing: 0;
                     line-height: 1.35;
                     min-height: 20px;
                     padding: 0 3px 2px;
@@ -148,6 +163,7 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                     #contrat-content {
                         width: 210mm;
                         max-width: 210mm;
+                        margin: 0 auto;
                         padding: 12mm 14mm;
                         box-shadow: none;
                     }
@@ -155,8 +171,39 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                 #contrat-content.pdf-export-mode {
                     width: 210mm !important;
                     max-width: 210mm !important;
+                    margin: 0 auto !important;
+                    background-color: #ffffff !important;
+                    color: #111827 !important;
                     box-shadow: none !important;
                     padding: 12mm 14mm !important;
+                }
+                #contrat-content.pdf-export-mode * {
+                    border-color: #d1d5db !important;
+                    box-shadow: none !important;
+                    text-shadow: none !important;
+                }
+                #contrat-content.pdf-export-mode,
+                #contrat-content.pdf-export-mode .text-gray-600,
+                #contrat-content.pdf-export-mode .text-gray-700,
+                #contrat-content.pdf-export-mode .text-gray-800,
+                #contrat-content.pdf-export-mode .text-gray-900,
+                #contrat-content.pdf-export-mode .text-gray-950 {
+                    color: #111827 !important;
+                }
+                #contrat-content.pdf-export-mode .text-blue-600,
+                #contrat-content.pdf-export-mode .text-blue-700,
+                #contrat-content.pdf-export-mode .text-blue-800,
+                #contrat-content.pdf-export-mode .text-blue-900,
+                #contrat-content.pdf-export-mode .text-blue-950 {
+                    color: #1e3a8a !important;
+                }
+                #contrat-content.pdf-export-mode .bg-white {
+                    background-color: #ffffff !important;
+                }
+                #contrat-content.pdf-export-mode .bg-blue-50,
+                #contrat-content.pdf-export-mode .bg-gray-50,
+                #contrat-content.pdf-export-mode .bg-gray-100 {
+                    background-color: #f8fafc !important;
                 }
                 .page-break-avoid {
                     page-break-inside: avoid;
@@ -199,7 +246,7 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
 
                 {/* Affichage du détail du contrat ou formulaire de création */}
                 {!loadingContrat && (!existingContrat || showContratDetail) && (
-                    <div className="mx-auto max-w-[calc(210mm+4rem)] p-4 sm:p-6">
+                    <div className="w-full p-3 sm:p-4">
                         {/* Boutons d'action */}
                         <div className="flex justify-between items-center mb-4 no-print">
                             {existingContrat && (
@@ -233,18 +280,21 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
 
                             <ContractTemplateSelector
                                 selectedTemplateId={selectedTemplateId}
+                                selectedPrejudiceLabel={contractForm.prejudiceFinal}
                                 onSelectTemplate={selectContractTemplate}
                             />
 
                             <VictimInfo
                                 victim={victim}
-                                selectedTemplate={selectedTemplate}
+                                selectedTemplateBareme={selectedTemplateBareme}
+                                useLegacyContractText={usesLegacyContractText}
                                 contractForm={contractForm}
                                 setContractForm={setContractForm}
                                 consentements={consentements}
                                 setConsentements={setConsentements}
                                 representant={representant}
                                 setRepresentant={setRepresentant}
+                                applyBaremeToTranches={applyBaremeToTranches}
                                 totalMontant={totalMontant}
                             />
 
@@ -254,16 +304,20 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                                 addTranche={addTranche}
                                 removeTranche={removeTranche}
                                 updateTranche={updateTranche}
+                                useLegacyLayout={usesLegacyContractText}
                             />
 
-                            <ReparationMeasuresSection
-                                consentements={consentements}
-                                setConsentements={setConsentements}
-                            />
+                            {!usesLegacyContractText && (
+                                <ReparationMeasuresSection
+                                    consentements={consentements}
+                                    setConsentements={setConsentements}
+                                />
+                            )}
 
                             <ConsentementsSection
                                 consentements={consentements}
                                 setConsentements={setConsentements}
+                                useLegacyContractText={usesLegacyContractText}
                             />
 
                             <SignaturesSection
@@ -276,6 +330,7 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                                 saveMessage={saveMessage}
                                 pendingOfflineContrat={pendingOfflineContrat}
                                 setShowSignatureModal={setShowSignatureModal}
+                                useLegacyContractText={usesLegacyContractText}
                             />
                         </div>
                     </div>

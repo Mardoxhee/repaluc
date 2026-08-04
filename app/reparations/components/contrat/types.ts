@@ -73,7 +73,8 @@ export type ContractTemplateId =
     | 'vslc'
     | 'atteinte-grave'
     | 'atteinte-integrite-physique'
-    | 'perte-economique';
+    | 'perte-economique'
+    | 'luc-decision-justice';
 
 export type MesureReparationKey =
     | 'indemnisation'
@@ -91,9 +92,20 @@ export interface ContractTemplate {
     amountWords: string;
     trancheAmountUSD: number;
     keywords: string[];
+    baremes?: ContractTemplateBareme[];
+}
+
+export interface ContractTemplateBareme {
+    prejudiceLabel: string;
+    amountUSD: number;
+    amountWords: string;
+    tranchesUSD: number[];
+    trancheLabels?: string[];
+    keywords: string[];
 }
 
 export interface ContractMetadata {
+    contractTemplateId?: ContractTemplateId;
     mesuresReparationAcceptees: MesureReparationKey[];
     mesuresReparationRenoncees: MesureReparationKey[];
     paiementMobileMoney: boolean;

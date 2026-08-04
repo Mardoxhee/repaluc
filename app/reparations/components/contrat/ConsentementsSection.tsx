@@ -5,12 +5,30 @@ import { Consentements } from './types';
 interface ConsentementsSectionProps {
     consentements: Consentements;
     setConsentements: React.Dispatch<React.SetStateAction<Consentements>>;
+    useLegacyContractText?: boolean;
 }
 
 export const ConsentementsSection: React.FC<ConsentementsSectionProps> = ({
     consentements,
     setConsentements,
+    useLegacyContractText = false,
 }) => {
+    const updateAcceptance = (accepted: boolean) => {
+        setConsentements((prev) => ({
+            ...prev,
+            accepteReparation: accepted,
+            refuseReparation: accepted ? false : prev.refuseReparation,
+        }));
+    };
+
+    const updateRefusal = (refused: boolean) => {
+        setConsentements((prev) => ({
+            ...prev,
+            refuseReparation: refused,
+            accepteReparation: refused ? false : prev.accepteReparation,
+        }));
+    };
+
     return (
         <>
             <div className="mb-6 text-sm leading-relaxed">
@@ -36,10 +54,46 @@ export const ConsentementsSection: React.FC<ConsentementsSectionProps> = ({
                     l'année et en tranches convenues avec la victime lors des entretiens de mise en œuvre.
                     Aucun versement en faveur de la victime ci-haut désignée ne sera effectué en cash.
                 </p>
+                {useLegacyContractText ? (
+                    <>
+                        <p className="mb-3">
+                            La victime déclare avoir été informée de ses droits et des modalités de mise en œuvre
+                            de la mesure.
+                        </p>
+                        <p className="mb-3">
+                            Elle a pu poser toutes les questions souhaitées et a reçu des réponses complètes et
+                            compréhensibles.
+                        </p>
+                    </>
+                ) : null}
             </div >
 
             <div className="mb-6">
                 <div className="space-y-3">
+                    {useLegacyContractText ? (
+                        <>
+                            <div className="flex items-start">
+                                <input
+                                    type="checkbox"
+                                    checked={consentements.accepteReparation}
+                                    onChange={(e) => updateAcceptance(e.target.checked)}
+                                    className="mt-1 mr-3"
+                                />
+                                <label className="text-sm">J'accepte de bénéficier des mesures de réparation administrative</label>
+                            </div>
+
+                            <div className="flex items-start">
+                                <input
+                                    type="checkbox"
+                                    checked={consentements.refuseReparation}
+                                    onChange={(e) => updateRefusal(e.target.checked)}
+                                    className="mt-1 mr-3"
+                                />
+                                <label className="text-sm">Je ne souhaite pas bénéficier de cette mesure de réparation administrative</label>
+                            </div>
+                        </>
+                    ) : null}
+
                     <div className="flex items-start">
                         <input
                             type="checkbox"

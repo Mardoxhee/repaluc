@@ -1,32 +1,36 @@
 'use client';
 import React from 'react';
-import type { ContractTemplate, Victim, Representant, ContractForm, Consentements } from './types';
-import { CONTRACT_TEMPLATES } from './contractTemplates';
+import type { ContractTemplateBareme, Victim, Representant, ContractForm, Consentements } from './types';
+import { getContractPrejudiceOptions } from './contractTemplates';
 
 interface VictimInfoProps {
     victim: Victim;
-    selectedTemplate: ContractTemplate;
+    selectedTemplateBareme: ContractTemplateBareme;
+    useLegacyContractText?: boolean;
     contractForm: ContractForm;
     setContractForm: React.Dispatch<React.SetStateAction<ContractForm>>;
     consentements: Consentements;
     setConsentements: React.Dispatch<React.SetStateAction<Consentements>>;
     representant: Representant;
     setRepresentant: React.Dispatch<React.SetStateAction<Representant>>;
+    applyBaremeToTranches: () => void;
     totalMontant: number;
 }
 
 const inputClass = 'border-b border-dotted border-gray-400 outline-none text-sm bg-transparent px-1 py-0.5 min-w-0';
 
-const prejudiceOptions = CONTRACT_TEMPLATES.map((template) => template.prejudiceLabel);
+const prejudiceOptions = getContractPrejudiceOptions();
 
 export const VictimInfo: React.FC<VictimInfoProps> = ({
-    selectedTemplate,
+    selectedTemplateBareme,
+    useLegacyContractText = false,
     contractForm,
     setContractForm,
     consentements,
     setConsentements,
     representant,
     setRepresentant,
+    applyBaremeToTranches,
     totalMontant,
 }) => {
     const updateField = (field: keyof ContractForm, value: string) => {
@@ -65,7 +69,16 @@ export const VictimInfo: React.FC<VictimInfoProps> = ({
             <div className="mb-6">
                 <div className="mb-3">
                     <span className="font-semibold text-sm mr-2">Type de contrat :</span>
-                    <span className="text-sm">{contractForm.typeContrat}</span>
+                    {useLegacyContractText ? (
+                        <input
+                            type="text"
+                            value={contractForm.typeContrat}
+                            onChange={(e) => updateField('typeContrat', e.target.value)}
+                            className={`${inputClass} w-80`}
+                        />
+                    ) : (
+                        <span className="text-sm">{contractForm.typeContrat}</span>
+                    )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 mb-3">
@@ -274,7 +287,7 @@ export const VictimInfo: React.FC<VictimInfoProps> = ({
             {/* Section reconnaissance */}
             <div className="mb-6">
                 <p className="font-bold text-sm mb-2">A été reconnue comme victime du préjudice suivant :</p>
-                <div className="mb-4">
+                <div className="flex flex-col gap-2 mb-4 sm:flex-row sm:items-center">
                     <input
                         type="text"
                         list="prejudice-final-options"
@@ -283,11 +296,19 @@ export const VictimInfo: React.FC<VictimInfoProps> = ({
                         className={`${inputClass} italic w-full sm:w-96`}
                         placeholder="Préjudice final"
                     />
+                    <button
+                        type="button"
+                        onClick={applyBaremeToTranches}
+                        className="no-print px-3 py-1.5 text-xs font-semibold text-blue-700 border border-blue-200 rounded hover:bg-blue-50"
+                    >
+                        Appliquer le barème
+                    </button>
                 </div>
                 <p className="text-sm leading-relaxed mb-4">
                     À ce titre, une indemnisation d'un montant de l'équivalent en Francs Congolais de
                     <span className="font-semibold"> {totalMontant.toLocaleString('fr-FR')} USD </span>
-                    ({selectedTemplate.amountWords}) vous est proposée, en tant
+                    ({selectedTemplateBareme.amountWords}) 
+                    vous est proposée, en tant
                     que mesure de réparation administrative versée par le FONAREV, de manière forfaitaire
                     et à titre symbolique en vue de contribuer au soulagement des préjudices subis.
                 </p>
@@ -358,7 +379,7 @@ export const VictimInfo: React.FC<VictimInfoProps> = ({
                     <div className="flex items-start">
                         <input
                             type="checkbox"
-                            checked={consentements.incapaciteConsentir}
+                            checked={useLegacyContractText ? representant.nom.trim().length > 0 : consentements.incapaciteConsentir}
                             onChange={(e) => {
                                 const checked = e.target.checked;
                                 setConsentements({ ...consentements, incapaciteConsentir: checked });
@@ -373,7 +394,7 @@ export const VictimInfo: React.FC<VictimInfoProps> = ({
                     <div className="flex items-start">
                         <input
                             type="checkbox"
-                            checked={consentements.consentementRepresentant}
+                            checked={useLegacyContractText ? representant.nom.trim().length > 0 : consentements.consentementRepresentant}
                             onChange={(e) => {
                                 const checked = e.target.checked;
                                 setConsentements({ ...consentements, consentementRepresentant: checked });
