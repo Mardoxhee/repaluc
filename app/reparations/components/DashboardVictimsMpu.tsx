@@ -21,7 +21,16 @@ import {
 import { getVictimsFromCache } from '../../utils/victimsCache';
 import MpuCliniquesSection from './MpuCliniquesSection';
 import { useFetch } from '../../context/FetchContext';
-import { normalizeGlobalProgress, normalizeText, type GlobalProgressStats } from '../utils/mentionStats';
+import {
+  normalizeApiList,
+  normalizeGlobalProgress,
+  normalizeSexeRows,
+  normalizeText,
+  normalizeTrancheAgeRows,
+  toNumber,
+  type CountRow,
+  type GlobalProgressStats,
+} from '../utils/mentionStats';
 
 interface DashboardVictimsMpuProps {
   onSelectAgentReparation?: (fullName: string) => void;
@@ -150,25 +159,6 @@ const getCliniqueMobileId = (victim: any): string | null => {
   return value.length > 0 ? value : null;
 };
 
-const collectMaladies = (victim: any): string[] => {
-  const out: string[] = [];
-  const pushStr = (v: any) => {
-    if (typeof v === 'string' && v.trim().length > 0) out.push(v.trim());
-  };
-  if (Array.isArray(victim?.maladies)) victim.maladies.forEach(pushStr);
-  if (Array.isArray(victim?.pathologies)) victim.pathologies.forEach(pushStr);
-  if (Array.isArray(victim?.diagnostics)) victim.diagnostics.forEach((d: any) => {
-    if (typeof d === 'string') pushStr(d);
-    else pushStr(d?.libelle || d?.nom || d?.diagnostic);
-  });
-  if (Array.isArray(victim?.consultationsMedicales)) victim.consultationsMedicales.forEach((c: any) => {
-    pushStr(c?.diagnostic || c?.maladie || c?.pathologie);
-  });
-  pushStr(victim?.diagnostic);
-  pushStr(victim?.maladie);
-  return out;
-};
-
 const computeAge = (victim: any): number | null => {
   const dn = victim?.dateNaissance;
   if (!dn) return null;
@@ -217,6 +207,28 @@ type KpiProps = {
   onClick?: () => void;
 };
 
+type MpuServerStats = {
+  sexe: CountRow[];
+  trancheAge: CountRow[];
+  province: CountRow[];
+  territoire: CountRow[];
+  prejudiceFinal: CountRow[];
+  agents: CountRow[];
+  mesures: CountRow[];
+  contratsCount: number;
+};
+
+const EMPTY_MPU_SERVER_STATS: MpuServerStats = {
+  sexe: [],
+  trancheAge: [],
+  province: [],
+  territoire: [],
+  prejudiceFinal: [],
+  agents: [],
+  mesures: [],
+  contratsCount: 0,
+};
+
 const KpiCard: React.FC<KpiProps> = ({ title, value, icon, color, subtitle, loading, onClick }) => (
   <button
     type="button"
@@ -249,30 +261,131 @@ const EMPTY_PROGRESS: GlobalProgressStats = {
   indemnisation: { commencee: 0, nonCommencee: 0, montantTotalIndemnise: 0 },
 };
 
-const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onShowSignedContractVictims }) => {
+const normalizeCountRows = (
+  payload: any,
+  labelKeys: string[],
+  fallback = 'Non renseigné'
+): CountRow[] => {
+  const grouped = new Map<string, number>();
+
+  normalizeApiList(payload).forEach((item: any) => {
+    const rawLabel = labelKeys
+      .map((key) => item?.[key])
+      .find((value) => typeof value === 'string' && value.trim().length > 0);
+    const label = String(rawLabel ?? item?.label ?? item?.name ?? fallback).trim() || fallback;
+    const value = toNumber(item?.total ?? item?.count ?? item?.nombre ?? item?.value);
+    grouped.set(label, (grouped.get(label) || 0) + value);
+  });
+
+  return Array.from(grouped.entries())
+    .map(([name, value]) => ({ name, fullName: name, value }))
+    .filter((row) => row.value > 0 || row.name !== fallback)
+    .sort((a, b) => b.value - a.value);
+};
+
+const formatMesureLabel = (key: string): string => {
+  const normalized = normalizeText(key);
+  const labels: Record<string, string> = {
+    reinsertioneconomique: 'Réinsertion économique',
+    priseenchargemedicale: 'Prise en charge médicale',
+    accompagnementpsychosocial: 'Accompagnement psychosocial',
+    accompagnementpsychologique: 'Accompagnement psychologique',
+    formation: 'Formation',
+    cliniquemobile: 'Clinique mobile',
+    musoavec: 'MUSO / AVEC',
+  };
+  if (labels[normalized.replace(/\s/g, '')]) return labels[normalized.replace(/\s/g, '')];
+
+  return key
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .trim()
+    .replace(/^./, (char) => char.toUpperCase());
+};
+
+const normalizeMesuresRows = (payload: any): CountRow[] => {
+  const data = payload?.data ?? payload ?? {};
+  const mesuresObject = data?.mesuresReparationAcceptees;
+
+  if (mesuresObject && typeof mesuresObject === 'object' && !Array.isArray(mesuresObject)) {
+    return Object.entries(mesuresObject)
+      .filter(([key]) => !normalizeText(key).includes('indemnisation'))
+      .map(([key, value]) => ({
+        name: formatMesureLabel(key),
+        fullName: formatMesureLabel(key),
+        value: toNumber(value),
+      }))
+      .filter((row) => row.value > 0)
+      .sort((a, b) => b.value - a.value);
+  }
+
+  return normalizeCountRows(payload, ['mesure', 'nom', 'type', 'label', 'name'])
+    .filter((row) => !normalizeText(row.name).includes('indemnisation'));
+};
+
+const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onSelectAgentReparation, onShowSignedContractVictims }) => {
   const { fetcher } = useFetch();
   const [victims, setVictims] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [progressLoading, setProgressLoading] = useState<boolean>(true);
   const [progress, setProgress] = useState<GlobalProgressStats>(EMPTY_PROGRESS);
+  const [mpuServerStats, setMpuServerStats] = useState<MpuServerStats>(EMPTY_MPU_SERVER_STATS);
   const [showConsultationsModal, setShowConsultationsModal] = useState<boolean>(false);
 
   useEffect(() => {
     let mounted = true;
 
-    const loadProgress = async () => {
+    const loadMpuServerStats = async () => {
       setProgressLoading(true);
       try {
-        const resp = await fetcher('/victime/stats/reparation/globalProgress/MPU');
-        if (mounted) setProgress(normalizeGlobalProgress(resp));
+        const safeFetch = (endpoint: string) => fetcher(endpoint).catch(() => null);
+        const [
+          progressResp,
+          agentsResp,
+          sexeResp,
+          trancheAgeResp,
+          provinceResp,
+          territoireResp,
+          prejudiceFinalResp,
+          ,
+          mesuresResp,
+          contratsResp,
+        ] = await Promise.all([
+          safeFetch('/victime/stats/reparation/globalProgress/MPU'),
+          safeFetch('/victime/filtre/agent-reparation/MPU'),
+          safeFetch('/victime/stats/sexe/MPU'),
+          safeFetch('/victime/stats/tranche-age/MPU'),
+          safeFetch('/victime/stats/province/MPU'),
+          safeFetch('/victime/stats/territoire/MPU'),
+          safeFetch('/victime/stats/prejudice-final/MPU'),
+          safeFetch('/victime/stats/total-indemnisation/MPU'),
+          safeFetch('/contrat/stats/mesures-reparation/MPU'),
+          safeFetch('/contrat/MPU'),
+        ]);
+
+        if (!mounted) return;
+        setProgress(normalizeGlobalProgress(progressResp));
+        setMpuServerStats({
+          sexe: normalizeSexeRows(sexeResp),
+          trancheAge: normalizeTrancheAgeRows(trancheAgeResp),
+          province: normalizeCountRows(provinceResp, ['province']),
+          territoire: normalizeCountRows(territoireResp, ['territoire']),
+          prejudiceFinal: normalizeCountRows(prejudiceFinalResp, ['prejudiceFinal', 'prejudice_final', 'prejudice', 'libelle']),
+          agents: normalizeCountRows(agentsResp, ['agentReparation', 'agent_reparation', 'agent', 'fullName', 'nom']),
+          mesures: normalizeMesuresRows(mesuresResp),
+          contratsCount: normalizeApiList(contratsResp).length,
+        });
       } catch {
-        if (mounted) setProgress(EMPTY_PROGRESS);
+        if (mounted) {
+          setProgress(EMPTY_PROGRESS);
+          setMpuServerStats(EMPTY_MPU_SERVER_STATS);
+        }
       } finally {
         if (mounted) setProgressLoading(false);
       }
     };
 
-    loadProgress();
+    loadMpuServerStats();
     return () => {
       mounted = false;
     };
@@ -303,14 +416,19 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onShowSignedC
   const totalMpu = progress.total > 0 ? progress.total : totalMpuFromCache;
   const officialLoading = progressLoading;
 
-  const provinces = useMemo(() => {
-    const set = new Set<string>();
+  const provinceRowsFromCache = useMemo(() => {
+    const counts = new Map<string, number>();
     mpuVictims.forEach((v) => {
-      const p = typeof v?.province === 'string' ? v.province.trim() : '';
-      if (p.length > 0) set.add(p);
+      const province = typeof v?.province === 'string' ? v.province.trim() : '';
+      if (province.length > 0) counts.set(province, (counts.get(province) || 0) + 1);
     });
-    return set.size;
+    return Array.from(counts.entries())
+      .map(([name, value]) => ({ name, fullName: name, value }))
+      .sort((a, b) => b.value - a.value);
   }, [mpuVictims]);
+
+  const provinceRows = mpuServerStats.province.length > 0 ? mpuServerStats.province : provinceRowsFromCache;
+  const provinces = provinceRows.length;
 
   const totalConsentement = useMemo(
     () => mpuVictims.filter(hasConsentementSigne).length,
@@ -346,6 +464,12 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onShowSignedC
     return rows;
   }, [mpuVictims, totalMpu]);
 
+  const territoireRows = mpuServerStats.territoire.length > 0
+    ? mpuServerStats.territoire
+    : perSite.map((row) => ({ name: row.site, fullName: row.site, value: row.count }));
+  const topTerritoireRows = territoireRows.slice(0, 8);
+  const maxTerritoire = Math.max(1, ...topTerritoireRows.map((row) => row.value));
+
   const totalFormations = useMemo(() => mpuVictims.filter(hasFormation).length, [mpuVictims]);
 
   const consultationsList = useMemo(
@@ -353,12 +477,14 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onShowSignedC
     [mpuVictims]
   );
   const totalConsultations = consultationsList.length;
-  const totalMesuresCommencees = useMemo(
+  const totalMesuresCommenceesCache = useMemo(
     () => mpuVictims.filter(hasCommenceMesuresMpu).length,
     [mpuVictims]
   );
+  const totalMesuresCommenceesServer = mpuServerStats.mesures.reduce((max, row) => Math.max(max, row.value), 0);
+  const totalMesuresCommencees = totalMesuresCommenceesServer || totalMesuresCommenceesCache;
 
-  const consentementCount = progress.contrat.withContrat || totalConsentement;
+  const consentementCount = progress.contrat.withContrat || mpuServerStats.contratsCount || totalConsentement;
   const recontactedCount = totalRecontactes > 0
     ? totalRecontactes
     : Math.max(progress.photo.withPhoto, progress.piece.withPiece);
@@ -393,23 +519,6 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onShowSignedC
     return sites.size;
   }, [cliniqueVictims]);
 
-  // Top maladies / diagnostics
-  const topMaladies = useMemo(() => {
-    const counts = new Map<string, number>();
-    mpuVictims.forEach((v) => {
-      collectMaladies(v).forEach((m) => {
-        const key = m.trim();
-        if (!key) return;
-        const normalized = key.charAt(0).toUpperCase() + key.slice(1).toLowerCase();
-        counts.set(normalized, (counts.get(normalized) || 0) + 1);
-      });
-    });
-    const rows = Array.from(counts.entries()).map(([nom, count]) => ({ nom, count }));
-    rows.sort((a, b) => b.count - a.count);
-    return rows.slice(0, 6);
-  }, [mpuVictims]);
-  const maxMaladie = topMaladies[0]?.count || 0;
-
   // Répartition sexe
   const sexeStats = useMemo(() => {
     let femmes = 0;
@@ -423,6 +532,13 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onShowSignedC
     });
     return { femmes, hommes, autres };
   }, [mpuVictims]);
+  const sexeRows = mpuServerStats.sexe.length > 0
+    ? mpuServerStats.sexe
+    : [
+      { name: 'Femmes', fullName: 'Femmes', value: sexeStats.femmes },
+      { name: 'Hommes', fullName: 'Hommes', value: sexeStats.hommes },
+      ...(sexeStats.autres > 0 ? [{ name: 'Non précisé', fullName: 'Non précisé', value: sexeStats.autres }] : []),
+    ].filter((row) => row.value > 0);
 
   // Répartition tranches d'âge
   const ageBuckets = useMemo(() => {
@@ -435,7 +551,16 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onShowSignedC
     });
     return order.map((k) => ({ bucket: k, count: counts.get(k) || 0 }));
   }, [mpuVictims]);
-  const maxAge = Math.max(1, ...ageBuckets.map((b) => b.count));
+  const ageRows = mpuServerStats.trancheAge.length > 0
+    ? mpuServerStats.trancheAge
+    : ageBuckets.map((bucket) => ({ name: bucket.bucket, fullName: bucket.bucket, value: bucket.count }));
+  const maxAge = Math.max(1, ...ageRows.map((row) => row.value));
+  const prejudiceRows = mpuServerStats.prejudiceFinal.slice(0, 6);
+  const maxPrejudice = Math.max(1, ...prejudiceRows.map((row) => row.value));
+  const mesureRows = mpuServerStats.mesures.slice(0, 6);
+  const maxMesure = Math.max(1, ...mesureRows.map((row) => row.value));
+  const agentRows = mpuServerStats.agents.slice(0, 6);
+  const maxAgent = Math.max(1, ...agentRows.map((row) => row.value));
 
   const totalVulnerables = useMemo(() => mpuVictims.filter(isVulnerable).length, [mpuVictims]);
   const percentVulnerables = totalMpu > 0 ? Math.round((totalVulnerables / totalMpu) * 100) : 0;
@@ -475,15 +600,15 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onShowSignedC
         />
         <KpiCard
           title="A commencé à bénéficier des mesures"
-          value={loading ? '…' : totalMesuresCommencees.toLocaleString()}
+          value={officialLoading && loading ? '…' : totalMesuresCommencees.toLocaleString()}
           icon={<FiActivity className="text-white" size={18} />}
           color="bg-orange-500"
           subtitle={`${percentMesuresCommencees}% des MPU`}
-          loading={loading}
+          loading={officialLoading && loading}
         />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
         <KpiCard
           title="Total victimes MPU"
           value={officialLoading ? '…' : totalMpu.toLocaleString()}
@@ -494,15 +619,23 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onShowSignedC
         />
         <KpiCard
           title="Provinces couvertes"
-          value={loading ? '…' : provinces}
+          value={officialLoading && loading ? '…' : provinces}
           icon={<FiMapPin className="text-white" size={18} />}
           color="bg-purple-500"
-          subtitle="Depuis le cache terrain"
-          loading={loading}
+          subtitle="Statistiques province MPU"
+          loading={officialLoading && loading}
+        />
+        <KpiCard
+          title="Territoires couverts"
+          value={officialLoading && loading ? '…' : territoireRows.length.toLocaleString()}
+          icon={<FiHome className="text-white" size={18} />}
+          color="bg-teal-500"
+          subtitle="Statistiques territoire MPU"
+          loading={officialLoading && loading}
         />
       </div>
 
-      {/* Progression par site de déplacés */}
+      {/* Répartition territoriale */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 mb-8">
         <div className="flex items-center gap-3 mb-5">
           <div className="p-2 rounded-lg bg-primary-50">
@@ -510,10 +643,10 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onShowSignedC
           </div>
           <div>
             <h3 className="text-lg font-bold text-gray-900">
-              Progression générale des victimes MPU
+              Répartition territoriale des victimes MPU
             </h3>
             <p className="text-sm text-gray-600">
-              Répartition par sites de déplacés — en nombre et en pourcentage.
+              Données par territoire, avec secours sur les sites terrain quand l’API est vide.
               {totalMpu > 0 ? (
                 <span className="ml-1 font-medium text-gray-800">
                   Base: {totalMpu.toLocaleString()} victime{totalMpu > 1 ? 's' : ''} MPU.
@@ -523,34 +656,38 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onShowSignedC
           </div>
         </div>
 
-        {loading ? (
+        {officialLoading && loading ? (
           <div className="space-y-3">
             {[1, 2, 3, 4].map((i) => (
               <div key={i} className="h-6 bg-gray-100 animate-pulse rounded" />
             ))}
           </div>
-        ) : perSite.length === 0 ? (
-          <div className="text-sm text-gray-500 italic">Aucune donnée de site disponible.</div>
+        ) : topTerritoireRows.length === 0 ? (
+          <div className="text-sm text-gray-500 italic">Aucune donnée territoriale disponible.</div>
         ) : (
           <div className="space-y-4">
-            {perSite.map((row) => (
-              <div key={row.site}>
+            {topTerritoireRows.map((row) => {
+              const pct = totalMpu > 0 ? Math.round((row.value / totalMpu) * 100) : 0;
+              const width = Math.round((row.value / maxTerritoire) * 100);
+              return (
+              <div key={row.name}>
                 <div className="flex items-center justify-between mb-1">
-                  <div className="text-sm font-medium text-gray-800 truncate pr-3">{row.site}</div>
+                  <div className="text-sm font-medium text-gray-800 truncate pr-3">{row.name}</div>
                   <div className="text-sm whitespace-nowrap">
-                    <span className="font-semibold text-gray-900">{row.count.toLocaleString()}</span>
+                    <span className="font-semibold text-gray-900">{row.value.toLocaleString()}</span>
                     <span className="text-gray-500"> / {totalMpu.toLocaleString()}</span>
-                    <span className="ml-2 text-xs font-bold text-primary-700">{row.percent}%</span>
+                    <span className="ml-2 text-xs font-bold text-primary-700">{pct}%</span>
                   </div>
                 </div>
                 <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
                   <div
                     className="h-full rounded-full bg-primary-600 transition-all duration-500"
-                    style={{ width: `${row.percent}%` }}
+                    style={{ width: `${width}%` }}
                   />
                 </div>
               </div>
-            ))}
+            );
+            })}
           </div>
         )}
       </div>
@@ -616,43 +753,126 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onShowSignedC
         />
       </div>
 
-      {/* Tendance maladies + Répartition sexe + âge */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="p-2 rounded-lg bg-orange-50">
+              <FiActivity className="text-orange-600" size={20} />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Mesures enregistrées</h3>
+              <p className="text-sm text-gray-600">Actes de consentement avec mesures MPU acceptées.</p>
+            </div>
+          </div>
+          {officialLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-6 bg-gray-100 animate-pulse rounded" />
+              ))}
+            </div>
+          ) : mesureRows.length === 0 ? (
+            <div className="text-sm text-gray-500 italic">Aucune mesure enregistrée côté serveur.</div>
+          ) : (
+            <div className="space-y-3">
+              {mesureRows.map((row, idx) => {
+                const pct = Math.round((row.value / maxMesure) * 100);
+                const palette = ['bg-orange-500', 'bg-teal-500', 'bg-cyan-500', 'bg-amber-500', 'bg-emerald-500', 'bg-rose-500'];
+                return (
+                  <div key={row.name}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm font-medium text-gray-800 truncate pr-3">{row.name}</span>
+                      <span className="text-sm font-bold text-gray-900 whitespace-nowrap">{row.value.toLocaleString()}</span>
+                    </div>
+                    <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${palette[idx % palette.length]}`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="p-2 rounded-lg bg-indigo-50">
+              <FiUsers className="text-indigo-600" size={20} />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Victimes par agent de réparation</h3>
+              <p className="text-sm text-gray-600">Répartition issue de l’endpoint agent-réparation MPU.</p>
+            </div>
+          </div>
+          {officialLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-6 bg-gray-100 animate-pulse rounded" />
+              ))}
+            </div>
+          ) : agentRows.length === 0 ? (
+            <div className="text-sm text-gray-500 italic">Aucune donnée agent disponible.</div>
+          ) : (
+            <div className="space-y-3">
+              {agentRows.map((row) => {
+                const pct = Math.round((row.value / maxAgent) * 100);
+                return (
+                  <button
+                    key={row.name}
+                    type="button"
+                    onClick={() => onSelectAgentReparation?.(row.fullName || row.name)}
+                    className="w-full text-left rounded-md border border-transparent p-1 transition-colors hover:border-indigo-100 hover:bg-indigo-50/50"
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm font-medium text-gray-800 truncate pr-3">{row.name}</span>
+                      <span className="text-sm font-bold text-gray-900 whitespace-nowrap">{row.value.toLocaleString()}</span>
+                    </div>
+                    <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full bg-indigo-500" style={{ width: `${pct}%` }} />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Préjudices + Répartition sexe + âge */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-        {/* Top maladies */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 lg:col-span-2">
           <div className="flex items-center gap-3 mb-5">
             <div className="p-2 rounded-lg bg-red-50">
               <FiTrendingUp className="text-red-600" size={20} />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-gray-900">Maladies les plus récurrentes</h3>
-              <p className="text-sm text-gray-600">Top diagnostics observés chez les victimes MPU.</p>
+              <h3 className="text-lg font-bold text-gray-900">Préjudices finaux les plus fréquents</h3>
+              <p className="text-sm text-gray-600">Statistiques préjudice final filtrées sur MPU.</p>
             </div>
           </div>
-          {loading ? (
+          {officialLoading ? (
             <div className="space-y-3">
               {[1, 2, 3, 4, 5].map((i) => (
                 <div key={i} className="h-6 bg-gray-100 animate-pulse rounded" />
               ))}
             </div>
-          ) : topMaladies.length === 0 ? (
-            <div className="text-sm text-gray-500 italic">Aucun diagnostic disponible dans les données.</div>
+          ) : prejudiceRows.length === 0 ? (
+            <div className="text-sm text-gray-500 italic">Aucune donnée de préjudice final disponible.</div>
           ) : (
             <div className="space-y-3">
-              {topMaladies.map((m, idx) => {
-                const pct = maxMaladie > 0 ? Math.round((m.count / maxMaladie) * 100) : 0;
+              {prejudiceRows.map((row, idx) => {
+                const pct = Math.round((row.value / maxPrejudice) * 100);
                 const palette = ['bg-red-500', 'bg-orange-500', 'bg-amber-500', 'bg-rose-500', 'bg-fuchsia-500', 'bg-pink-500'];
                 return (
-                  <div key={m.nom}>
+                  <div key={row.name}>
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2 min-w-0">
                         <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold text-white ${palette[idx % palette.length]}`}>
                           {idx + 1}
                         </span>
-                        <span className="text-sm font-medium text-gray-800 truncate">{m.nom}</span>
+                        <span className="text-sm font-medium text-gray-800 truncate">{row.name}</span>
                       </div>
                       <span className="text-sm font-bold text-gray-900 whitespace-nowrap">
-                        {m.count.toLocaleString()}
+                        {row.value.toLocaleString()}
                       </span>
                     </div>
                     <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
@@ -676,29 +896,31 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onShowSignedC
             </div>
             <h3 className="text-lg font-bold text-gray-900">Répartition par sexe</h3>
           </div>
-          {loading ? (
+          {officialLoading && loading ? (
             <div className="h-24 bg-gray-100 animate-pulse rounded" />
+          ) : sexeRows.length === 0 ? (
+            <div className="text-sm text-gray-500 italic">Aucune donnée de sexe disponible.</div>
           ) : (
             <div className="space-y-3">
-              {[
-                { label: 'Femmes', value: sexeStats.femmes, color: 'bg-pink-500', text: 'text-pink-700' },
-                { label: 'Hommes', value: sexeStats.hommes, color: 'bg-blue-500', text: 'text-blue-700' },
-                ...(sexeStats.autres > 0
-                  ? [{ label: 'Non précisé', value: sexeStats.autres, color: 'bg-gray-400', text: 'text-gray-700' }]
-                  : []),
-              ].map((r) => {
-                const pct = totalMpu > 0 ? Math.round((r.value / totalMpu) * 100) : 0;
+              {sexeRows.map((row, idx) => {
+                const pct = totalMpu > 0 ? Math.round((row.value / totalMpu) * 100) : 0;
+                const colors = [
+                  { bar: 'bg-pink-500', text: 'text-pink-700' },
+                  { bar: 'bg-blue-500', text: 'text-blue-700' },
+                  { bar: 'bg-gray-400', text: 'text-gray-700' },
+                ];
+                const visual = colors[idx % colors.length];
                 return (
-                  <div key={r.label}>
+                  <div key={row.name}>
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-medium text-gray-800">{r.label}</span>
+                      <span className="text-sm font-medium text-gray-800">{row.name}</span>
                       <span className="text-sm text-gray-700">
-                        <span className="font-bold text-gray-900">{r.value.toLocaleString()}</span>
-                        <span className={`ml-2 text-xs font-bold ${r.text}`}>{pct}%</span>
+                        <span className="font-bold text-gray-900">{row.value.toLocaleString()}</span>
+                        <span className={`ml-2 text-xs font-bold ${visual.text}`}>{pct}%</span>
                       </span>
                     </div>
                     <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full ${r.color}`} style={{ width: `${pct}%` }} />
+                      <div className={`h-full rounded-full ${visual.bar}`} style={{ width: `${pct}%` }} />
                     </div>
                   </div>
                 );
@@ -719,17 +941,19 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onShowSignedC
             <p className="text-sm text-gray-600">Âge calculé à partir de la date de naissance.</p>
           </div>
         </div>
-        {loading ? (
+        {officialLoading && loading ? (
           <div className="h-24 bg-gray-100 animate-pulse rounded" />
+        ) : ageRows.length === 0 ? (
+          <div className="text-sm text-gray-500 italic">Aucune donnée d’âge disponible.</div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-            {ageBuckets.map((b) => {
-              const pct = totalMpu > 0 ? Math.round((b.count / totalMpu) * 100) : 0;
-              const heightPct = maxAge > 0 ? Math.round((b.count / maxAge) * 100) : 0;
+            {ageRows.map((row) => {
+              const pct = totalMpu > 0 ? Math.round((row.value / totalMpu) * 100) : 0;
+              const heightPct = Math.round((row.value / maxAge) * 100);
               return (
-                <div key={b.bucket} className="rounded-md border border-gray-100 bg-gray-50 p-3 flex flex-col">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{b.bucket}</div>
-                  <div className="text-xl font-bold text-gray-900 mt-1 leading-none">{b.count.toLocaleString()}</div>
+                <div key={row.name} className="rounded-md border border-gray-100 bg-gray-50 p-3 flex flex-col">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{row.name}</div>
+                  <div className="text-xl font-bold text-gray-900 mt-1 leading-none">{row.value.toLocaleString()}</div>
                   <div className="text-[11px] text-gray-500 mt-0.5">{pct}% des MPU</div>
                   <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden mt-2">
                     <div className="h-full bg-amber-500 rounded-full" style={{ width: `${heightPct}%` }} />
