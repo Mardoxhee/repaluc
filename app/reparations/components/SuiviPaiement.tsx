@@ -13,7 +13,8 @@ import {
     Smartphone,
     AlertCircle,
     Loader2,
-    Eye
+    Eye,
+    Pencil
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 
@@ -51,6 +52,18 @@ const MODE_PAIEMENT_OPTIONS = [
     { value: 'Mobile Money', label: 'Mobile Money', icon: Smartphone },
     { value: 'Virement', label: 'Virement bancaire', icon: CreditCard },
 ];
+
+const isPaidPlan = (statut: string) => statut === 'Effectué' || statut === 'Payé';
+
+const toDateInputValue = (date: string | null) => {
+    if (!date) return new Date().toISOString().split('T')[0];
+    if (/^\d{4}-\d{2}-\d{2}/.test(date)) return date.slice(0, 10);
+
+    const parsed = new Date(date);
+    if (Number.isNaN(parsed.getTime())) return new Date().toISOString().split('T')[0];
+
+    return parsed.toISOString().split('T')[0];
+};
 
 const SuiviPaiement: React.FC<SuiviPaiementProps> = ({ victim }) => {
     const [contrat, setContrat] = useState<Contrat | null>(null);
@@ -95,7 +108,7 @@ const SuiviPaiement: React.FC<SuiviPaiementProps> = ({ victim }) => {
 
         const total = contrat.montantTotalUSD;
         const paye = contrat.planIndemnisation
-            .filter(p => p.statut === 'Effectué' || p.statut === 'Payé')
+            .filter(p => isPaidPlan(p.statut))
             .reduce((sum, p) => sum + p.montantUSD, 0);
         const restant = total - paye;
         const pourcentage = total > 0 ? Math.round((paye / total) * 100) : 0;
@@ -107,9 +120,7 @@ const SuiviPaiement: React.FC<SuiviPaiementProps> = ({ victim }) => {
     const handleEdit = (plan: PlanIndemnisation) => {
         setEditingId(plan.id);
         setEditForm({
-            datePaiementEffectif: plan.datePaiementEffectif
-                ? new Date(plan.datePaiementEffectif).toISOString().split('T')[0]
-                : new Date().toISOString().split('T')[0],
+            datePaiementEffectif: toDateInputValue(plan.datePaiementEffectif),
             modePaiement: plan.modePaiement || 'Cash',
             preuve: null,
             preuveUrl: plan.preuve || ''
@@ -206,8 +217,8 @@ const SuiviPaiement: React.FC<SuiviPaiementProps> = ({ victim }) => {
 
             await Swal.fire({
                 icon: 'success',
-                title: 'Paiement enregistré',
-                text: 'Le paiement a été enregistré avec succès',
+                title: 'Paiement mis à jour',
+                text: 'Les informations de paiement ont été enregistrées avec succès',
                 timer: 2000,
                 showConfirmButton: false
             });
@@ -411,9 +422,16 @@ const SuiviPaiement: React.FC<SuiviPaiementProps> = ({ victim }) => {
                                                         />
                                                         <span className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-xs text-gray-700">
                                                             <Upload className="w-3 h-3" />
-                                                            {editForm.preuve ? editForm.preuve.name.substring(0, 15) + '...' : 'Choisir'}
+                                                            {editForm.preuve
+                                                                ? editForm.preuve.name.substring(0, 15) + '...'
+                                                                : editForm.preuveUrl
+                                                                    ? 'Remplacer'
+                                                                    : 'Choisir'}
                                                         </span>
                                                     </label>
+                                                    {editForm.preuveUrl && !editForm.preuve && (
+                                                        <span className="text-xs text-gray-500">preuve existante conservée</span>
+                                                    )}
                                                 </div>
                                             </td>
                                             <td className="px-4 py-3">
@@ -428,6 +446,7 @@ const SuiviPaiement: React.FC<SuiviPaiementProps> = ({ victim }) => {
                                                     </button>
                                                     <button
                                                         onClick={handleCancelEdit}
+                                                        disabled={saving}
                                                         className="p-1.5 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
                                                         title="Annuler"
                                                     >
@@ -475,10 +494,20 @@ const SuiviPaiement: React.FC<SuiviPaiementProps> = ({ victim }) => {
                                             </td>
                                             <td className="px-4 py-3">
                                                 <div className="flex items-center justify-center">
-                                                    {(plan.statut !== 'Effectué' && plan.statut !== 'Payé') && (
+                                                    {isPaidPlan(plan.statut) ? (
+                                                        <button
+                                                            onClick={() => handleEdit(plan)}
+                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white text-xs font-medium rounded-md shadow-sm hover:bg-amber-600 hover:shadow transition-all"
+                                                            title="Modifier les informations de paiement"
+                                                        >
+                                                            <Pencil className="w-3.5 h-3.5" />
+                                                            Modifier
+                                                        </button>
+                                                    ) : (
                                                         <button
                                                             onClick={() => handleEdit(plan)}
                                                             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md shadow-sm hover:bg-blue-700 hover:shadow transition-all"
+                                                            title="Enregistrer le paiement"
                                                         >
                                                             <DollarSign className="w-3.5 h-3.5" />
                                                             Payer
