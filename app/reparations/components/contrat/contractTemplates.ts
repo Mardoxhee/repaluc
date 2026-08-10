@@ -4,6 +4,7 @@ import type {
     ContractTemplateId,
     MesureReparationKey,
     MesuresReparation,
+    Victim,
 } from './types';
 
 export const TRANCHE_LABELS = ['Juil 2026', 'Août 2026', 'Sept 2026', 'Oct 2026', 'Nov 2026'];
@@ -238,8 +239,44 @@ export const getContractPrejudiceOptions = (): string[] => {
 
 export const getContractTemplateForPrejudice = (prejudiceFinal?: string): ContractTemplate => {
     const normalized = normalizeText(prejudiceFinal);
+    const hasPhysicalIntegrityPrejudice = normalized.includes('atteinte')
+        && normalized.includes('integrite')
+        && normalized.includes('physique');
+    const hasSeverePhysicalIntegrityPrejudice = normalized.includes('atteinte grave')
+        || normalized.includes('incapacite severe');
+
+    if (hasPhysicalIntegrityPrejudice && !hasSeverePhysicalIntegrityPrejudice) {
+        return getContractTemplateById('atteinte-integrite-physique');
+    }
 
     return CONTRACT_TEMPLATES.filter((template) => !template.baremes).find((template) =>
         template.keywords.some((keyword) => normalized.includes(normalizeText(keyword)))
     ) || CONTRACT_TEMPLATES[0];
+};
+
+export const isDecisionJusticeVictim = (victim?: Pick<Victim, 'categorie' | 'variablesSpecifiques'>): boolean => {
+    const categorie = normalizeText(victim?.categorie);
+    const variables = normalizeText(
+        Object.values(victim?.variablesSpecifiques || {})
+            .filter((value): value is string => typeof value === 'string')
+            .join(' ')
+    );
+
+    return [categorie, variables].some((value) =>
+        value.includes('decision') && (value.includes('justice') || value.includes('judiciaire'))
+    );
+};
+
+export const getVictimPrejudiceForContract = (
+    victim: Pick<Victim, 'prejudiceFinal' | 'prejudicesSubis' | 'typeViolation'>
+): string => (
+    victim.prejudiceFinal || victim.prejudicesSubis || victim.typeViolation || ''
+);
+
+export const getContractTemplateForVictim = (victim: Victim): ContractTemplate => {
+    if (isDecisionJusticeVictim(victim)) {
+        return getContractTemplateById('luc-decision-justice');
+    }
+
+    return getContractTemplateForPrejudice(getVictimPrejudiceForContract(victim));
 };

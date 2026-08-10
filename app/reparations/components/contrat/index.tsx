@@ -36,7 +36,6 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
         setContractForm,
         setShowContratDetail,
         setShowSignatureModal,
-        selectContractTemplate,
         startDrawing,
         draw,
         stopDrawing,
@@ -281,7 +280,6 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                             <ContractTemplateSelector
                                 selectedTemplateId={selectedTemplateId}
                                 selectedPrejudiceLabel={contractForm.prejudiceFinal}
-                                onSelectTemplate={selectContractTemplate}
                             />
 
                             <VictimInfo

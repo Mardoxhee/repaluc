@@ -11,6 +11,7 @@ export interface Victim {
     pieceIdentite?: string;
     codeUnique?: string;
     codeBeneficiaire?: string;
+    categorie?: string;
     village?: string;
     groupement?: string;
     territoire?: string;

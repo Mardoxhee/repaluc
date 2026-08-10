@@ -10,8 +10,11 @@ import {
     getContractTemplateBareme,
     getContractTemplateById,
     getContractTemplateForPrejudice,
+    getContractTemplateForVictim,
+    getVictimPrejudiceForContract,
     getDefaultTemplateTranches,
     getSelectedMesures,
+    isDecisionJusticeVictim,
     isContractTemplateId,
     mesuresFromKeys,
     normalizeText,
@@ -30,10 +33,12 @@ const getDateLieuNaissance = (victim: Victim): string => {
 };
 
 const getInitialContractForm = (victim: Victim): ContractForm => {
-    const template = getContractTemplateForPrejudice(victim.prejudiceFinal || victim.prejudicesSubis);
-    const bareme = getContractTemplateBareme(template.id, victim.prejudiceFinal || victim.prejudicesSubis);
+    const template = getContractTemplateForVictim(victim);
+    const prejudice = getVictimPrejudiceForContract(victim);
+    const bareme = getContractTemplateBareme(template.id, prejudice);
     const nomPostnom = [victim.nom, victim.postnom].filter(Boolean).join(' ').trim();
     const prenom = victim.prenom || '';
+    const usesDecisionJusticeContract = template.id === 'luc-decision-justice';
 
     return {
         nom: [nomPostnom, prenom].filter(Boolean).join(' ').trim(),
@@ -51,13 +56,13 @@ const getInitialContractForm = (victim: Victim): ContractForm => {
         secteur: victim.secteur || '',
         province: victim.province || '',
         typeViolation: victim.typeViolation || '',
-        typePrejudices: victim.prejudicesSubis || '',
+        typePrejudices: bareme.prejudiceLabel || victim.prejudicesSubis || '',
         reparationAdministrative: 'Programme des Réparations Administratives Intégrales (PRAI)',
-        reparationJudiciaire: 'En attente de décision',
+        reparationJudiciaire: usesDecisionJusticeContract ? 'Décision de justice' : 'En attente de décision',
         codeBeneficiaire: victim.codeBeneficiaire || victim.codeUnique || '',
         decisionJustice: '',
         prejudiceFinal: victim.prejudiceFinal || bareme.prejudiceLabel,
-        typeContrat: 'Réparation Administrative',
+        typeContrat: usesDecisionJusticeContract ? template.label : 'Réparation Administrative',
         lieuSignature: [victim.territoire, victim.province].filter(Boolean).join(', ') || 'Goma',
         dateSignature: new Date().toISOString().split('T')[0],
         fonarevNom: 'FATA MAKUNGA Patrick',
@@ -107,7 +112,7 @@ const coerceMesureKeys = (value: unknown): MesureReparationKey[] => {
     ));
 };
 
-const getContratTemplateIdFromData = (data: any, fallbackPrejudice?: string): ContractTemplateId => {
+const getContratTemplateIdFromData = (data: any, fallbackVictim: Victim): ContractTemplateId => {
     const metadataTemplateId = data?.metadataContrat?.contractTemplateId;
     if (isContractTemplateId(metadataTemplateId)) return metadataTemplateId;
 
@@ -122,14 +127,18 @@ const getContratTemplateIdFromData = (data: any, fallbackPrejudice?: string): Co
         return 'luc-decision-justice';
     }
 
-    return getContractTemplateForPrejudice(data?.typePrejudiceReconnu || fallbackPrejudice).id;
+    if (isDecisionJusticeVictim(fallbackVictim)) {
+        return 'luc-decision-justice';
+    }
+
+    return getContractTemplateForPrejudice(data?.typePrejudiceReconnu || getVictimPrejudiceForContract(fallbackVictim)).id;
 };
 
 export function useContrat(victim: Victim) {
-    const initialTemplate = getContractTemplateForPrejudice(victim.prejudiceFinal || victim.prejudicesSubis);
+    const initialTemplate = getContractTemplateForVictim(victim);
     const [selectedTemplateId, setSelectedTemplateId] = useState<ContractTemplateId>(initialTemplate.id);
     const [tranches, setTranches] = useState<Tranche[]>(() => (
-        createTemplateTranches(initialTemplate.id, victim.prejudiceFinal || victim.prejudicesSubis)
+        createTemplateTranches(initialTemplate.id, getVictimPrejudiceForContract(victim))
     ));
     const [consentements, setConsentements] = useState<Consentements>(() => createDefaultConsentements());
     const [representant, setRepresentant] = useState<Representant>(DEFAULT_REPRESENTANT);
@@ -180,11 +189,12 @@ export function useContrat(victim: Victim) {
                 if (response.ok) {
                     const data = await response.json();
                     setExistingContrat(data);
-                    const templateId = getContratTemplateIdFromData(data, victim.prejudiceFinal || victim.prejudicesSubis);
+                    const templateId = getContratTemplateIdFromData(data, victim);
                     const template = getContractTemplateById(templateId);
+                    const usesDecisionJusticeContract = templateId === 'luc-decision-justice';
                     const bareme = getContractTemplateBareme(
                         templateId,
-                        data.typePrejudiceReconnu || victim.prejudiceFinal || victim.prejudicesSubis
+                        data.typePrejudiceReconnu || getVictimPrejudiceForContract(victim)
                     );
                     setSelectedTemplateId(templateId);
 
@@ -203,9 +213,9 @@ export function useContrat(victim: Victim) {
                         nom: data.nomBeneficiaire || prev.nom,
                         nomPostnom: data.nomPostnom || prev.nomPostnom,
                         prenom: data.prenom || prev.prenom,
-                        typeContrat: data.typeContrat || prev.typeContrat,
+                        typeContrat: usesDecisionJusticeContract ? template.label : data.typeContrat || prev.typeContrat,
                         reparationAdministrative: data.reparationAdministrative || prev.reparationAdministrative,
-                        reparationJudiciaire: data.reparationJudiciaire || prev.reparationJudiciaire,
+                        reparationJudiciaire: usesDecisionJusticeContract ? 'Décision de justice' : data.reparationJudiciaire || prev.reparationJudiciaire,
                         typePrejudices: data.typePrejudiceReconnu || prev.typePrejudices,
                         prejudiceFinal: data.typePrejudiceReconnu || bareme.prejudiceLabel,
                         lieuSignature: data.lieuSignature || prev.lieuSignature,
