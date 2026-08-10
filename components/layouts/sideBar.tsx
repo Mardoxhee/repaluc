@@ -48,7 +48,7 @@ const SideBar: React.FC<SideBarProps> = ({ onNavigate }) => {
             <FiShield className="text-white text-xl" />
           </div>
           <div>
-            <div className="text-sm font-black tracking-wide text-white">REPAREV</div>
+            <div className="text-sm font-black tracking-wide text-white">FONOPS</div>
             <div className="text-[11px] font-semibold text-white/75">Réparations</div>
           </div>
         </div>
