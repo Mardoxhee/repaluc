@@ -4,13 +4,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   FiActivity,
   FiCamera,
-  FiCreditCard,
-  FiDollarSign,
   FiFileText,
   FiHeart,
-  FiScissors,
-  FiHome,
-  FiEye,
   FiUsers,
   FiCheckCircle,
   FiAlertCircle,
@@ -53,12 +48,76 @@ const isPecmuVictim = (victim: any): boolean => {
   );
 };
 
+const hasPhoto = (victim: any): boolean => (
+  typeof victim?.photo === 'string' && victim.photo.trim().length > 0
+);
+
+const hasPieceIdentite = (victim: any): boolean => {
+  if (victim?.progression?.hasPieceIdentite === true) return true;
+  if (victim?.pieceIdentite) return true;
+  if (!Array.isArray(victim?.documentVictime)) return false;
+  return victim.documentVictime.some((d: any) => {
+    const label = normalizeText(d?.label ?? d?.type ?? d?.nom);
+    return label === "piece d'identite" || label === 'piece identite' || label === 'piece_identite';
+  });
+};
+
+const hasActeConsentement = (victim: any): boolean => {
+  if (victim?.consentementSigne === true) return true;
+  if (victim?.acteConsentementSigne === true) return true;
+  if (victim?.contratSigne === true) return true;
+  if (victim?.contrat && (victim.contrat.accepteReparation === true || victim.contrat.dateSignature)) return true;
+  const consentements = victim?.consentements;
+  return Boolean(consentements && (consentements.signataire === true || consentements.accepteReparation === true));
+};
+
+const collectPecmuStatuses = (victim: any): string[] => {
+  const statuses: string[] = [];
+  const visit = (value: any) => {
+    if (!value || typeof value !== 'object') return;
+    Object.entries(value).forEach(([key, child]) => {
+      if (['statut', 'status', 'etat'].includes(normalizeText(key)) && typeof child === 'string') {
+        statuses.push(normalizeText(child));
+      } else if (typeof child === 'object') {
+        visit(child);
+      }
+    });
+  };
+  visit(victim?.progressionPecmu ?? victim?.progressionPECMU ?? victim?.progression?.pecmu);
+  return statuses;
+};
+
+const isPecmuProcessFinished = (victim: any): boolean => {
+  const progression = victim?.progression;
+  if (
+    typeof progression?.done === 'number' &&
+    typeof progression?.total === 'number' &&
+    progression.total > 0 &&
+    progression.done >= progression.total
+  ) {
+    return true;
+  }
+  const statuses = collectPecmuStatuses(victim);
+  if (statuses.some((status) => status.includes('cloture') || status.includes('finalise'))) return true;
+  const knownStatuses = statuses.filter((status) => status && !status.includes('non commence'));
+  return knownStatuses.length > 0 && knownStatuses.every((status) => (
+    status.includes('terminee') || status.includes('termine')
+  ));
+};
+
+const isPecmuProcessInProgress = (victim: any): boolean => {
+  if (isPecmuProcessFinished(victim)) return false;
+  const statuses = collectPecmuStatuses(victim);
+  if (statuses.some((status) => status.includes('en cours') || status.includes('evalue'))) return true;
+  return hasActeConsentement(victim) || hasPhoto(victim) || hasPieceIdentite(victim);
+};
+
 const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = ({ onShowSignedContractVictims }) => {
   const { fetcher } = useFetch();
   const kpis = useMemo(() => getMockPecmuKpis(), []);
   const timeline = useMemo(() => getMockPecmuTimeline(), []);
   const [progress, setProgress] = useState<GlobalProgressStats>(EMPTY_PROGRESS);
-  const [contractsCount, setContractsCount] = useState(0);
+  const [actesConsentementCount, setActesConsentementCount] = useState(0);
   const [victimsFromCache, setVictimsFromCache] = useState<any[]>([]);
   const [loadingOfficial, setLoadingOfficial] = useState(true);
   const [loadingCache, setLoadingCache] = useState(true);
@@ -69,17 +128,17 @@ const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = ({ onShowS
     const loadOfficialStats = async () => {
       setLoadingOfficial(true);
       try {
-        const [progressResp, contratsResp] = await Promise.all([
+        const [progressResp, consentementsResp] = await Promise.all([
           fetcher('/victime/stats/reparation/globalProgress/PECMU'),
           fetcher('/contrat/PECMU'),
         ]);
         if (!mounted) return;
         setProgress(normalizeGlobalProgress(progressResp));
-        setContractsCount(normalizeApiList(contratsResp).length);
+        setActesConsentementCount(normalizeApiList(consentementsResp).length);
       } catch {
         if (!mounted) return;
         setProgress(EMPTY_PROGRESS);
-        setContractsCount(0);
+        setActesConsentementCount(0);
       } finally {
         if (mounted) setLoadingOfficial(false);
       }
@@ -113,6 +172,36 @@ const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = ({ onShowS
   }, []);
 
   const totalPecmu = progress.total > 0 ? progress.total : victimsFromCache.length;
+  const recontactedFromCache = useMemo(
+    () => victimsFromCache.filter((victim) => hasPhoto(victim) || hasPieceIdentite(victim)).length,
+    [victimsFromCache]
+  );
+  const consentementsFromCache = useMemo(
+    () => victimsFromCache.filter(hasActeConsentement).length,
+    [victimsFromCache]
+  );
+  const finProcessusFromCache = useMemo(
+    () => victimsFromCache.filter(isPecmuProcessFinished).length,
+    [victimsFromCache]
+  );
+  const circuitFromCache = useMemo(
+    () => victimsFromCache.filter(isPecmuProcessInProgress).length,
+    [victimsFromCache]
+  );
+
+  const recontactedCount = recontactedFromCache > 0
+    ? recontactedFromCache
+    : Math.max(progress.photo.withPhoto, progress.piece.withPiece);
+  const consentementCount = progress.contrat.withContrat || actesConsentementCount || consentementsFromCache;
+  const finProcessusCount = finProcessusFromCache;
+  const circuitCount = circuitFromCache > 0
+    ? circuitFromCache
+    : Math.max(0, totalPecmu - finProcessusCount);
+  const priseEnChargeDocumentee = Math.max(0, finProcessusCount + circuitCount);
+  const timelineSansChirurgie = useMemo(
+    () => timeline.filter((step) => step.key !== 'chirurgie'),
+    [timeline]
+  );
 
   const etatData = useMemo(() =>
     kpis.parEtatVictimisation.map((e, i) => ({
@@ -153,7 +242,7 @@ const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = ({ onShowS
             Tableau de bord — Prise en charge médicale urgente (PECMU)
           </h1>
           <p className="text-sm text-gray-600">
-            Suivi des victimes en urgence médicale : chirurgie, soins, suivi et accompagnement psychologique.
+            Suivi des victimes en urgence médicale : recontact, acte de consentement et avancement du circuit.
           </p>
         </div>
       </div>
@@ -169,37 +258,37 @@ const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = ({ onShowS
           loading={loadingOfficial && !victimsFromCache.length}
         />
         <StatCard
-          title="Avec photo"
-          value={loadingOfficial ? '...' : progress.photo.withPhoto.toLocaleString()}
+          title="Recontacté (photo et/ou pièce)"
+          value={loadingOfficial && loadingCache ? '...' : recontactedCount.toLocaleString()}
           icon={<FiCamera className="text-white text-xl" />}
           color="bg-gradient-to-br from-sky-500 to-blue-600"
-          subtitle={`${totalPecmu > 0 ? Math.round((progress.photo.withPhoto / totalPecmu) * 100) : 0}% des PECMU`}
-          loading={loadingOfficial}
+          subtitle={`${totalPecmu > 0 ? Math.round((recontactedCount / totalPecmu) * 100) : 0}% des PECMU`}
+          loading={loadingOfficial && loadingCache}
         />
         <StatCard
-          title="Avec pièce"
-          value={loadingOfficial ? '...' : progress.piece.withPiece.toLocaleString()}
+          title="Consentement"
+          value={loadingOfficial && loadingCache ? '...' : consentementCount.toLocaleString()}
           icon={<FiFileText className="text-white text-xl" />}
           color="bg-gradient-to-br from-violet-500 to-purple-600"
-          subtitle={`${totalPecmu > 0 ? Math.round((progress.piece.withPiece / totalPecmu) * 100) : 0}% documentées`}
-          loading={loadingOfficial}
-        />
-        <StatCard
-          title="Contrats PECMU"
-          value={loadingOfficial ? '...' : (progress.contrat.withContrat || contractsCount).toLocaleString()}
-          icon={<FiCreditCard className="text-white text-xl" />}
-          color="bg-gradient-to-br from-emerald-500 to-teal-600"
-          subtitle={`${totalPecmu > 0 ? Math.round(((progress.contrat.withContrat || contractsCount) / totalPecmu) * 100) : 0}% des PECMU`}
-          loading={loadingOfficial}
+          subtitle="Acte de consentement signé"
+          loading={loadingOfficial && loadingCache}
           onClick={onShowSignedContractVictims}
         />
         <StatCard
-          title="Déjà indemnisé"
-          value={loadingOfficial ? '...' : `${progress.indemnisation.montantTotalIndemnise.toLocaleString()} USD`}
-          icon={<FiDollarSign className="text-white text-xl" />}
+          title="Dans le circuit"
+          value={loadingOfficial && loadingCache ? '...' : circuitCount.toLocaleString()}
+          icon={<FiActivity className="text-white text-xl" />}
+          color="bg-gradient-to-br from-emerald-500 to-teal-600"
+          subtitle="Processus en cours"
+          loading={loadingOfficial && loadingCache}
+        />
+        <StatCard
+          title="Fin de processus"
+          value={loadingOfficial && loadingCache ? '...' : finProcessusCount.toLocaleString()}
+          icon={<FiCheckCircle className="text-white text-xl" />}
           color="bg-gradient-to-br from-amber-500 to-orange-600"
-          subtitle={`${progress.indemnisation.commencee.toLocaleString()} paiement(s) démarré(s)`}
-          loading={loadingOfficial}
+          subtitle="Personnes arrivées en fin de circuit"
+          loading={loadingOfficial && loadingCache}
         />
       </div>
 
@@ -221,26 +310,26 @@ const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = ({ onShowS
       {/* Aspects médicaux breakdown + Psychologique */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <ProgressionBreakdownCard
-          title="Aspects médicaux"
+          title="Circuit de prise en charge PECMU"
           icon={<FiHeart className="text-white" size={18} />}
           iconBg="bg-gradient-to-br from-red-500 to-rose-600"
           items={[
-            { label: 'Chirurgie terminée', count: kpis.chirurgies.terminees, color: '#10b981' },
-            { label: 'Chirurgie en cours', count: kpis.chirurgies.enCours, color: '#f59e0b' },
-            { label: 'Soins terminés', count: kpis.soinsDomicile.terminees, color: '#06b6d4' },
-            { label: 'Soins en cours', count: kpis.soinsDomicile.enCours, color: '#8b5cf6' },
-            { label: 'Suivi terminé', count: kpis.suivis.terminees, color: '#3b82f6' },
-            { label: 'Suivi en cours', count: kpis.suivis.enCours, color: '#ec4899' },
+            { label: 'Recontactés avec photo ou pièce', count: recontactedCount, color: '#0ea5e9' },
+            { label: 'Actes de consentement signés', count: consentementCount, color: '#8b5cf6' },
+            { label: 'Personnes dans le circuit', count: circuitCount, color: '#10b981' },
+            { label: 'Personnes en fin de processus', count: finProcessusCount, color: '#f59e0b' },
           ]}
         />
 
         <ProgressionBreakdownCard
-          title="Aspects psychologiques"
+          title="Suivi de la prise en charge"
           icon={<FiActivity className="text-white" size={18} />}
           iconBg="bg-gradient-to-br from-violet-500 to-purple-600"
           items={[
-            { label: 'En cours', count: kpis.psychologique.enCours, color: '#f59e0b' },
-            { label: 'Terminés', count: kpis.psychologique.terminees, color: '#10b981' },
+            { label: 'Dossiers PECMU documentés', count: priseEnChargeDocumentee, color: '#14b8a6' },
+            { label: 'Soins à domicile suivis', count: kpis.soinsDomicile.enCours + kpis.soinsDomicile.terminees, color: '#06b6d4' },
+            { label: 'Suivi médical documenté', count: kpis.suivis.enCours + kpis.suivis.terminees, color: '#3b82f6' },
+            { label: 'Accompagnement psychologique', count: kpis.psychologique.enCours + kpis.psychologique.terminees, color: '#ec4899' },
           ]}
         />
       </div>
@@ -350,7 +439,7 @@ const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = ({ onShowS
             <p className="text-xs text-gray-500">Parcours de prise en charge médicale urgente d'une victime</p>
           </div>
         </div>
-        <ProgressionTimeline steps={timeline} orientation="horizontal" />
+        <ProgressionTimeline steps={timelineSansChirurgie} orientation="horizontal" />
       </div>
 
       {/* Résumé */}
@@ -370,8 +459,8 @@ const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = ({ onShowS
             <div className="text-red-100 text-sm">Victimes total</div>
           </div>
           <div className="bg-white/10 rounded-lg p-4">
-            <div className="text-2xl font-bold">{kpis.chirurgies.terminees + kpis.soinsDomicile.terminees + kpis.suivis.terminees}</div>
-            <div className="text-red-100 text-sm">Prises en charge terminées</div>
+            <div className="text-2xl font-bold">{finProcessusCount.toLocaleString()}</div>
+            <div className="text-red-100 text-sm">Fin de processus</div>
           </div>
           <div className="bg-white/10 rounded-lg p-4">
             <div className="text-2xl font-bold">{kpis.partenaires.length}</div>

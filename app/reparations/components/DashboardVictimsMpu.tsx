@@ -117,6 +117,29 @@ const hasCliniqueMobile = (victim: any): boolean => {
   return collectMesureNames(victim).some((n) => n.includes('clinique mobile'));
 };
 
+const hasCommenceMesuresMpu = (victim: any): boolean => {
+  if (hasFormation(victim) || hasConsultationMedicale(victim) || hasCliniqueMobile(victim)) return true;
+  if (victim?.mesuresMpuCommencees === true || victim?.priseEnChargeMpu === true) return true;
+
+  const progression = victim?.progressionMpu ?? victim?.progressionMPU ?? victim?.progression?.mpu;
+  if (!progression || typeof progression !== 'object') return false;
+
+  const cliniques = Array.isArray(progression?.cliniques) ? progression.cliniques : [];
+  if (cliniques.some((c: any) => c?.effectuee === true || c?.date)) return true;
+  if (progression?.musoAvec?.paiementEffectue === true || progression?.musoAvec?.date) return true;
+
+  const statuts = [
+    progression?.psychologique?.statut,
+    progression?.economique?.statut,
+  ].map(normalizeText);
+
+  return statuts.some((statut) => (
+    statut.includes('en cours') ||
+    statut.includes('evalue') ||
+    statut.includes('termine')
+  ));
+};
+
 const getCliniqueMobileId = (victim: any): string | null => {
   const raw =
     victim?.cliniqueMobileNom ||
@@ -293,6 +316,20 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onShowSignedC
     () => mpuVictims.filter(hasConsentementSigne).length,
     [mpuVictims]
   );
+  const totalRecontactes = useMemo(
+    () => mpuVictims.filter((victim) => {
+      const hasVictimPhoto = typeof victim?.photo === 'string' && victim.photo.trim().length > 0;
+      const hasPieceIdentiteFromProgress = victim?.progression?.hasPieceIdentite === true;
+      const hasPieceIdentiteFromDocs = Array.isArray(victim?.documentVictime)
+        ? victim.documentVictime.some((d: any) => {
+          const label = normalizeText(d?.label ?? d?.type ?? d?.nom);
+          return label === "piece d'identite" || label === 'piece identite' || label === 'piece_identite';
+        })
+        : false;
+      return hasVictimPhoto || hasPieceIdentiteFromProgress || hasPieceIdentiteFromDocs;
+    }).length,
+    [mpuVictims]
+  );
 
   const perSite = useMemo(() => {
     const counts = new Map<string, number>();
@@ -316,8 +353,18 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onShowSignedC
     [mpuVictims]
   );
   const totalConsultations = consultationsList.length;
+  const totalMesuresCommencees = useMemo(
+    () => mpuVictims.filter(hasCommenceMesuresMpu).length,
+    [mpuVictims]
+  );
 
-  const percentConsentement = totalMpu > 0 ? Math.round((totalConsentement / totalMpu) * 100) : 0;
+  const consentementCount = progress.contrat.withContrat || totalConsentement;
+  const recontactedCount = totalRecontactes > 0
+    ? totalRecontactes
+    : Math.max(progress.photo.withPhoto, progress.piece.withPiece);
+  const percentConsentement = totalMpu > 0 ? Math.round((consentementCount / totalMpu) * 100) : 0;
+  const percentRecontacted = totalMpu > 0 ? Math.round((recontactedCount / totalMpu) * 100) : 0;
+  const percentMesuresCommencees = totalMpu > 0 ? Math.round((totalMesuresCommencees / totalMpu) * 100) : 0;
   const percentFormations = totalMpu > 0 ? Math.round((totalFormations / totalMpu) * 100) : 0;
   const percentConsultations = totalMpu > 0 ? Math.round((totalConsultations / totalMpu) * 100) : 0;
 
@@ -407,58 +454,42 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onShowSignedC
         </div>
       </div>
 
-      {/* KPI classiques */}
+      {/* KPI principaux */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+        <KpiCard
+          title="Recontacté (photo et/ou pièce)"
+          value={officialLoading && loading ? '…' : recontactedCount.toLocaleString()}
+          icon={<FiCamera className="text-white" size={18} />}
+          color="bg-sky-500"
+          subtitle={`${percentRecontacted}% des MPU`}
+          loading={officialLoading && loading}
+        />
+        <KpiCard
+          title="Actes de consentement"
+          value={officialLoading && loading ? '…' : consentementCount.toLocaleString()}
+          icon={<FiFileText className="text-white" size={18} />}
+          color="bg-emerald-500"
+          subtitle={`${percentConsentement}% des MPU`}
+          loading={officialLoading && loading}
+          onClick={onShowSignedContractVictims}
+        />
+        <KpiCard
+          title="A commencé à bénéficier des mesures"
+          value={loading ? '…' : totalMesuresCommencees.toLocaleString()}
+          icon={<FiActivity className="text-white" size={18} />}
+          color="bg-orange-500"
+          subtitle={`${percentMesuresCommencees}% des MPU`}
+          loading={loading}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
         <KpiCard
           title="Total victimes MPU"
           value={officialLoading ? '…' : totalMpu.toLocaleString()}
           icon={<FiUsers className="text-white" size={18} />}
-          color="bg-orange-500"
-          subtitle="Source officielle MPU"
-          loading={officialLoading}
-        />
-        <KpiCard
-          title="Avec photo"
-          value={officialLoading ? '…' : progress.photo.withPhoto.toLocaleString()}
-          icon={<FiCamera className="text-white" size={18} />}
-          color="bg-sky-500"
-          subtitle={`${totalMpu > 0 ? Math.round((progress.photo.withPhoto / totalMpu) * 100) : 0}% des MPU`}
-          loading={officialLoading}
-        />
-        <KpiCard
-          title="Contrats liés"
-          value={officialLoading ? '…' : `${progress.contrat.withContrat.toLocaleString()}`}
-          icon={<FiFileText className="text-white" size={18} />}
-          color="bg-emerald-500"
-          subtitle={`${totalMpu > 0 ? Math.round((progress.contrat.withContrat / totalMpu) * 100) : 0}% des MPU`}
-          loading={officialLoading}
-          onClick={onShowSignedContractVictims}
-        />
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <KpiCard
-          title="Avec pièce"
-          value={officialLoading ? '…' : progress.piece.withPiece.toLocaleString()}
-          icon={<FiShield className="text-white" size={18} />}
           color="bg-indigo-500"
-          subtitle={`${totalMpu > 0 ? Math.round((progress.piece.withPiece / totalMpu) * 100) : 0}% dossiers documentés`}
-          loading={officialLoading}
-        />
-        <KpiCard
-          title="Indemnisation commencée"
-          value={officialLoading ? '…' : progress.indemnisation.commencee.toLocaleString()}
-          icon={<FiTrendingUp className="text-white" size={18} />}
-          color="bg-amber-500"
-          subtitle={`${totalMpu > 0 ? Math.round((progress.indemnisation.commencee / totalMpu) * 100) : 0}% des MPU`}
-          loading={officialLoading}
-        />
-        <KpiCard
-          title="Montant déjà indemnisé"
-          value={officialLoading ? '…' : `${progress.indemnisation.montantTotalIndemnise.toLocaleString()} USD`}
-          icon={<FiCheckCircle className="text-white" size={18} />}
-          color="bg-teal-500"
-          subtitle="Plans avec paiement effectif"
+          subtitle="Source officielle MPU"
           loading={officialLoading}
         />
         <KpiCard
