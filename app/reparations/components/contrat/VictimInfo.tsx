@@ -1,7 +1,6 @@
 'use client';
 import React from 'react';
 import type { ContractTemplateBareme, Victim, Representant, ContractForm, Consentements } from './types';
-import { getContractPrejudiceOptions } from './contractTemplates';
 
 interface VictimInfoProps {
     victim: Victim;
@@ -13,13 +12,12 @@ interface VictimInfoProps {
     setConsentements: React.Dispatch<React.SetStateAction<Consentements>>;
     representant: Representant;
     setRepresentant: React.Dispatch<React.SetStateAction<Representant>>;
-    applyBaremeToTranches: () => void;
+    selectFinalPrejudice: (prejudiceFinal: string) => void;
+    prejudiceOptions: string[];
     totalMontant: number;
 }
 
 const inputClass = 'border-b border-dotted border-gray-400 outline-none text-sm bg-transparent px-1 py-0.5 min-w-0';
-
-const prejudiceOptions = getContractPrejudiceOptions();
 
 export const VictimInfo: React.FC<VictimInfoProps> = ({
     selectedTemplateBareme,
@@ -30,9 +28,15 @@ export const VictimInfo: React.FC<VictimInfoProps> = ({
     setConsentements,
     representant,
     setRepresentant,
-    applyBaremeToTranches,
+    selectFinalPrejudice,
+    prejudiceOptions,
     totalMontant,
 }) => {
+    const currentPrejudice = contractForm.prejudiceFinal.trim();
+    const displayedPrejudiceOptions = currentPrejudice && !prejudiceOptions.includes(currentPrejudice)
+        ? [currentPrejudice, ...prejudiceOptions]
+        : prejudiceOptions;
+
     const updateField = (field: keyof ContractForm, value: string) => {
         setContractForm((prev) => {
             const next = { ...prev, [field]: value };
@@ -48,12 +52,6 @@ export const VictimInfo: React.FC<VictimInfoProps> = ({
 
     return (
         <>
-            <datalist id="prejudice-final-options">
-                {prejudiceOptions.map((option) => (
-                    <option key={option} value={option} />
-                ))}
-            </datalist>
-
             {/* Introduction */}
             <div className="mb-6 text-sm text-gray-700 leading-relaxed">
                 <p>
@@ -287,22 +285,19 @@ export const VictimInfo: React.FC<VictimInfoProps> = ({
             {/* Section reconnaissance */}
             <div className="mb-6">
                 <p className="font-bold text-sm mb-2">A été reconnue comme victime du préjudice suivant :</p>
-                <div className="flex flex-col gap-2 mb-4 sm:flex-row sm:items-center">
-                    <input
-                        type="text"
-                        list="prejudice-final-options"
+                <div className="mb-4">
+                    <select
                         value={contractForm.prejudiceFinal}
-                        onChange={(e) => updateField('prejudiceFinal', e.target.value)}
-                        className={`${inputClass} italic w-full sm:w-96`}
-                        placeholder="Préjudice final"
-                    />
-                    <button
-                        type="button"
-                        onClick={applyBaremeToTranches}
-                        className="no-print px-3 py-1.5 text-xs font-semibold text-blue-700 border border-blue-200 rounded hover:bg-blue-50"
+                        onChange={(e) => selectFinalPrejudice(e.target.value)}
+                        className={`${inputClass} italic w-full sm:w-[28rem]`}
                     >
-                        Appliquer le barème
-                    </button>
+                        <option value="" disabled>Sélectionner le préjudice final</option>
+                        {displayedPrejudiceOptions.map((option) => (
+                            <option key={option} value={option}>
+                                {option}
+                            </option>
+                        ))}
+                    </select>
                 </div>
                 <p className="text-sm leading-relaxed mb-4">
                     À ce titre, une indemnisation d'un montant de l'équivalent en Francs Congolais de

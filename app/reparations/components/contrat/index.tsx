@@ -31,6 +31,7 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
         formattedSignatureDate,
         totalMontant,
         pendingOfflineContrat,
+        prejudiceOptions,
         setConsentements,
         setRepresentant,
         setContractForm,
@@ -43,7 +44,7 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
         addTranche,
         removeTranche,
         updateTranche,
-        applyBaremeToTranches,
+        selectFinalPrejudice,
         saveContract,
         exportToPDF,
     } = useContrat(victim);
@@ -292,7 +293,8 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                                 setConsentements={setConsentements}
                                 representant={representant}
                                 setRepresentant={setRepresentant}
-                                applyBaremeToTranches={applyBaremeToTranches}
+                                selectFinalPrejudice={selectFinalPrejudice}
+                                prejudiceOptions={prejudiceOptions}
                                 totalMontant={totalMontant}
                             />
 

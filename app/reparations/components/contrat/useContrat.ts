@@ -7,6 +7,7 @@ import type { Victim, Tranche, Contrat, Consentements, Representant, SaveMessage
 import { getVictimBirthInfo } from '../../utils/victimBirthInfo';
 import {
     cloneMesuresReparation,
+    getContractPrejudiceOptions,
     getContractTemplateBareme,
     getContractTemplateById,
     getContractTemplateForPrejudice,
@@ -27,6 +28,10 @@ const createTemplateTranches = (templateId: ContractTemplateId, prejudiceFinal?:
         montant: String(tranche.montantUSD),
     }));
 };
+
+const uniqueStringOptions = (values: string[]): string[] => (
+    Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)))
+);
 
 const getDateLieuNaissance = (victim: Victim): string => {
     return getVictimBirthInfo(victim).dateLieuNaissance;
@@ -143,6 +148,7 @@ export function useContrat(victim: Victim) {
     const [consentements, setConsentements] = useState<Consentements>(() => createDefaultConsentements());
     const [representant, setRepresentant] = useState<Representant>(DEFAULT_REPRESENTANT);
     const [contractForm, setContractForm] = useState<ContractForm>(() => getInitialContractForm(victim));
+    const [prejudiceOptions, setPrejudiceOptions] = useState<string[]>(() => getContractPrejudiceOptions());
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isDrawing, setIsDrawing] = useState(false);
@@ -162,6 +168,40 @@ export function useContrat(victim: Victim) {
     const selectedTemplate = getContractTemplateById(selectedTemplateId);
     const selectedTemplateBareme = getContractTemplateBareme(selectedTemplateId, contractForm.prejudiceFinal);
     const totalMontant = tranches.reduce((sum, t) => sum + (parseFloat(t.montant) || 0), 0);
+
+    useEffect(() => {
+        let isMounted = true;
+
+        const fetchSystemPrejudices = async () => {
+            try {
+                const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
+                const response = await fetch(`${baseUrl}/prejudices`);
+                if (!response.ok) return;
+
+                const data = await response.json();
+                const systemOptions = Array.isArray(data)
+                    ? data.map((item: any) => (
+                        typeof item === 'string' ? item : item?.prejudice || item?.nom || ''
+                    ))
+                    : [];
+
+                if (isMounted) {
+                    setPrejudiceOptions(uniqueStringOptions([
+                        ...getContractPrejudiceOptions(),
+                        ...systemOptions,
+                    ]));
+                }
+            } catch (error) {
+                console.log('Erreur lors du chargement des préjudices:', error);
+            }
+        };
+
+        fetchSystemPrejudices();
+
+        return () => {
+            isMounted = false;
+        };
+    }, []);
 
     // Initialiser le canvas
     useEffect(() => {
@@ -464,14 +504,42 @@ export function useContrat(victim: Victim) {
         }));
     };
 
-    const applyBaremeToTranches = () => {
-        const bareme = getContractTemplateBareme(selectedTemplateId, contractForm.prejudiceFinal);
+    const selectFinalPrejudice = (prejudiceFinal: string) => {
+        const templateId = selectedTemplateId === 'luc-decision-justice'
+            ? selectedTemplateId
+            : getContractTemplateForPrejudice(prejudiceFinal).id;
+        const template = getContractTemplateById(templateId);
+        const bareme = getContractTemplateBareme(templateId, prejudiceFinal);
+
+        setSelectedTemplateId(templateId);
         setContractForm((prev) => ({
             ...prev,
             prejudiceFinal: bareme.prejudiceLabel,
             typePrejudices: bareme.prejudiceLabel,
+            typeContrat: templateId === 'luc-decision-justice' ? template.label : 'Réparation Administrative',
+            reparationJudiciaire: templateId === 'luc-decision-justice' ? 'Décision de justice' : 'En attente de décision',
+            reparationAdministrative: 'Programme des Réparations Administratives Intégrales (PRAI)',
         }));
-        setTranches(createTemplateTranches(selectedTemplateId, bareme.prejudiceLabel));
+        setTranches(createTemplateTranches(templateId, bareme.prejudiceLabel));
+    };
+
+    const applyBaremeToTranches = () => {
+        const templateId = selectedTemplateId === 'luc-decision-justice'
+            ? selectedTemplateId
+            : getContractTemplateForPrejudice(contractForm.prejudiceFinal).id;
+        const template = getContractTemplateById(templateId);
+        const bareme = getContractTemplateBareme(templateId, contractForm.prejudiceFinal);
+
+        setSelectedTemplateId(templateId);
+        setContractForm((prev) => ({
+            ...prev,
+            prejudiceFinal: bareme.prejudiceLabel,
+            typePrejudices: bareme.prejudiceLabel,
+            typeContrat: templateId === 'luc-decision-justice' ? template.label : 'Réparation Administrative',
+            reparationJudiciaire: templateId === 'luc-decision-justice' ? 'Décision de justice' : 'En attente de décision',
+            reparationAdministrative: 'Programme des Réparations Administratives Intégrales (PRAI)',
+        }));
+        setTranches(createTemplateTranches(templateId, bareme.prejudiceLabel));
     };
 
     // Sauvegarde du contrat
@@ -728,6 +796,7 @@ export function useContrat(victim: Victim) {
         formattedSignatureDate,
         totalMontant,
         pendingOfflineContrat,
+        prejudiceOptions,
 
         // Setters
         setConsentements,
@@ -738,6 +807,7 @@ export function useContrat(victim: Victim) {
 
         // Actions
         selectContractTemplate,
+        selectFinalPrejudice,
         startDrawing,
         draw,
         stopDrawing,
