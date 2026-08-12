@@ -1224,7 +1224,43 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                 });
                 setUsingCache(false);
                 setLoading(false);
+                return;
             }
+
+            console.warn('[FetchVictims] Réponse API vide ou invalide:', response);
+            const cachedResult = await getVictimsFromCache(cacheKey);
+            if (cachedResult?.data?.length) {
+                const filteredData = applyLocalFilters(cachedResult.data);
+                const totalItems = filteredData.length;
+                const totalPages = Math.max(1, Math.ceil(totalItems / meta.limit));
+                const currentPage = Math.min(meta.page, totalPages);
+                const start = (currentPage - 1) * meta.limit;
+                const end = start + meta.limit;
+                const pageData = filteredData.slice(start, end);
+
+                setVictims(pageData);
+                setMeta(prev => ({
+                    ...prev,
+                    page: currentPage,
+                    total: totalItems,
+                    totalPages,
+                    hasNextPage: end < totalItems,
+                    hasPreviousPage: currentPage > 1
+                }));
+                setUsingCache(true);
+                setError("");
+            } else {
+                setVictims([]);
+                setMeta(prev => ({
+                    ...prev,
+                    total: 0,
+                    totalPages: 0,
+                    hasNextPage: false,
+                    hasPreviousPage: false
+                }));
+                setError('Aucune donnée reçue du serveur. Vérifiez la connexion ou rechargez le cache depuis Paramètres.');
+            }
+            setLoading(false);
         } catch (err: any) {
             console.error('Erreur lors du chargement des données:', err);
 

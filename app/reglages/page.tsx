@@ -23,6 +23,11 @@ import { getPendingVictimPhotosSummary } from '@/app/utils/victimPhotosCache';
 import { syncPendingVictimDocsForVictim } from '@/app/utils/victimDocsSyncService';
 import { syncPendingVictimPhotosForVictim } from '@/app/utils/victimPhotosSyncService';
 import { authenticatedFetch } from '@/app/utils/authFetch';
+import {
+  refreshVictimsCacheInBackground,
+  type VictimsCacheSyncProgress
+} from '@/app/utils/victimsCacheSync';
+import { getCacheInventory, type CacheTableInfo } from '@/app/utils/cacheInventory';
 
 const CORE_POWERVIZ_URL = process.env.NEXT_PUBLIC_CORE_POWERVIZ;
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
@@ -77,6 +82,11 @@ const ReglagesPage = () => {
   const [selectedVictims, setSelectedVictims] = useState<Record<number, boolean>>({});
   const [batchCount, setBatchCount] = useState<number>(10);
   const [batchSyncing, setBatchSyncing] = useState<boolean>(false);
+  const [victimsCacheSyncing, setVictimsCacheSyncing] = useState(false);
+  const [victimsCacheProgress, setVictimsCacheProgress] = useState<VictimsCacheSyncProgress | null>(null);
+  const [victimsCacheMessage, setVictimsCacheMessage] = useState('');
+  const [cacheInventory, setCacheInventory] = useState<CacheTableInfo[]>([]);
+  const [loadingCacheInventory, setLoadingCacheInventory] = useState(false);
 
   const formatVictimName = (victim: any): string => {
     if (!victim || typeof victim !== 'object') return '';
@@ -214,6 +224,53 @@ const ReglagesPage = () => {
         text: error?.message || 'Impossible de vider les caches',
         confirmButtonColor: '#901c67'
       });
+    }
+  };
+
+  const refreshVictimsCache = async () => {
+    if (victimsCacheSyncing) return;
+
+    if (!online) {
+      setVictimsCacheMessage('Connexion absente: impossible de compléter le cache maintenant.');
+      return;
+    }
+
+    setVictimsCacheSyncing(true);
+    setVictimsCacheMessage('Synchronisation du cache lancée en arrière-plan.');
+    setVictimsCacheProgress({
+      currentPage: 0,
+      totalPages: 1,
+      records: 0,
+      status: 'running',
+      message: 'Préparation',
+    });
+
+    try {
+      const result = await refreshVictimsCacheInBackground({
+        onProgress: setVictimsCacheProgress,
+      });
+      setVictimsCacheMessage(`${result.totalRecords.toLocaleString('fr-FR')} victime(s) disponibles dans le cache hors ligne.`);
+      setLastUpdateTime(new Date().toLocaleTimeString('fr-FR'));
+      await loadCacheInventory();
+    } catch (error: any) {
+      console.error('[Reglages] Erreur rafraîchissement cache victimes:', error);
+      setVictimsCacheProgress(prev => prev ? { ...prev, status: 'error', message: error?.message || 'Erreur' } : null);
+      setVictimsCacheMessage(error?.message || 'Impossible de compléter le cache des victimes.');
+    } finally {
+      setVictimsCacheSyncing(false);
+    }
+  };
+
+  const loadCacheInventory = async () => {
+    try {
+      setLoadingCacheInventory(true);
+      const rows = await getCacheInventory();
+      setCacheInventory(rows);
+    } catch (error) {
+      console.error('[Reglages] Erreur inventaire cache:', error);
+      setCacheInventory([]);
+    } finally {
+      setLoadingCacheInventory(false);
     }
   };
 
@@ -670,7 +727,10 @@ const ReglagesPage = () => {
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab('cache')}
+            onClick={() => {
+              setActiveTab('cache');
+              loadCacheInventory();
+            }}
             className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${activeTab === 'cache'
               ? 'bg-white border-gray-300 text-gray-900 shadow-sm'
               : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-white'
@@ -1058,6 +1118,24 @@ const ReglagesPage = () => {
 
               <div className="flex items-center gap-2">
                 <button
+                  onClick={loadCacheInventory}
+                  disabled={loadingCacheInventory || victimsCacheSyncing}
+                  className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm"
+                  title="Actualiser les informations du cache"
+                >
+                  <RefreshCw size={16} className={loadingCacheInventory ? 'animate-spin' : ''} />
+                  Actualiser infos cache
+                </button>
+                <button
+                  onClick={refreshVictimsCache}
+                  disabled={!online || victimsCacheSyncing}
+                  className="flex items-center gap-2 px-4 py-2 bg-white border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50 hover:border-blue-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm"
+                  title="Compléter le cache local avec les nouvelles victimes de la base de données"
+                >
+                  <RefreshCw size={16} className={victimsCacheSyncing ? 'animate-spin' : ''} />
+                  Compléter les nouvelles données
+                </button>
+                <button
                   onClick={clearAllCachesAndReload}
                   className="flex items-center gap-2 px-4 py-2 bg-white border border-red-300 text-red-700 rounded-lg hover:bg-red-50 hover:border-red-400 transition-all font-medium shadow-sm"
                   title="Supprimer toutes les bases IndexedDB et recharger"
@@ -1065,6 +1143,97 @@ const ReglagesPage = () => {
                   <Trash2 size={16} />
                   Vider les caches
                 </button>
+              </div>
+            </div>
+
+            {(victimsCacheProgress || victimsCacheMessage) && (
+              <div className={`mt-5 rounded-lg border p-4 ${
+                victimsCacheProgress?.status === 'error'
+                  ? 'border-red-200 bg-red-50 text-red-800'
+                  : 'border-blue-200 bg-blue-50 text-blue-900'
+              }`}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-sm font-semibold">
+                    <RefreshCw size={16} className={victimsCacheSyncing ? 'animate-spin' : ''} />
+                    <span>{victimsCacheMessage || victimsCacheProgress?.message}</span>
+                  </div>
+                  {victimsCacheProgress && (
+                    <span className="text-xs font-medium">
+                      Page {victimsCacheProgress.currentPage} / {victimsCacheProgress.totalPages} · {victimsCacheProgress.records.toLocaleString('fr-FR')} ligne(s)
+                    </span>
+                  )}
+                </div>
+                {victimsCacheProgress && victimsCacheProgress.totalPages > 0 && (
+                  <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/70">
+                    <div
+                      className="h-full rounded-full bg-blue-600 transition-all duration-300"
+                      style={{
+                        width: `${Math.min(100, Math.round((victimsCacheProgress.currentPage / victimsCacheProgress.totalPages) * 100))}%`
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="mt-6">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900">Données en cache</h3>
+                  <p className="text-xs text-gray-500">
+                    Tables IndexedDB contenant au moins un enregistrement local.
+                  </p>
+                </div>
+                <div className="text-xs font-semibold text-gray-600">
+                  {cacheInventory.length.toLocaleString('fr-FR')} table(s)
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-lg border border-gray-200">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-left text-xs font-semibold uppercase text-gray-600">
+                    <tr>
+                      <th className="px-4 py-3">Base</th>
+                      <th className="px-4 py-3">Table</th>
+                      <th className="px-4 py-3 text-right">Enregistrements</th>
+                      <th className="px-4 py-3">Nom technique</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 bg-white">
+                    {loadingCacheInventory && (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-8 text-center text-gray-600">
+                          <RefreshCw size={28} className="mx-auto mb-2 animate-spin text-gray-400" />
+                          Lecture du cache...
+                        </td>
+                      </tr>
+                    )}
+
+                    {!loadingCacheInventory && cacheInventory.map((row) => (
+                      <tr key={`${row.dbName}-${row.tableName}`} className="text-gray-800">
+                        <td className="px-4 py-3 font-semibold text-gray-900">{row.dbLabel}</td>
+                        <td className="px-4 py-3">
+                          <div className="font-medium">{row.tableLabel}</div>
+                          {row.error && <div className="text-xs text-red-600">{row.error}</div>}
+                        </td>
+                        <td className="px-4 py-3 text-right font-bold text-blue-700">
+                          {row.records.toLocaleString('fr-FR')}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-500">
+                          {row.dbName}.{row.tableName}
+                        </td>
+                      </tr>
+                    ))}
+
+                    {!loadingCacheInventory && cacheInventory.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-8 text-center text-gray-600">
+                          Aucune donnée en cache détectée.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
