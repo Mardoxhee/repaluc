@@ -30,12 +30,13 @@ import SuiviPaiement from './SuiviPaiement';
 import Swal from 'sweetalert2';
 import { isOnline } from '@/app/utils/victimsCache';
 import { deletePendingVictimDocById, getPendingDocsForVictim, getPendingVictimDocById, savePendingVictimDoc } from '@/app/utils/victimDocsCache';
+import { authenticatedFetch } from '@/app/utils/authFetch';
 
 // Fonction pour obtenir le lien réel du fichier
 const getFileLink = async (lien: string): Promise<string> => {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
-    const response = await fetch(`${baseUrl}/minio/files/${lien}`);
+    const response = await authenticatedFetch(`${baseUrl}/minio/files/${lien}`);
 
     if (!response.ok) {
       throw new Error('Erreur lors de la récupération du lien du fichier');
@@ -68,7 +69,7 @@ const downloadBlob = async (blob: Blob, filename: string) => {
 };
 
 const downloadFromUrl = async (url: string, filename: string) => {
-  const resp = await fetch(url);
+  const resp = await authenticatedFetch(url);
   if (!resp.ok) {
     throw new Error(`Téléchargement échoué (${resp.status})`);
   }
@@ -342,7 +343,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
     setDeletingFileId(file.id);
     try {
       const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
-      const response = await fetch(`${baseUrl}/document-victime/${file.id}`, {
+      const response = await authenticatedFetch(`${baseUrl}/document-victime/${file.id}`, {
         method: 'DELETE',
         headers: { Accept: 'application/json' },
       });
@@ -510,7 +511,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
     const checkContrat = async () => {
       try {
         const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
-        const response = await fetch(`${baseUrl}/contrat/${currentVictim.id}`);
+        const response = await authenticatedFetch(`${baseUrl}/contrat/${currentVictim.id}`);
         if (response.ok) {
           const data = await response.json();
           // Vérifier si le contrat a un plan d'indemnisation
@@ -534,7 +535,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
       setLoadingFiles(true);
       try {
         const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
-        const res = await fetch(`${baseUrl}/victime/document/${currentVictim.id}`);
+        const res = await authenticatedFetch(`${baseUrl}/victime/document/${currentVictim.id}`);
         if (!res.ok) console.log('Erreur récupération des documents');
         const data = await res.json();
 
@@ -581,7 +582,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
     setLoadingFiles(true);
     try {
       const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
-      const res = await fetch(`${baseUrl}/victime/document/${victimId}`);
+      const res = await authenticatedFetch(`${baseUrl}/victime/document/${victimId}`);
       if (!res.ok) {
         setFiles([]);
         return;
@@ -707,7 +708,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
     setIsConfirming(true);
     try {
       const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
-      const response = await fetch(`${baseUrl}/victime/${currentVictim.id}`, {
+      const response = await authenticatedFetch(`${baseUrl}/victime/${currentVictim.id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -1088,7 +1089,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
                       const formData = new FormData();
                       formData.append('file', newFileFile);
                       const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
-                      const uploadRes = await fetch(`${baseUrl}/minio/files/upload`, {
+                      const uploadRes = await authenticatedFetch(`${baseUrl}/minio/files/upload`, {
                         method: 'POST',
                         body: formData
                       });
@@ -1098,7 +1099,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
                       if (!lien) throw new Error('Erreur upload fichier');
 
                       // 2. POST sur /document_victime
-                      const docRes = await fetch(`${baseUrl}/document-victime`, {
+                      const docRes = await authenticatedFetch(`${baseUrl}/document-victime`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -1127,7 +1128,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
                       // Recharge la liste des documents
                       setLoadingFiles(true);
                       try {
-                        const res = await fetch(`${baseUrl}/victime/document/${currentVictim.id}`);
+                        const res = await authenticatedFetch(`${baseUrl}/victime/document/${currentVictim.id}`);
                         if (res.ok) {
                           const data = await res.json();
                           const documents = data?.documentVictime || [];

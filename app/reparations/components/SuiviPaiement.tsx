@@ -17,6 +17,7 @@ import {
     Pencil
 } from 'lucide-react';
 import Swal from 'sweetalert2';
+import { authenticatedFetch } from '@/app/utils/authFetch';
 
 interface PlanIndemnisation {
     id: number;
@@ -87,7 +88,7 @@ const SuiviPaiement: React.FC<SuiviPaiementProps> = ({ victim }) => {
         const fetchContrat = async () => {
             try {
                 setLoading(true);
-                const response = await fetch(`${baseUrl}/contrat/${victim.id}`);
+                const response = await authenticatedFetch(`${baseUrl}/contrat/${victim.id}`);
                 if (response.ok) {
                     const data = await response.json();
                     setContrat(data);
@@ -145,7 +146,7 @@ const SuiviPaiement: React.FC<SuiviPaiementProps> = ({ victim }) => {
         const formData = new FormData();
         formData.append('file', file);
 
-        const resp = await fetch(uploadEndpoint, {
+        const resp = await authenticatedFetch(uploadEndpoint, {
             method: 'POST',
             body: formData,
         });
@@ -182,7 +183,7 @@ const SuiviPaiement: React.FC<SuiviPaiementProps> = ({ victim }) => {
                 payload.preuve = preuveUrl;
             }
 
-            const response = await fetch(`${baseUrl}/plan-indemnisation/${planId}`, {
+            const response = await authenticatedFetch(`${baseUrl}/plan-indemnisation/${planId}`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',
@@ -239,7 +240,7 @@ const SuiviPaiement: React.FC<SuiviPaiementProps> = ({ victim }) => {
     // Voir la preuve
     const handleViewPreuve = async (preuve: string) => {
         try {
-            const response = await fetch(`${baseUrl}/minio/files/${preuve}`);
+            const response = await authenticatedFetch(`${baseUrl}/minio/files/${preuve}`);
             if (response.ok) {
                 const data = await response.json();
                 if (data?.data?.src) {

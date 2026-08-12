@@ -1,6 +1,7 @@
 'use client';
 import { getAllPendingContracts, deletePendingContract, PendingContract } from './contractsCache';
 import { isOnline } from './victimsCache';
+import { authenticatedFetch } from './authFetch';
 
 let isSyncing = false;
 let syncInterval: NodeJS.Timeout | null = null;
@@ -15,7 +16,7 @@ const uploadSignature = async (dataUrl: string, victimId: number): Promise<strin
     const formData = new FormData();
     formData.append('file', file);
 
-    const resp = await fetch(uploadEndpoint, {
+    const resp = await authenticatedFetch(uploadEndpoint, {
         method: 'POST',
         body: formData,
     });
@@ -33,7 +34,7 @@ const uploadSignature = async (dataUrl: string, victimId: number): Promise<strin
 const checkExistingContract = async (victimId: number): Promise<boolean> => {
     try {
         const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
-        const response = await fetch(`${baseUrl}/contrat/${victimId}`);
+        const response = await authenticatedFetch(`${baseUrl}/contrat/${victimId}`);
         return response.ok;
     } catch {
         return false;
@@ -92,7 +93,7 @@ export const syncPendingContracts = async (): Promise<{ synced: number; failed: 
                     signature: finalSignature,
                 };
 
-                const resp = await fetch(`${baseUrl}/contrat`, {
+                const resp = await authenticatedFetch(`${baseUrl}/contrat`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

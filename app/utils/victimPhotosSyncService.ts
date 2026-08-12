@@ -2,6 +2,7 @@
 
 import { getAllPendingVictimPhotos, getPendingVictimPhotosToSyncForVictim, markVictimPhotoSynced, PendingVictimPhoto } from './victimPhotosCache';
 import { isOnline } from './victimsCache';
+import { authenticatedFetch } from './authFetch';
 
 let isSyncing = false;
 let syncInterval: NodeJS.Timeout | null = null;
@@ -58,7 +59,7 @@ const uploadPhoto = async (dataUrl: string, victimId: number): Promise<string> =
   const formData = new FormData();
   formData.append('file', file);
 
-  const resp = await fetch(uploadEndpoint, {
+  const resp = await authenticatedFetch(uploadEndpoint, {
     method: 'POST',
     body: formData,
   });
@@ -84,7 +85,7 @@ const patchVictimPhoto = async (victimId: number, photoUrl: string): Promise<boo
     throw new Error('NEXT_PUBLIC_API_BASE_URL n\'est pas configurée');
   }
 
-  const resp = await fetch(`${baseUrl}/victime/${victimId}`, {
+  const resp = await authenticatedFetch(`${baseUrl}/victime/${victimId}`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
@@ -188,7 +189,7 @@ const getVictimVariablesSpecifiques = async (victimId: number): Promise<Record<s
     throw new Error('NEXT_PUBLIC_API_BASE_URL n\'est pas configurée');
   }
 
-  const resp = await fetch(`${baseUrl}/victime/${victimId}`, {
+  const resp = await authenticatedFetch(`${baseUrl}/victime/${victimId}`, {
     method: 'GET',
     headers: {
       'Accept': 'application/json',
@@ -216,7 +217,7 @@ const patchVictimAgentReparation = async (victimId: number, agentFullName: strin
     return false;
   }
 
-  const resp = await fetch(`${baseUrl}/victime/${victimId}`, {
+  const resp = await authenticatedFetch(`${baseUrl}/victime/${victimId}`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',

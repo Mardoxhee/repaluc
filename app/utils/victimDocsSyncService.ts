@@ -2,6 +2,7 @@
 
 import { getAllPendingVictimDocs, getPendingVictimDocsToSyncForVictim, markVictimDocSynced, PendingVictimDoc } from './victimDocsCache';
 import { isOnline } from './victimsCache';
+import { authenticatedFetch } from './authFetch';
 
 let isSyncing = false;
 let syncInterval: NodeJS.Timeout | null = null;
@@ -16,7 +17,7 @@ const uploadDoc = async (doc: PendingVictimDoc): Promise<string> => {
   const formData = new FormData();
   formData.append('file', file);
 
-  const resp = await fetch(`${baseUrl}/minio/files/upload`, {
+  const resp = await authenticatedFetch(`${baseUrl}/minio/files/upload`, {
     method: 'POST',
     body: formData,
   });
@@ -41,7 +42,7 @@ const attachDocToVictim = async (doc: PendingVictimDoc, lien: string): Promise<b
     throw new Error("NEXT_PUBLIC_API_BASE_URL n'est pas configurée");
   }
 
-  const resp = await fetch(`${baseUrl}/document-victime`, {
+  const resp = await authenticatedFetch(`${baseUrl}/document-victime`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

@@ -9,6 +9,7 @@ import ViewEvaluationModal from "./ViewEvaluationModal";
 import { saveVictimsToCache, getVictimsFromCache, isOnline, saveProgress, getProgress } from '../../utils/victimsCache';
 import { saveQuestions, isCacheValid, getQuestions } from '../../utils/planVieQuestionsCache';
 import { deletePendingVictimPhotosForVictim } from '@/app/utils/victimPhotosCache';
+import { authenticatedFetch } from '@/app/utils/authFetch';
 import * as XLSX from 'xlsx';
 
 const CORE_POWERVIZ_URL = process.env.NEXT_PUBLIC_CORE_POWERVIZ;
@@ -284,7 +285,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                 if (!CORE_POWERVIZ_URL) return;
 
                 if (!cacheValid) {
-                    const response = await fetch(`${CORE_POWERVIZ_URL}/question/type/plandevie`);
+                    const response = await authenticatedFetch(`${CORE_POWERVIZ_URL}/question/type/plandevie`);
                     if (!response.ok) {
                         throw new Error('Erreur lors du chargement des questions');
                     }
@@ -438,7 +439,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
         if (isOnline()) {
             try {
                 const doPatch = async (payload: any) => {
-                    const response = await fetch(`${API_BASE_URL}/victime/${victimToUpdate.id}`, {
+                    const response = await authenticatedFetch(`${API_BASE_URL}/victime/${victimToUpdate.id}`, {
                         method: 'PATCH',
                         headers: {
                             'Content-Type': 'application/json',

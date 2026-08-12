@@ -4,6 +4,7 @@ import Swal from 'sweetalert2';
 import { isOnline } from '@/app/utils/victimsCache';
 import { savePendingVictimPhoto, getLatestVictimPhoto } from '@/app/utils/victimPhotosCache';
 import { syncPendingVictimPhotos } from '@/app/utils/victimPhotosSyncService';
+import { authenticatedFetch } from '@/app/utils/authFetch';
 import { getVictimBirthInfo } from '../utils/victimBirthInfo';
 
 interface InfosVictimProps {
@@ -229,7 +230,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
                 return;
             }
 
-            const resp = await fetch(displayedPhoto);
+            const resp = await authenticatedFetch(displayedPhoto);
             if (!resp.ok) throw new Error(`Téléchargement échoué (${resp.status})`);
             const blob = await resp.blob();
 
@@ -391,7 +392,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
 
             try {
                 setIsResolvingRemote(true);
-                const response = await fetch(`${baseUrl}/minio/files/${photo}`);
+                const response = await authenticatedFetch(`${baseUrl}/minio/files/${photo}`);
                 if (!response.ok) return;
                 const data = await response.json();
                 const src = data?.data?.src;

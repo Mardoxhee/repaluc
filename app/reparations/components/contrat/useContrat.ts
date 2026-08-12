@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { isOnline } from '../../../utils/victimsCache';
 import { savePendingContract, getAllPendingContracts, deletePendingContract } from '../../../utils/contractsCache';
+import { authenticatedFetch } from '../../../utils/authFetch';
 import type { PendingContract } from '../../../utils/contractsCache';
 import type { Victim, Tranche, Contrat, Consentements, Representant, SaveMessage, ContractForm, ContractTemplateId, MesureReparationKey } from './types';
 import { getVictimBirthInfo } from '../../utils/victimBirthInfo';
@@ -175,7 +176,7 @@ export function useContrat(victim: Victim) {
         const fetchSystemPrejudices = async () => {
             try {
                 const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
-                const response = await fetch(`${baseUrl}/prejudices`);
+                const response = await authenticatedFetch(`${baseUrl}/prejudices`);
                 if (!response.ok) return;
 
                 const data = await response.json();
@@ -224,7 +225,7 @@ export function useContrat(victim: Victim) {
             try {
                 setLoadingContrat(true);
                 const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
-                const response = await fetch(`${baseUrl}/contrat/${victim.id}`);
+                const response = await authenticatedFetch(`${baseUrl}/contrat/${victim.id}`);
 
                 if (response.ok) {
                     const data = await response.json();
@@ -297,7 +298,7 @@ export function useContrat(victim: Victim) {
 
                     if (data.signature && data.signature !== 'SIG_ELEC') {
                         const signUrl = `${baseUrl}/minio/files/${data.signature}`;
-                        const signResp = await fetch(signUrl);
+                        const signResp = await authenticatedFetch(signUrl);
                         if (signResp.ok) {
                             const signData = await signResp.json();
                             if (signData?.data?.src) {
@@ -345,7 +346,7 @@ export function useContrat(victim: Victim) {
         const formData = new FormData();
         formData.append('file', file);
 
-        const resp = await fetch(uploadEndpoint, {
+        const resp = await authenticatedFetch(uploadEndpoint, {
             method: 'POST',
             body: formData,
         });
@@ -379,7 +380,7 @@ export function useContrat(victim: Victim) {
                         signature: finalSignature,
                     };
 
-                    const resp = await fetch(`${baseUrl}/contrat`, {
+                    const resp = await authenticatedFetch(`${baseUrl}/contrat`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -643,7 +644,7 @@ export function useContrat(victim: Victim) {
                 }
 
                 const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
-                const response = await fetch(`${baseUrl}/contrat/${existingContrat.id}`, {
+                const response = await authenticatedFetch(`${baseUrl}/contrat/${existingContrat.id}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(contractData),

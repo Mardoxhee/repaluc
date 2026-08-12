@@ -23,6 +23,7 @@ import {
   type CountRow,
   type MentionCode,
 } from '../utils/mentionStats';
+import { authenticatedFetch } from '@/app/utils/authFetch';
 
 interface DashboardVictimsProps {
   onSelectAgentReparation?: (fullName: string) => void;
@@ -61,6 +62,7 @@ const getTotalForLucFromStats = (stats: { programme: any[]; categorie: any[] }) 
 const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentReparation, onShowRecontactedVictims, onShowSignedContractVictims, dashboardScope = 'all', extraSection, afterMainStats }) => {
   const { fetcher } = useFetch();
   const [loading, setLoading] = useState(true);
+  const [mainStatsLoading, setMainStatsLoading] = useState(true);
   const [loadingRecontact, setLoadingRecontact] = useState(true);
   const [isOffline, setIsOffline] = useState(false);
   const [showOfflineIndicator, setShowOfflineIndicator] = useState(true);
@@ -105,11 +107,13 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
   useEffect(() => {
     const fetchAllStats = async () => {
       setLoading(true);
+      setMainStatsLoading(true);
       setLoadingRecontact(true);
       setIsOffline(typeof navigator !== 'undefined' ? !navigator.onLine : false);
 
+      const mention: MentionCode | null = dashboardScope === 'luc' ? 'LUC' : null;
+
       try {
-        const mention: MentionCode | null = dashboardScope === 'luc' ? 'LUC' : null;
         const globalProgressResp = await fetcher(endpointForMention('/victime/stats/reparation/globalProgress', mention));
         const globalData = normalizeGlobalProgress(globalProgressResp);
         const totalFromGlobal = globalData.total > 0 ? globalData.total : null;
@@ -125,59 +129,93 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
         setLoadingRecontact(false);
 
         const [
-          sexeData,
-          trancheAgeData,
           provinceData,
-          programmeData,
           territoireData,
-          prejudiceFinalData,
           totalIndemnisationData,
-          categorieData,
-          prejudiceData,
-          contratsData,
-          plansIndemnisationData,
-          indemnisationsData,
         ] = await Promise.all([
-          fetcher(endpointForMention('/victime/stats/sexe', mention)),
-          fetcher(endpointForMention('/victime/stats/tranche-age', mention)),
           fetcher(endpointForMention('/victime/stats/province', mention)),
-          fetcher('/victime/stats/programme'),
           fetcher(endpointForMention('/victime/stats/territoire', mention)),
-          fetcher('/victime/stats/prejudice-final'),
           fetcher(endpointForMention('/victime/stats/total-indemnisation', mention)),
-          fetcher('/victime/stats/categorie'),
-          fetcher('/victime/stats/prejudice'),
-          fetcher(endpointForMention('/contrat', mention)),
-          fetcher('/plan-indemnisation'),
-          fetcher('/indemnisation'),
         ]);
 
-        const indemnisationStats = buildIndemnisationDashboardStats({
-          contrats: normalizeApiList(contratsData),
-          plans: normalizeApiList(plansIndemnisationData),
-          indemnisations: normalizeApiList(indemnisationsData),
-        });
-
-        const newStats = {
-          sexe: normalizeSexeRows(sexeData),
-          trancheAge: normalizeTrancheAgeRows(trancheAgeData),
+        setTotalVictimesLuc(mention === 'LUC' ? globalData.total : 0);
+        setStats((prev) => ({
+          ...prev,
           province: normalizeRowsByField(provinceData, 'province'),
-          programme: programmeData || [],
           territoire: normalizeRowsByField(territoireData, 'territoire'),
-          prejudiceFinal: prejudiceFinalData || [],
-          totalIndemnisation: mention === 'LUC'
-            ? totalIndemnisationFromPayload(totalIndemnisationData)
-            : (indemnisationStats.totalPlanifieUSD || totalIndemnisationFromPayload(totalIndemnisationData)),
-          categorie: categorieData || [],
-          prejudice: prejudiceData || []
+          totalIndemnisation: totalIndemnisationFromPayload(totalIndemnisationData),
+        }));
+        setMainStatsLoading(false);
+
+        const hydrateIndemnisationFallback = async () => {
+          try {
+            const [
+              contratsData,
+              plansIndemnisationData,
+              indemnisationsData,
+            ] = await Promise.all([
+              fetcher(endpointForMention('/contrat', mention)),
+              fetcher('/plan-indemnisation'),
+              fetcher('/indemnisation'),
+            ]);
+
+            const indemnisationStats = buildIndemnisationDashboardStats({
+              contrats: normalizeApiList(contratsData),
+              plans: normalizeApiList(plansIndemnisationData),
+              indemnisations: normalizeApiList(indemnisationsData),
+            });
+
+            setVictimesAvecContratSigne(withContrat || indemnisationStats.totalContrats);
+            setVictimesIndemnisationCommencee(indemnCommencee || indemnisationStats.contratsAvecPaiement);
+            setMontantIndemnisationsDejaVersees(globalData.indemnisation.montantTotalIndemnise || indemnisationStats.totalVerseUSD);
+            setStats((prev) => ({
+              ...prev,
+              totalIndemnisation: mention === 'LUC'
+                ? prev.totalIndemnisation
+                : (indemnisationStats.totalPlanifieUSD || prev.totalIndemnisation),
+            }));
+          } catch (error) {
+            console.log('[Dashboard] Erreur hydratation indemnisation:', error);
+          }
         };
 
-        setVictimesAvecContratSigne(withContrat || indemnisationStats.totalContrats);
-        setVictimesIndemnisationCommencee(indemnCommencee || indemnisationStats.contratsAvecPaiement);
-        setVictimesRecontactees(withPhoto);
-        setTotalVictimesLuc(mention === 'LUC' ? (globalData.total || getTotalForLucFromStats(newStats)) : 0);
-        setMontantIndemnisationsDejaVersees(globalData.indemnisation.montantTotalIndemnise || indemnisationStats.totalVerseUSD);
-        setStats(newStats);
+        void hydrateIndemnisationFallback();
+
+        try {
+          const [
+            sexeData,
+            trancheAgeData,
+            programmeData,
+            prejudiceFinalData,
+            categorieData,
+            prejudiceData,
+          ] = await Promise.all([
+            fetcher(endpointForMention('/victime/stats/sexe', mention)),
+            fetcher(endpointForMention('/victime/stats/tranche-age', mention)),
+            fetcher('/victime/stats/programme'),
+            fetcher('/victime/stats/prejudice-final'),
+            fetcher('/victime/stats/categorie'),
+            fetcher('/victime/stats/prejudice'),
+          ]);
+
+          const newStats = {
+            sexe: normalizeSexeRows(sexeData),
+            trancheAge: normalizeTrancheAgeRows(trancheAgeData),
+            province: normalizeRowsByField(provinceData, 'province'),
+            programme: programmeData || [],
+            territoire: normalizeRowsByField(territoireData, 'territoire'),
+            prejudiceFinal: prejudiceFinalData || [],
+            totalIndemnisation: totalIndemnisationFromPayload(totalIndemnisationData),
+            categorie: categorieData || [],
+            prejudice: prejudiceData || []
+          };
+
+          setVictimesRecontactees(withPhoto);
+          setTotalVictimesLuc(mention === 'LUC' ? (globalData.total || getTotalForLucFromStats(newStats)) : 0);
+          setStats(newStats);
+        } catch (error) {
+          console.log('[Dashboard] Erreur chargement stats secondaires:', error);
+        }
       } catch (error) {
         console.log('[Dashboard] Erreur chargement serveur:', error);
         setTotalVictimesGlobal(null);
@@ -187,6 +225,7 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
         setMontantIndemnisationsDejaVersees(0);
         setTotalVictimesLuc(0);
       } finally {
+        setMainStatsLoading(false);
         setLoading(false);
         setLoadingRecontact(false);
       }
@@ -217,19 +256,9 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
 
       setAgentsLoading(true);
       try {
-        let authHeader: Record<string, string> = {};
-        try {
-          const t = localStorage.getItem('token');
-          if (t && t.trim().length > 0) {
-            authHeader = { Authorization: `Bearer ${t}` };
-          }
-        } catch {
-          // ignore
-        }
-
-        const res = await fetch(`${coreBaseUrl}/user`, {
+        const res = await authenticatedFetch(`${coreBaseUrl}/user`, {
           method: 'GET',
-          headers: { 'Accept': 'application/json', ...authHeader },
+          headers: { 'Accept': 'application/json' },
         });
         const payload = await res.json().catch(() => null);
         const rows = payload?.data;
@@ -406,37 +435,37 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
 
         <StatCard
           title="Total Victimes"
-          value={loading ? "..." : scopedTotalVictimes.toLocaleString()}
+          value={mainStatsLoading ? "..." : scopedTotalVictimes.toLocaleString()}
           icon={<FiUsers className="text-white text-xl" />}
           color="bg-gradient-to-br from-blue-500 to-blue-600"
           subtitle={scopedTotalLabel}
-          loading={loading}
+          loading={mainStatsLoading}
         />
 
         <StatCard
           title="Indemnisation Totale"
-          value={loading ? "..." : `${stats.totalIndemnisation.toLocaleString()} USD`}
+          value={mainStatsLoading ? "..." : `${stats.totalIndemnisation.toLocaleString()} USD`}
           icon={<FiDollarSign className="text-white text-xl" />}
           color="bg-gradient-to-br from-green-500 to-green-600"
           subtitle="Montant total d'indemnisations estimées"
-          loading={loading}
+          loading={mainStatsLoading}
         />
 
         <StatCard
           title="Provinces Couvertes"
-          value={loading ? "..." : totalProvinces}
+          value={mainStatsLoading ? "..." : totalProvinces}
           icon={<FiMapPin className="text-white text-xl" />}
           color="bg-gradient-to-br from-purple-500 to-purple-600"
           subtitle="Zones géographiques"
-          loading={loading}
+          loading={mainStatsLoading}
         />
         <StatCard
           title="Territoires"
-          value={loading ? "..." : totalTerritoires}
+          value={mainStatsLoading ? "..." : totalTerritoires}
           icon={<BsFillHousesFill className="text-white text-xl" />}
           color="bg-gradient-to-br from-pink-500 to-pink-600"
           subtitle="Territoires actifs"
-          loading={loading}
+          loading={mainStatsLoading}
         />
       </div>
 
@@ -449,7 +478,7 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
           icon={<FiCheckCircle className="text-white text-xl" />}
           color="bg-gradient-to-br from-indigo-500 to-indigo-600"
           subtitle=""
-          loading={loading || loadingRecontact}
+          loading={mainStatsLoading || loadingRecontact}
           onClick={onShowRecontactedVictims}
         />
 
@@ -460,7 +489,7 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
           icon={<FiFileText className="text-white text-xl" />}
           color="bg-gradient-to-br from-emerald-500 to-emerald-600"
           subtitle=""
-          loading={loading || loadingRecontact}
+          loading={mainStatsLoading || loadingRecontact}
           onClick={onShowSignedContractVictims}
         />
 
@@ -471,17 +500,17 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
           icon={<FiTrendingUp className="text-white text-xl" />}
           color="bg-gradient-to-br from-amber-500 to-amber-600"
           subtitle=""
-          loading={loading || loadingRecontact}
+          loading={mainStatsLoading || loadingRecontact}
         />
 
         <StatCard
           title="Indemnisations déjà versées"
-          value={loading || loadingRecontact ? "..." : `${montantIndemnisationsDejaVersees.toLocaleString()} USD`}
+          value={mainStatsLoading || loadingRecontact ? "..." : `${montantIndemnisationsDejaVersees.toLocaleString()} USD`}
           icon={<FiCreditCard className="text-white text-xl" />}
           color="bg-gradient-to-br from-cyan-500 to-cyan-600"
           subtitle=""
-          trend={loading || loadingRecontact || totalIndemnisationSafe <= 0 ? undefined : `${percentIndemnisationDejaVersees}%`}
-          loading={loading || loadingRecontact}
+          trend={mainStatsLoading || loadingRecontact || totalIndemnisationSafe <= 0 ? undefined : `${percentIndemnisationDejaVersees}%`}
+          loading={mainStatsLoading || loadingRecontact}
         />
       </div>
 

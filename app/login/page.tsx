@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import Swal from 'sweetalert2';
 import { Eye, EyeOff, Loader2, ShieldCheck, WifiOff, KeyRound } from 'lucide-react';
 import { hashPassword, saveOfflineCredentials, verifyOfflineCredentials } from '@/app/utils/authCache';
+import { authenticatedFetch } from '@/app/utils/authFetch';
 
 type Step = 'credentials' | '2fa';
 
@@ -60,7 +61,7 @@ export default function LoginPage() {
 
     setSubmitting(true);
     try {
-      const res = await fetch(`${CORE_BASE_URL}/auth/verify-token`, {
+      const res = await authenticatedFetch(`${CORE_BASE_URL}/auth/verify-token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: username, token }),
@@ -132,7 +133,7 @@ export default function LoginPage() {
         return;
       }
 
-      const res = await fetch(`${CORE_BASE_URL}/auth/login`, {
+      const res = await authenticatedFetch(`${CORE_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
@@ -147,6 +148,7 @@ export default function LoginPage() {
       if (!data) {
         throw new Error('Réponse login invalide');
       }
+      if (data?.token) localStorage.setItem('token', data.token);
       setLoginData(data);
 
       setStep('2fa');

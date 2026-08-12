@@ -15,6 +15,7 @@ import {
   saveQuestions as saveQuestionsToCache,
   getQuestions as getQuestionsFromCache
 } from '@/app/utils/planVieQuestionsCache';
+import { authenticatedFetch } from '@/app/utils/authFetch';
 
 const CORE_POWERVIZ_URL = process.env.NEXT_PUBLIC_CORE_POWERVIZ;
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
@@ -86,7 +87,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
     try {
-      return await fetch(url, {
+      return await authenticatedFetch(url, {
         ...options,
         signal: options.signal || controller.signal,
       });
@@ -491,7 +492,7 @@ const Formulaireplandevie: React.FC<FormProps> = ({ victim, userId, initialQuest
 
       // Mettre à jour le statut de la victime à "interrogé" après enregistrement du plan de vie
       try {
-        const victimResponse = await fetch(`${API_BASE_URL}/victime/${victim.id}`, {
+        const victimResponse = await authenticatedFetch(`${API_BASE_URL}/victime/${victim.id}`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',

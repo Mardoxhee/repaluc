@@ -22,6 +22,7 @@ import { getPendingVictimDocsSummary } from '@/app/utils/victimDocsCache';
 import { getPendingVictimPhotosSummary } from '@/app/utils/victimPhotosCache';
 import { syncPendingVictimDocsForVictim } from '@/app/utils/victimDocsSyncService';
 import { syncPendingVictimPhotosForVictim } from '@/app/utils/victimPhotosSyncService';
+import { authenticatedFetch } from '@/app/utils/authFetch';
 
 const CORE_POWERVIZ_URL = process.env.NEXT_PUBLIC_CORE_POWERVIZ;
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
@@ -135,7 +136,7 @@ const ReglagesPage = () => {
     const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
     if (!baseUrl) return '';
     try {
-      const resp = await fetch(`${baseUrl}/victime/${victimId}`, {
+      const resp = await authenticatedFetch(`${baseUrl}/victime/${victimId}`, {
         method: 'GET',
         headers: { Accept: 'application/json' },
       });
@@ -432,7 +433,7 @@ const ReglagesPage = () => {
         throw new Error('NEXT_PUBLIC_CORE_POWERVIZ n’est pas configurée');
       }
 
-      const response = await fetch(`${CORE_POWERVIZ_URL}/plan-vie-enquette`, {
+      const response = await authenticatedFetch(`${CORE_POWERVIZ_URL}/plan-vie-enquette`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -527,7 +528,7 @@ const ReglagesPage = () => {
           throw new Error('NEXT_PUBLIC_CORE_POWERVIZ n’est pas configurée');
         }
 
-        const response = await fetch(`${CORE_POWERVIZ_URL}/plan-vie-enquette`, {
+        const response = await authenticatedFetch(`${CORE_POWERVIZ_URL}/plan-vie-enquette`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -620,7 +621,7 @@ const ReglagesPage = () => {
 
   const markVictimPlanVieDone = async (victimId: number) => {
     try {
-      await fetch(`${API_BASE_URL}/victime/${victimId}`, {
+      await authenticatedFetch(`${API_BASE_URL}/victime/${victimId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'interrogé' })

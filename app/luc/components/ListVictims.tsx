@@ -5,6 +5,7 @@ import Swal from 'sweetalert2';
 import VictimDetailModal from "./VictimDetailModal"
 import { Search, Filter, Eye, Users, ChevronLeft, ChevronRight, X, Plus, Check, Stethoscope } from 'lucide-react';
 import EvaluationModal from "./EvaluationModal";
+import { authenticatedFetch } from "@/app/utils/authFetch";
 
 interface ReglagesProps {
     mockPrejudices: { id: number; nom: string }[];
@@ -196,7 +197,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories }) => {
         try {
             const payload = buildClassificationPayload();
             const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-            const response = await fetch(`${baseUrl}/programme-prejudice-mesure/classify/multiple`, {
+            const response = await authenticatedFetch(`${baseUrl}/programme-prejudice-mesure/classify/multiple`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)

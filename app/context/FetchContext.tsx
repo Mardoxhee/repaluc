@@ -1,5 +1,6 @@
 "use client"
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { authenticatedFetch } from '@/app/utils/authFetch';
 
 interface FetchContextType {
     fetcher: (url: string, options?: RequestInit) => Promise<any>;
@@ -21,7 +22,7 @@ export const FetchProvider = ({ children }: { children: ReactNode }) => {
         setError(null);
         try {
             const fullUrl = url.startsWith('http') ? url : `${baseUrl}${url}`;
-            const response = await fetch(fullUrl, options);
+            const response = await authenticatedFetch(fullUrl, options);
 
             // Gérer les erreurs HTTP (404, 500, etc.) sans crasher
             if (!response.ok) {
