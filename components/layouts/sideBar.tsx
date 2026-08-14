@@ -27,11 +27,32 @@ const navItems = [
     description: 'Import et historique',
     icon: <FiDatabase size={20} />,
     href: '/reparations/sources',
+    developerOnly: true,
   },
 ];
 
 const SideBar: React.FC<SideBarProps> = ({ onNavigate }) => {
   const pathname = usePathname();
+  const [userFunction, setUserFunction] = React.useState('');
+
+  React.useEffect(() => {
+    try {
+      const raw = localStorage.getItem('usr');
+      const user = raw ? JSON.parse(raw) : null;
+      const fonction = user?.fonction?.fonction || user?.fonction || '';
+      setUserFunction(typeof fonction === 'string' ? fonction : '');
+    } catch {
+      setUserFunction('');
+    }
+  }, []);
+
+  const normalizedFunction = userFunction
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+  const canSeeDeveloperMenus = normalizedFunction === 'developpeur';
+  const visibleNavItems = navItems.filter((item) => !item.developerOnly || canSeeDeveloperMenus);
 
   const handleNavigation = () => {
     if (onNavigate) {
@@ -60,7 +81,7 @@ const SideBar: React.FC<SideBarProps> = ({ onNavigate }) => {
           Modules
         </div>
         <nav className="space-y-2">
-          {navItems.map(item => {
+          {visibleNavItems.map(item => {
             const isActive = pathname === item.href || (item.href !== '/' && pathname?.startsWith(item.href));
             return (
               <Link
