@@ -417,7 +417,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
         const res = await Swal.fire({
             icon: 'warning',
             title: 'Supprimer la photo ? ',
-            text: 'La photo sera retirée du dossier de cette victime.',
+            text: 'La photo sera retirée du profil de cette victime.',
             showCancelButton: true,
             confirmButtonText: 'Supprimer',
             cancelButtonText: 'Annuler',
@@ -466,11 +466,9 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                 };
 
                 let first = await doPatch({ photo: null });
-                let usedFallbackPayload = false;
 
                 if (!first.response.ok) {
                     first = await doPatch({ photo: '' });
-                    usedFallbackPayload = true;
                 }
 
                 if (!first.response.ok) {
@@ -495,7 +493,6 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                     if (serverPhoto != null) {
                         console.warn('[handleDeletePhoto] Le serveur a renvoyé une ancienne photo après suppression', {
                             victimId: victimToUpdate.id,
-                            usedFallbackPayload,
                             serverPhoto,
                         });
                     }
