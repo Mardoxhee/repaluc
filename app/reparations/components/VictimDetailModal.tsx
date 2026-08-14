@@ -130,7 +130,7 @@ interface VictimDetailModalProps {
   mention?: string;
   onClose: () => void;
   onVictimUpdate?: (updatedVictim: Victim) => void;
-  onDeletePhoto?: (victim: Victim) => void;
+  onDeletePhoto?: (victim: Victim) => Promise<boolean> | boolean;
   onViewEvaluation?: (victim: Victim) => void;
 }
 
@@ -822,10 +822,12 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
             <div>
               <InfosVictim
                 victim={currentVictim}
-                onDeletePhoto={() => {
-                  if (!currentVictim) return;
-                  onDeletePhoto?.(currentVictim);
+                onDeletePhoto={async () => {
+                  if (!currentVictim) return false;
+                  const deleted = await onDeletePhoto?.(currentVictim);
+                  if (!deleted) return false;
                   setCurrentVictim({ ...currentVictim, photo: null });
+                  return true;
                 }}
               />
 

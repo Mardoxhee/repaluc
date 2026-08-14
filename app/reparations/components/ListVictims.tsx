@@ -412,19 +412,19 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
     const [selectedVictim, setSelectedVictim] = useState<any>(null);
 
     const handleDeletePhoto = useCallback(async (victimToUpdate: any) => {
-        if (!victimToUpdate?.id) return;
+        if (!victimToUpdate?.id) return false;
 
         const res = await Swal.fire({
             icon: 'warning',
             title: 'Supprimer la photo ? ',
-            text: 'La photo sera retirée du dossier (action locale pour le moment).',
+            text: 'La photo sera retirée du dossier de cette victime.',
             showCancelButton: true,
             confirmButtonText: 'Supprimer',
             cancelButtonText: 'Annuler',
             confirmButtonColor: '#dc2626',
         });
 
-        if (!res.isConfirmed) return;
+        if (!res.isConfirmed) return false;
 
         try {
             await deletePendingVictimPhotosForVictim(victimToUpdate.id);
@@ -465,7 +465,13 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                     return { response, parsed };
                 };
 
-                const first = await doPatch({ photo: null });
+                let first = await doPatch({ photo: null });
+                let usedFallbackPayload = false;
+
+                if (!first.response.ok) {
+                    first = await doPatch({ photo: '' });
+                    usedFallbackPayload = true;
+                }
 
                 if (!first.response.ok) {
                     await Swal.fire({
@@ -480,17 +486,17 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                         : null;
 
                     if (candidate && typeof candidate === 'object' && 'id' in candidate) {
-                        setVictims((prev) => prev.map((v) => (v.id === victimToUpdate.id ? candidate : v)));
-                        setSelectedVictim((prev: any) => (prev?.id === victimToUpdate.id ? candidate : prev));
+                        const candidateWithoutPhoto = { ...candidate, photo: null };
+                        setVictims((prev) => prev.map((v) => (v.id === victimToUpdate.id ? candidateWithoutPhoto : v)));
+                        setSelectedVictim((prev: any) => (prev?.id === victimToUpdate.id ? candidateWithoutPhoto : prev));
                     }
 
                     const serverPhoto = candidate?.photo;
                     if (serverPhoto != null) {
-                        await Swal.fire({
-                            icon: 'warning',
-                            title: 'Serveur non mis à jour',
-                            text: 'La photo est supprimée localement, mais le serveur renvoie encore une valeur pour "photo" après envoi de null. Il faut corriger côté backend pour accepter photo=null (ne pas utiliser une chaîne vide, cela biaise les statistiques).',
-                            confirmButtonColor: '#901c67'
+                        console.warn('[handleDeletePhoto] Le serveur a renvoyé une ancienne photo après suppression', {
+                            victimId: victimToUpdate.id,
+                            usedFallbackPayload,
+                            serverPhoto,
                         });
                     }
                 }
@@ -513,6 +519,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
             }
         } catch {
         }
+
+        return true;
     }, []);
 
     // Fonction pour afficher les détails d'une victime

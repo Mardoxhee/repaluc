@@ -58,7 +58,7 @@ interface InfosVictimProps {
             [key: string]: string | null | undefined;
         };
     };
-    onDeletePhoto?: () => void;
+    onDeletePhoto?: () => Promise<boolean> | boolean;
 }
 
 const getSpecificValue = (
@@ -577,19 +577,11 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
                                 <button
                                     type="button"
                                     onClick={async () => {
-                                        const res = await Swal.fire({
-                                            icon: 'warning',
-                                            title: 'Supprimer la photo',
-                                            text: 'Voulez-vous supprimer la photo de cette victime ?',
-                                            showCancelButton: true,
-                                            confirmButtonText: 'Supprimer',
-                                            cancelButtonText: 'Annuler',
-                                            confirmButtonColor: '#dc2626'
-                                        });
-                                        if (!res.isConfirmed) return;
-                                        onDeletePhoto();
+                                        const deleted = await onDeletePhoto();
+                                        if (!deleted) return;
                                         setLocalPhotoPreview(null);
                                         setRemoteResolvedSrc(null);
+                                        setIsImageLoaded(false);
                                     }}
                                     disabled={savingPhoto}
                                     className="px-3 py-2 text-xs rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
