@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { FiCheckCircle, FiClock, FiDatabase, FiFileText, FiRefreshCw, FiTrash2, FiUploadCloud, FiXCircle } from 'react-icons/fi';
+import { getAuthToken } from '@/app/utils/authFetch';
 
 type ImportStatus = 'success' | 'error';
 
@@ -110,6 +111,10 @@ const SourceDonneesPage: React.FC = () => {
       const responseData = await new Promise<any>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open('POST', `${process.env.NEXT_PUBLIC_API_BASE_URL}/analysis-mapping/upload`);
+        const token = getAuthToken();
+        if (token) {
+          xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        }
         xhr.responseType = 'json';
 
         xhr.upload.onprogress = (event) => {
