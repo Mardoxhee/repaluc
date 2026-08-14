@@ -3,6 +3,7 @@
 import { getAllPendingVictimDocs, getPendingVictimDocsToSyncForVictim, markVictimDocSynced, PendingVictimDoc } from './victimDocsCache';
 import { isOnline } from './victimsCache';
 import { authenticatedFetch } from './authFetch';
+import { readUploadResponseLink } from './uploadResponse';
 
 let isSyncing = false;
 let syncInterval: NodeJS.Timeout | null = null;
@@ -22,18 +23,7 @@ const uploadDoc = async (doc: PendingVictimDoc): Promise<string> => {
     body: formData,
   });
 
-  if (!resp.ok) {
-    let bodyText = '';
-    try {
-      bodyText = await resp.text();
-    } catch {
-      // ignore
-    }
-    throw new Error(`Failed to upload document: ${resp.status} ${resp.statusText}${bodyText ? ` - ${bodyText}` : ''}`);
-  }
-
-  const data = await resp.json();
-  return data?.url || '';
+  return await readUploadResponseLink(resp);
 };
 
 const attachDocToVictim = async (doc: PendingVictimDoc, lien: string): Promise<boolean> => {

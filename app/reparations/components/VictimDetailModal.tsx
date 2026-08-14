@@ -31,6 +31,7 @@ import Swal from 'sweetalert2';
 import { isOnline } from '@/app/utils/victimsCache';
 import { deletePendingVictimDocById, getPendingDocsForVictim, getPendingVictimDocById, savePendingVictimDoc } from '@/app/utils/victimDocsCache';
 import { authenticatedFetch } from '@/app/utils/authFetch';
+import { readUploadResponseLink } from '@/app/utils/uploadResponse';
 
 // Fonction pour obtenir le lien réel du fichier
 const getFileLink = async (lien: string): Promise<string> => {
@@ -1096,9 +1097,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
                         body: formData
                       });
 
-                      const uploadData = await uploadRes.json();
-                      const lien = uploadData?.url;
-                      if (!lien) throw new Error('Erreur upload fichier');
+                      const lien = await readUploadResponseLink(uploadRes);
 
                       // 2. POST sur /document_victime
                       const docRes = await authenticatedFetch(`${baseUrl}/document-victime`, {
@@ -1112,7 +1111,10 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
                         })
                       });
 
-                      if (!docRes.ok) throw new Error('Erreur enregistrement document');
+                      if (!docRes.ok) {
+                        const bodyText = await docRes.text().catch(() => '');
+                        throw new Error(`Erreur enregistrement document (${docRes.status})${bodyText ? `: ${bodyText}` : ''}`);
+                      }
 
                       // 3. Succès et recharge la liste
                       await Swal.fire({
