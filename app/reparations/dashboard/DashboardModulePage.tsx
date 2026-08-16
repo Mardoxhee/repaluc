@@ -33,7 +33,10 @@ const DashboardModulePage: React.FC = () => {
       <DashboardReparations
         showIntro={false}
         onSelectAgentReparation={(fullName) => goToVictims({ agent: fullName })}
-        onShowRecontactedVictims={() => goToVictims({ photo: '1' })}
+        onShowRecontactedVictims={(mention) => goToVictims({
+          ...(mention ? { mention } : {}),
+          photo: '1',
+        })}
         onShowSignedContractVictims={(mention) => goToVictims({
           ...(mention ? { mention } : {}),
           contrats: 'signes',

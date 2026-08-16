@@ -323,7 +323,7 @@ const normalizeMesuresRows = (payload: any): CountRow[] => {
     .filter((row) => !normalizeText(row.name).includes('indemnisation'));
 };
 
-const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onSelectAgentReparation, onShowSignedContractVictims }) => {
+const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onSelectAgentReparation, onShowRecontactedVictims, onShowSignedContractVictims }) => {
   const { fetcher } = useFetch();
   const [victims, setVictims] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -485,9 +485,10 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onSelectAgent
   const totalMesuresCommencees = totalMesuresCommenceesServer || totalMesuresCommenceesCache;
 
   const consentementCount = progress.contrat.withContrat || mpuServerStats.contratsCount || totalConsentement;
-  const recontactedCount = totalRecontactes > 0
-    ? totalRecontactes
-    : Math.max(progress.photo.withPhoto, progress.piece.withPiece);
+  const recontactedOfficialCount = Math.max(progress.photo.withPhoto, progress.piece.withPiece);
+  const recontactedCount = recontactedOfficialCount > 0
+    ? recontactedOfficialCount
+    : totalRecontactes;
   const percentConsentement = totalMpu > 0 ? Math.round((consentementCount / totalMpu) * 100) : 0;
   const percentRecontacted = totalMpu > 0 ? Math.round((recontactedCount / totalMpu) * 100) : 0;
   const percentMesuresCommencees = totalMpu > 0 ? Math.round((totalMesuresCommencees / totalMpu) * 100) : 0;
@@ -588,6 +589,7 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onSelectAgent
           color="bg-sky-500"
           subtitle={`${percentRecontacted}% des MPU`}
           loading={officialLoading && loading}
+          onClick={onShowRecontactedVictims}
         />
         <KpiCard
           title="Actes de consentement"
