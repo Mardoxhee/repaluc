@@ -22,6 +22,8 @@ import { getPendingVictimDocsSummary } from '@/app/utils/victimDocsCache';
 import { getPendingVictimPhotosSummary } from '@/app/utils/victimPhotosCache';
 import { syncPendingVictimDocsForVictim } from '@/app/utils/victimDocsSyncService';
 import { syncPendingVictimPhotosForVictim } from '@/app/utils/victimPhotosSyncService';
+import { getAllPendingContracts, type PendingContract } from '@/app/utils/contractsCache';
+import { syncPendingContracts } from '@/app/utils/contractsSyncService';
 import { authenticatedFetch } from '@/app/utils/authFetch';
 import {
   refreshVictimsCacheInBackground,
@@ -70,7 +72,7 @@ const ReglagesPage = () => {
   const [mounted, setMounted] = useState(false);
   const [lastUpdateTime, setLastUpdateTime] = useState<string>('');
 
-  const [activeTab, setActiveTab] = useState<'sync' | 'plans' | 'cache'>('sync');
+  const [activeTab, setActiveTab] = useState<'sync' | 'plans' | 'contracts' | 'cache'>('sync');
 
   const [showVictimPending, setShowVictimPending] = useState(false);
   const [pendingVictimRows, setPendingVictimRows] = useState<PendingVictimRow[]>([]);
@@ -87,6 +89,15 @@ const ReglagesPage = () => {
   const [victimsCacheMessage, setVictimsCacheMessage] = useState('');
   const [cacheInventory, setCacheInventory] = useState<CacheTableInfo[]>([]);
   const [loadingCacheInventory, setLoadingCacheInventory] = useState(false);
+  const [pendingContracts, setPendingContracts] = useState<PendingContract[]>([]);
+  const [loadingContracts, setLoadingContracts] = useState(false);
+  const [contractsSyncing, setContractsSyncing] = useState(false);
+  const [contractsSyncResult, setContractsSyncResult] = useState<{
+    total: number;
+    synced: number;
+    failed: number;
+    skipped: number;
+  } | null>(null);
 
   const formatVictimName = (victim: any): string => {
     if (!victim || typeof victim !== 'object') return '';
@@ -274,16 +285,33 @@ const ReglagesPage = () => {
     }
   };
 
+  const loadPendingContracts = async () => {
+    try {
+      setLoadingContracts(true);
+      const contracts = await getAllPendingContracts();
+      setPendingContracts(
+        [...contracts].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+      );
+    } catch (error) {
+      console.error('[Reglages] Erreur chargement contrats en attente:', error);
+      setPendingContracts([]);
+    } finally {
+      setLoadingContracts(false);
+    }
+  };
+
   useEffect(() => {
     setMounted(true);
     setLastUpdateTime(new Date().toLocaleTimeString('fr-FR'));
 
     loadPendingForms();
+    loadPendingContracts();
     checkOnlineStatus();
 
     const handleOnline = () => {
       setOnline(true);
       loadPendingForms();
+      loadPendingContracts();
     };
     const handleOffline = () => setOnline(false);
 
@@ -627,6 +655,64 @@ const ReglagesPage = () => {
     });
   };
 
+  const syncAllContracts = async () => {
+    if (!online) {
+      await Swal.fire({
+        icon: 'warning',
+        title: 'Hors ligne',
+        text: 'Vous devez être en ligne pour synchroniser',
+        confirmButtonColor: '#901c67'
+      });
+      return;
+    }
+
+    if (pendingContracts.length === 0) return;
+
+    const result = await Swal.fire({
+      icon: 'question',
+      title: 'Resoumettre les contrats',
+      text: `Voulez-vous resoumettre les ${pendingContracts.length} contrat(s) en attente ?`,
+      showCancelButton: true,
+      confirmButtonText: 'Oui, resoumettre',
+      cancelButtonText: 'Annuler',
+      confirmButtonColor: '#901c67'
+    });
+
+    if (!result.isConfirmed) return;
+
+    setContractsSyncing(true);
+    setContractsSyncResult(null);
+
+    try {
+      const total = pendingContracts.length;
+      const syncResult = await syncPendingContracts();
+      setContractsSyncResult({ total, ...syncResult });
+      await loadPendingContracts();
+      await loadCacheInventory();
+
+      await Swal.fire({
+        icon: syncResult.failed === 0 ? 'success' : 'warning',
+        title: 'Resoumission terminée',
+        html: `
+          <p>${syncResult.synced} contrat(s) synchronisé(s)</p>
+          ${syncResult.skipped > 0 ? `<p>${syncResult.skipped} contrat(s) déjà existant(s)</p>` : ''}
+          ${syncResult.failed > 0 ? `<p class="text-red-600">${syncResult.failed} échec(s)</p>` : ''}
+        `,
+        confirmButtonColor: '#901c67'
+      });
+    } catch (error: any) {
+      console.error('[Reglages] Erreur resoumission contrats:', error);
+      await Swal.fire({
+        icon: 'error',
+        title: 'Erreur',
+        text: error?.message || 'Impossible de resoumettre les contrats',
+        confirmButtonColor: '#901c67'
+      });
+    } finally {
+      setContractsSyncing(false);
+    }
+  };
+
   const deleteForm = async (form: PendingForm) => {
     const result = await Swal.fire({
       icon: 'warning',
@@ -674,6 +760,22 @@ const ReglagesPage = () => {
 
   const getQuestionCount = (formData: any) => {
     return Object.keys(formData).length;
+  };
+
+  const getContractBeneficiary = (contract: PendingContract) => {
+    const data = contract.contractData || {};
+    const direct = data.nomBeneficiaire || data.nomComplet || data.fullName || data.name;
+    if (typeof direct === 'string' && direct.trim()) return direct.trim();
+
+    return [data.nomPostnom, data.prenom]
+      .filter((value) => typeof value === 'string' && value.trim())
+      .map((value) => value.trim())
+      .join(' ') || `ID ${contract.victimId}`;
+  };
+
+  const getContractTypeLabel = (contract: PendingContract) => {
+    const data = contract.contractData || {};
+    return data.typeContrat || data.typePrejudiceReconnu || data.prejudiceFinal || 'Contrat';
   };
 
   const markVictimPlanVieDone = async (victimId: number) => {
@@ -728,6 +830,19 @@ const ReglagesPage = () => {
           <button
             type="button"
             onClick={() => {
+              setActiveTab('contracts');
+              loadPendingContracts();
+            }}
+            className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${activeTab === 'contracts'
+              ? 'bg-white border-gray-300 text-gray-900 shadow-sm'
+              : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-white'
+              }`}
+          >
+            Contrats
+          </button>
+          <button
+            type="button"
+            onClick={() => {
               setActiveTab('cache');
               loadCacheInventory();
             }}
@@ -741,7 +856,7 @@ const ReglagesPage = () => {
         </div>
 
         {/* Status Card */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           {/* Connection Status */}
           <div className={`p-4 rounded-xl border transition-all ${online
             ? 'bg-white border-green-200 shadow-sm hover:shadow-md'
@@ -769,6 +884,18 @@ const ReglagesPage = () => {
             </div>
             <h3 className="text-xs font-medium text-gray-600 mb-1">Formulaires en attente</h3>
             <p className="text-xl font-bold text-blue-600">{pendingForms.length}</p>
+          </div>
+
+          <div className={`bg-white p-4 rounded-xl shadow-sm hover:shadow-md transition-all ${pendingContracts.length > 0 ? 'border border-orange-200' : 'border border-green-200'}`}>
+            <div className="flex items-center justify-between mb-3">
+              <div className={`p-2 rounded-lg ${pendingContracts.length > 0 ? 'bg-orange-50' : 'bg-green-50'}`}>
+                <FileText size={20} className={pendingContracts.length > 0 ? 'text-orange-600' : 'text-green-600'} />
+              </div>
+            </div>
+            <h3 className="text-xs font-medium text-gray-600 mb-1">Contrats en attente</h3>
+            <p className={`text-xl font-bold ${pendingContracts.length > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+              {pendingContracts.length}
+            </p>
           </div>
 
           {/* Last Update */}
@@ -1100,6 +1227,121 @@ const ReglagesPage = () => {
                       <FileText size={44} className="text-gray-300 mx-auto mb-4" />
                       <p className="text-gray-700 font-medium">Aucun plan de vie en attente</p>
                       <p className="text-sm text-gray-500 mt-1">Les formulaires sauvegardés hors ligne apparaîtront ici.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {activeTab === 'contracts' && (
+          <>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Contrats en attente</h2>
+                  <p className="text-sm text-gray-600">Contrats stockés localement dans IndexedDB, resoumis avec la même logique que la synchronisation automatique.</p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    onClick={loadPendingContracts}
+                    disabled={loadingContracts || contractsSyncing}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-all disabled:opacity-50 font-medium shadow-sm"
+                  >
+                    <RefreshCw size={18} className={loadingContracts ? 'animate-spin' : ''} />
+                    Actualiser
+                  </button>
+
+                  <button
+                    onClick={syncAllContracts}
+                    disabled={!online || pendingContracts.length === 0 || contractsSyncing}
+                    className="flex items-center gap-2 px-6 py-2.5 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm hover:shadow-md"
+                    style={{ backgroundColor: '#901c67' }}
+                  >
+                    {contractsSyncing ? (
+                      <RefreshCw size={18} className="animate-spin" />
+                    ) : (
+                      <CloudUpload size={18} />
+                    )}
+                    {contractsSyncing ? 'Resoumission...' : 'Resoumettre tout'}
+                  </button>
+                </div>
+              </div>
+
+              {contractsSyncResult && (
+                <div className={`mt-4 rounded-lg border p-4 ${contractsSyncResult.failed > 0 ? 'border-orange-200 bg-orange-50' : 'border-green-200 bg-green-50'}`}>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                      <CloudUpload size={16} />
+                      <span>{contractsSyncResult.total} contrat(s) traité(s)</span>
+                    </div>
+                    <div className="text-xs font-medium text-gray-700">
+                      {contractsSyncResult.synced} synchronisé(s)
+                      {contractsSyncResult.skipped > 0 ? ` · ${contractsSyncResult.skipped} déjà existant(s)` : ''}
+                      {contractsSyncResult.failed > 0 ? ` · ${contractsSyncResult.failed} échec(s)` : ''}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+              {loadingContracts ? (
+                <div className="p-12 text-center">
+                  <RefreshCw size={48} className="animate-spin text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600">Chargement...</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-200">
+                  {pendingContracts.map((contract) => (
+                    <div
+                      key={contract.id ?? `${contract.victimId}-${contract.createdAt}`}
+                      className="p-6 hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-3">
+                            <FileText size={20} className="text-orange-600" />
+                            <h3 className="font-semibold text-gray-900">
+                              {getContractTypeLabel(contract)}
+                            </h3>
+                            <span className="px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded-full">
+                              En attente
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+                            <div>
+                              <p className="text-gray-500">Victime</p>
+                              <p className="font-medium text-gray-900">{getContractBeneficiary(contract)}</p>
+                              <p className="text-xs text-gray-500">ID {contract.victimId}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500">Préjudice</p>
+                              <p className="font-medium text-gray-900">{contract.contractData?.typePrejudiceReconnu || '-'}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500">Montant total</p>
+                              <p className="font-medium text-gray-900">
+                                {Number(contract.contractData?.montantTotalUSD || 0).toLocaleString('fr-FR')} USD
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500">Date locale</p>
+                              <p className="font-medium text-gray-900">{formatDate(contract.createdAt)}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {pendingContracts.length === 0 && (
+                    <div className="p-12 text-center">
+                      <FileText size={44} className="text-green-500 mx-auto mb-4" />
+                      <p className="text-gray-700 font-medium">Tous les contrats sont synchronisés</p>
+                      <p className="text-sm text-gray-500 mt-1">Les contrats dont la synchronisation a échoué resteront ici pour être resoumis.</p>
                     </div>
                   )}
                 </div>
