@@ -2,6 +2,7 @@
 import { getAllPendingContracts, deletePendingContract, PendingContract } from './contractsCache';
 import { isOnline } from './victimsCache';
 import { authenticatedFetch } from './authFetch';
+import { getConnectedAgentFullName } from './currentUser';
 
 let isSyncing = false;
 let syncInterval: NodeJS.Timeout | null = null;
@@ -91,6 +92,7 @@ export const syncPendingContracts = async (): Promise<{ synced: number; failed: 
                 const payload = {
                     ...item.contractData,
                     signature: finalSignature,
+                    nomAgentFonarev: item.contractData?.nomAgentFonarev || getConnectedAgentFullName(),
                 };
 
                 const resp = await authenticatedFetch(`${baseUrl}/contrat`, {

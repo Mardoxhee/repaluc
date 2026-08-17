@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { authenticatedFetch } from '@/app/utils/authFetch';
+import { getConnectedAgentFullName } from '@/app/utils/currentUser';
 
 interface PlanIndemnisation {
     id: number;
@@ -28,6 +29,7 @@ interface PlanIndemnisation {
     modePaiement: string;
     preuve: string | null;
     contratId: number;
+    nomAgentFonarev?: string | null;
 }
 
 interface Contrat {
@@ -177,6 +179,7 @@ const SuiviPaiement: React.FC<SuiviPaiementProps> = ({ victim }) => {
                 statut: 'Effectué',
                 datePaiementEffectif: editForm.datePaiementEffectif,
                 modePaiement: editForm.modePaiement,
+                nomAgentFonarev: getConnectedAgentFullName(),
             };
 
             if (preuveUrl) {
@@ -207,7 +210,8 @@ const SuiviPaiement: React.FC<SuiviPaiementProps> = ({ victim }) => {
                                 statut: 'Effectué',
                                 datePaiementEffectif: editForm.datePaiementEffectif,
                                 modePaiement: editForm.modePaiement,
-                                preuve: preuveUrl || p.preuve
+                                preuve: preuveUrl || p.preuve,
+                                nomAgentFonarev: payload.nomAgentFonarev
                             }
                             : p
                     )

@@ -66,6 +66,7 @@ export interface Contrat {
     evaluationJointe?: boolean;
     signataire?: boolean;
     consentementRepresentant?: boolean;
+    nomAgentFonarev?: string | null;
     metadataContrat?: ContractMetadata;
 }
 
@@ -121,6 +122,7 @@ export interface ContractMetadata {
     signataire: boolean;
     incapaciteConsentir: boolean;
     consentementRepresentant: boolean;
+    nomAgentFonarev?: string | null;
 }
 
 export interface Consentements {

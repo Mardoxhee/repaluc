@@ -3,6 +3,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { isOnline } from '../../../utils/victimsCache';
 import { savePendingContract, getAllPendingContracts, deletePendingContract } from '../../../utils/contractsCache';
 import { authenticatedFetch } from '../../../utils/authFetch';
+import { getConnectedAgentFullName } from '../../../utils/currentUser';
 import type { PendingContract } from '../../../utils/contractsCache';
 import type { Victim, Tranche, Contrat, Consentements, Representant, SaveMessage, ContractForm, ContractTemplateId, MesureReparationKey } from './types';
 import { getVictimBirthInfo } from '../../utils/victimBirthInfo';
@@ -378,6 +379,7 @@ export function useContrat(victim: Victim) {
                     const payload = {
                         ...item.contractData,
                         signature: finalSignature,
+                        nomAgentFonarev: item.contractData?.nomAgentFonarev || getConnectedAgentFullName(),
                     };
 
                     const resp = await authenticatedFetch(`${baseUrl}/contrat`, {
@@ -565,6 +567,7 @@ export function useContrat(victim: Victim) {
             }
 
             const usesLegacyContractText = selectedTemplateId === 'luc-decision-justice';
+            const nomAgentFonarev = getConnectedAgentFullName();
             const mesuresReparationAcceptees = usesLegacyContractText
                 ? (consentements.accepteReparation ? ['indemnisation' as MesureReparationKey] : [])
                 : getSelectedMesures(consentements.mesuresAcceptees);
@@ -587,6 +590,7 @@ export function useContrat(victim: Victim) {
                 signataire: consentements.signataire,
                 incapaciteConsentir: consentements.incapaciteConsentir,
                 consentementRepresentant: consentements.consentementRepresentant,
+                nomAgentFonarev,
             };
 
             const contractData = {
@@ -625,6 +629,7 @@ export function useContrat(victim: Victim) {
                 evaluationJointe: consentements.evaluationJointe,
                 signataire: consentements.signataire,
                 consentementRepresentant: consentements.consentementRepresentant,
+                nomAgentFonarev,
                 metadataContrat,
                 dateSignature: contractForm.dateSignature ? new Date(contractForm.dateSignature).toISOString() : new Date().toISOString(),
                 signature: existingContrat?.signature || 'SIG_ELEC',
