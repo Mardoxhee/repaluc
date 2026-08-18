@@ -236,22 +236,9 @@ export const normalizeText = (value?: string): string => (
         .toLowerCase()
 );
 
-export const isMpuVictim = (victim?: Pick<Victim, 'mention' | 'status' | 'categorie' | 'programme' | 'variablesSpecifiques'>): boolean => {
-    const values = [
-        victim?.mention,
-        victim?.status,
-        victim?.categorie,
-        victim?.programme,
-        ...Object.values(victim?.variablesSpecifiques || {}),
-    ].map((value) => normalizeText(typeof value === 'string' ? value : ''));
-
-    return values.some((value) => (
-        value === 'mpu' ||
-        value.includes('mpu') ||
-        value.includes('mesure provisoire') ||
-        value.includes('provisoire urgente')
-    ));
-};
+export const isMpuVictim = (victim?: Pick<Victim, 'mention'>): boolean => (
+    normalizeText(victim?.mention) === 'mpu'
+);
 
 export const getContractTemplateBareme = (
     templateId: ContractTemplateId,
