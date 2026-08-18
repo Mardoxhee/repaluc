@@ -75,13 +75,31 @@ const buildPendingPayload = (
         };
     }
 
+    const {
+        nomAgentFonarev: pendingAgentName,
+        metadataContrat,
+        ...contractDataWithoutAgent
+    } = item.contractData || {};
+    const { nomAgentFonarev: _metadataAgentName, ...metadataWithoutAgent } = metadataContrat || {};
+    const agentFullName = typeof pendingAgentName === 'string' && pendingAgentName.trim()
+        ? pendingAgentName.trim()
+        : getConnectedAgentFullName() || '';
+
     return {
         endpoint: `${baseUrl}/contrat`,
         label: 'Contrat',
         payload: {
-            ...item.contractData,
+            ...contractDataWithoutAgent,
+            ...(metadataContrat ? { metadataContrat: metadataWithoutAgent } : {}),
             signature: finalSignature,
-            nomAgentFonarev: item.contractData?.nomAgentFonarev || getConnectedAgentFullName(),
+            planIndemnisation: Array.isArray(contractDataWithoutAgent.planIndemnisation)
+                ? contractDataWithoutAgent.planIndemnisation.map((plan: any) => ({
+                    ...plan,
+                    nomAgentFonarev: typeof plan?.nomAgentFonarev === 'string' && plan.nomAgentFonarev.trim()
+                        ? plan.nomAgentFonarev.trim()
+                        : agentFullName,
+                }))
+                : contractDataWithoutAgent.planIndemnisation,
         },
     };
 };

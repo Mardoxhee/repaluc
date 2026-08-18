@@ -520,11 +520,31 @@ export function useContrat(victim: Victim) {
                             [isRepresentantSignature ? 'signatureRepresentant' : 'signatureBeneficiaire']: finalSignature,
                             nomAgentFonarev: item.contractData?.nomAgentFonarev || getConnectedAgentFullName(),
                         }
-                        : {
-                            ...item.contractData,
-                            signature: finalSignature,
-                            nomAgentFonarev: item.contractData?.nomAgentFonarev || getConnectedAgentFullName(),
-                        };
+                        : (() => {
+                            const {
+                                nomAgentFonarev: pendingAgentName,
+                                metadataContrat,
+                                ...contractDataWithoutAgent
+                            } = item.contractData || {};
+                            const { nomAgentFonarev: _metadataAgentName, ...metadataWithoutAgent } = metadataContrat || {};
+                            const agentFullName = typeof pendingAgentName === 'string' && pendingAgentName.trim()
+                                ? pendingAgentName.trim()
+                                : getConnectedAgentFullName() || '';
+
+                            return {
+                                ...contractDataWithoutAgent,
+                                ...(metadataContrat ? { metadataContrat: metadataWithoutAgent } : {}),
+                                signature: finalSignature,
+                                planIndemnisation: Array.isArray(contractDataWithoutAgent.planIndemnisation)
+                                    ? contractDataWithoutAgent.planIndemnisation.map((plan: any) => ({
+                                        ...plan,
+                                        nomAgentFonarev: typeof plan?.nomAgentFonarev === 'string' && plan.nomAgentFonarev.trim()
+                                            ? plan.nomAgentFonarev.trim()
+                                            : agentFullName,
+                                    }))
+                                    : contractDataWithoutAgent.planIndemnisation,
+                            };
+                        })();
                     const endpoint = targetType === 'consentement-mpu'
                         ? `${baseUrl}/consentements-mpu`
                         : `${baseUrl}/contrat`;
@@ -825,7 +845,6 @@ export function useContrat(victim: Victim) {
                 signataire: consentements.signataire,
                 incapaciteConsentir: consentements.incapaciteConsentir,
                 consentementRepresentant: consentements.consentementRepresentant,
-                nomAgentFonarev,
             };
 
             const contractData = {
@@ -864,7 +883,6 @@ export function useContrat(victim: Victim) {
                 evaluationJointe: consentements.evaluationJointe,
                 signataire: consentements.signataire,
                 consentementRepresentant: consentements.consentementRepresentant,
-                nomAgentFonarev,
                 metadataContrat,
                 dateSignature: contractForm.dateSignature ? new Date(contractForm.dateSignature).toISOString() : new Date().toISOString(),
                 signature: existingContrat?.signature || 'SIG_ELEC',
@@ -873,7 +891,8 @@ export function useContrat(victim: Victim) {
                 planIndemnisation: tranches.map(t => ({
                     periode: t.periode,
                     montantUSD: parseFloat(t.montant) || 0,
-                    statut: 'Planifier'
+                    statut: 'Planifier',
+                    nomAgentFonarev: nomAgentFonarev || '',
                 }))
             };
 
