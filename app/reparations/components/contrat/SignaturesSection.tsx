@@ -15,6 +15,8 @@ interface SignaturesSectionProps {
     pendingOfflineContrat: PendingContract | null;
     setShowSignatureModal: (show: boolean) => void;
     useLegacyContractText?: boolean;
+    documentLabel?: string;
+    documentActionLabel?: string;
 }
 
 export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
@@ -28,6 +30,8 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
     pendingOfflineContrat,
     setShowSignatureModal,
     useLegacyContractText = false,
+    documentLabel = 'Contrat',
+    documentActionLabel = 'le contrat',
 }) => {
     const updateField = (field: keyof ContractForm, value: string) => {
         setContractForm((prev) => ({ ...prev, [field]: value }));
@@ -124,7 +128,7 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
                                                 <Clock className="w-5 h-5 text-amber-600" />
                                             </div>
                                             <div>
-                                                <p className="font-semibold text-amber-800">Contrat signé hors ligne</p>
+                                                <p className="font-semibold text-amber-800">{documentLabel} signé hors ligne</p>
                                                 <p className="text-sm text-amber-700">
                                                     Signé le {new Date(pendingOfflineContrat.createdAt).toLocaleDateString('fr-FR')} à {new Date(pendingOfflineContrat.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                                                 </p>
@@ -141,7 +145,7 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
                                         onClick={() => setShowSignatureModal(true)}
                                         className="no-print inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
                                     >
-                                        Signer le contrat
+                                        Signer {documentActionLabel}
                                     </button>
                                 )}
                             </div>
@@ -161,7 +165,7 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
             {existingContrat && (
                 <div className="mt-8 p-4 bg-green-50 border border-green-200 rounded no-print">
                     <p className="text-green-800 text-sm">
-                        ✓ Contrat signé le {formattedSignatureDate}
+                        ✓ {documentLabel} signé le {formattedSignatureDate}
                     </p>
                 </div>
             )}

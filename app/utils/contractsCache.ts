@@ -9,6 +9,7 @@ export interface PendingContract {
     victimId: number;
     contractData: any;
     signatureDataUrl?: string | null;
+    targetType?: 'contrat' | 'consentement-mpu';
     createdAt: number;
 }
 

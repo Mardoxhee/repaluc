@@ -18,6 +18,9 @@ export interface Victim {
     secteur?: string;
     province?: string;
     typeViolation?: string;
+    status?: string;
+    mention?: string;
+    programme?: string;
     prejudicesSubis?: string;
     indemnisation?: number;
     prejudiceFinal?: string;
@@ -36,6 +39,41 @@ export interface PlanIndemnisation {
     montantUSD: number;
     statut: string;
 }
+
+export type MpuEtatVictimisation =
+    | ''
+    | 'directe'
+    | 'indirecte'
+    | 'communaute_victime'
+    | 'communaute_affectee';
+
+export type MpuMesureKey =
+    | 'abri_urgence'
+    | 'baches_couvertures_nattes_moustiquaires'
+    | 'vivres'
+    | 'complements_nutritionnels'
+    | 'acces_eau_potable'
+    | 'kits_hygiene'
+    | 'installations_sanitaires'
+    | 'lumiere_energie_publique'
+    | 'consultation_medicale'
+    | 'medicaments'
+    | 'premiers_secours_psychologiques'
+    | 'accompagnement_psychosocial'
+    | 'documentation'
+    | 'orientation_juridique'
+    | 'protection_enfance'
+    | 'autres_mesures_protection';
+
+export type MpuVulnerabiliteKey =
+    | 'grossesse'
+    | 'handicap'
+    | 'maladie_chronique'
+    | 'enfant_protection_particuliere'
+    | 'enfant_non_accompagne'
+    | 'menage_monoparental';
+
+export type MpuDecisionConsentement = 'accepte' | 'refuse';
 
 export interface Contrat {
     id: number;
@@ -67,6 +105,12 @@ export interface Contrat {
     signataire?: boolean;
     consentementRepresentant?: boolean;
     nomAgentFonarev?: string | null;
+    fonctionAgentFonarev?: string | null;
+    dateConsentement?: string;
+    lieuConsentement?: string;
+    decisionConsentement?: MpuDecisionConsentement;
+    signatureBeneficiaire?: string | null;
+    signatureRepresentant?: string | null;
     metadataContrat?: ContractMetadata;
 }
 
@@ -123,6 +167,7 @@ export interface ContractMetadata {
     incapaciteConsentir: boolean;
     consentementRepresentant: boolean;
     nomAgentFonarev?: string | null;
+    fonctionAgentFonarev?: string | null;
 }
 
 export interface Consentements {
@@ -144,6 +189,17 @@ export interface Consentements {
     consentementRepresentant: boolean;
     mesuresAcceptees: MesuresReparation;
     mesuresRenoncees: MesuresReparation;
+    etatVictimisation: MpuEtatVictimisation;
+    situationVulnerabiliteUrgente: boolean;
+    mesuresProposees: Record<MpuMesureKey, boolean>;
+    autresMesures: string;
+    vulnerabilites: Record<MpuVulnerabiliteKey, boolean>;
+    autresVulnerabilites: string;
+    informeMpu: boolean;
+    droitsExpliques: boolean;
+    engagementsAcceptes: boolean;
+    mediateurFonarev: boolean;
+    accompagnementPersonneConfiance: boolean;
 }
 
 export interface Representant {

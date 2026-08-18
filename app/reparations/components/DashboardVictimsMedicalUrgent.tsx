@@ -17,10 +17,10 @@ const DashboardVictimsMedicalUrgent: React.FC<DashboardVictimsMedicalUrgentProps
             <AlertCircle className="text-red-600" size={20} />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Dashboard Prise en charge médicale urgente</h1>
-            <p className="text-sm text-gray-600">Victimes en urgence médicale</p>
+            <h1 className="text-xl font-bold text-gray-900">Dashboard PECMU</h1>
+            <p className="text-sm text-gray-600">Victimes PECMU</p>
             <div className="mt-3 text-sm text-gray-700">
-              Ce dashboard est prêt côté structure. Il reste à brancher les statistiques/filtrages spécifiques aux urgences médicales.
+              Ce dashboard est prêt côté structure. Il reste à brancher les statistiques/filtrages spécifiques au parcours PECMU.
             </div>
           </div>
         </div>

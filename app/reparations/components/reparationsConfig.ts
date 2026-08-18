@@ -6,7 +6,7 @@ export const mockProgrammes = [
 export const mockCategories = [
   { id: 1, nom: "Victimes vivant dans les ménages ordinaires" },
   { id: 2, nom: "Victimes vivant dans les ménages collectifs" },
-  { id: 3, nom: "Victime en cas d'urgence médicale" },
+  { id: 3, nom: "Victimes PECMU" },
   { id: 4, nom: "Victimes détenant des décisions de justice définitives" },
 ];
 

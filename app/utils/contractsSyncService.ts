@@ -31,15 +31,59 @@ const uploadSignature = async (dataUrl: string, victimId: number): Promise<strin
     return data.url || data.link || '';
 };
 
-// Vérifier si un contrat existe déjà pour une victime
-const checkExistingContract = async (victimId: number): Promise<boolean> => {
+const getPendingTargetType = (item: PendingContract): 'contrat' | 'consentement-mpu' => (
+    item.targetType === 'consentement-mpu' ? 'consentement-mpu' : 'contrat'
+);
+
+// Vérifier si un contrat / acte de consentement existe déjà pour une victime
+const checkExistingContract = async (victimId: number, targetType: 'contrat' | 'consentement-mpu' = 'contrat'): Promise<boolean> => {
     try {
         const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
-        const response = await authenticatedFetch(`${baseUrl}/contrat/${victimId}`);
+        const endpoint = targetType === 'consentement-mpu'
+            ? `${baseUrl}/consentements-mpu/victime/${victimId}`
+            : `${baseUrl}/contrat/${victimId}`;
+        const response = await authenticatedFetch(endpoint);
         return response.ok;
     } catch {
         return false;
     }
+};
+
+const buildPendingPayload = (
+    item: PendingContract,
+    finalSignature: string
+): { endpoint: string; payload: any; label: string } => {
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
+    const targetType = getPendingTargetType(item);
+
+    if (targetType === 'consentement-mpu') {
+        const isRepresentantSignature = Boolean(
+            item.contractData?.incapableConsentir ||
+            item.contractData?.nomRepresentant ||
+            item.contractData?.signatureRepresentant
+        );
+        const signatureField = isRepresentantSignature ? 'signatureRepresentant' : 'signatureBeneficiaire';
+
+        return {
+            endpoint: `${baseUrl}/consentements-mpu`,
+            label: 'Acte de consentement MPU',
+            payload: {
+                ...item.contractData,
+                [signatureField]: finalSignature,
+                nomAgentFonarev: item.contractData?.nomAgentFonarev || getConnectedAgentFullName(),
+            },
+        };
+    }
+
+    return {
+        endpoint: `${baseUrl}/contrat`,
+        label: 'Contrat',
+        payload: {
+            ...item.contractData,
+            signature: finalSignature,
+            nomAgentFonarev: item.contractData?.nomAgentFonarev || getConnectedAgentFullName(),
+        },
+    };
 };
 
 export const syncPendingContracts = async (): Promise<{ synced: number; failed: number; skipped: number }> => {
@@ -59,43 +103,42 @@ export const syncPendingContracts = async (): Promise<{ synced: number; failed: 
     let skipped = 0;
 
     try {
-        const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
         const pending: PendingContract[] = await getAllPendingContracts();
 
         if (pending.length === 0) {
-            console.log('[ContractsSyncService] Aucun contrat en attente');
+            console.log('[ContractsSyncService] Aucun document en attente');
             return { synced: 0, failed: 0, skipped: 0 };
         }
 
-        console.log(`[ContractsSyncService] ${pending.length} contrat(s) en attente de synchronisation`);
+        console.log(`[ContractsSyncService] ${pending.length} document(s) en attente de synchronisation`);
 
         for (const item of pending) {
             try {
-                // Vérifier si un contrat existe déjà pour cette victime
-                const contractExists = await checkExistingContract(item.victimId);
+                const targetType = getPendingTargetType(item);
+                // Vérifier si un contrat / acte existe déjà pour cette victime
+                const contractExists = await checkExistingContract(item.victimId, targetType);
 
                 if (contractExists) {
-                    // Le contrat existe déjà, supprimer de la file d'attente sans re-créer
-                    console.log(`[ContractsSyncService] ⏭ Contrat déjà existant pour victime ${item.victimId}, suppression de la file d'attente`);
+                    // Le document existe déjà, supprimer de la file d'attente sans re-créer
+                    console.log(`[ContractsSyncService] Document déjà existant pour victime ${item.victimId}, suppression de la file d'attente`);
                     await deletePendingContract(item.id as number);
                     skipped++;
                     continue;
                 }
 
-                let finalSignature = item.contractData.signature || 'SIG_ELEC';
+                let finalSignature = item.contractData.signature
+                    || item.contractData.signatureBeneficiaire
+                    || item.contractData.signatureRepresentant
+                    || 'SIG_ELEC';
 
                 // Upload de la signature si présente
                 if (item.signatureDataUrl) {
                     finalSignature = await uploadSignature(item.signatureDataUrl, item.victimId);
                 }
 
-                const payload = {
-                    ...item.contractData,
-                    signature: finalSignature,
-                    nomAgentFonarev: item.contractData?.nomAgentFonarev || getConnectedAgentFullName(),
-                };
+                const { endpoint, payload, label } = buildPendingPayload(item, finalSignature);
 
-                const resp = await authenticatedFetch(`${baseUrl}/contrat`, {
+                const resp = await authenticatedFetch(endpoint, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -107,9 +150,9 @@ export const syncPendingContracts = async (): Promise<{ synced: number; failed: 
                     const errorText = await resp.text();
                     console.log('[ContractsSyncService] Erreur API:', errorText);
 
-                    // Si erreur 409 (conflit) ou contrat déjà existant, supprimer quand même
+                    // Si erreur 409 (conflit) ou document déjà existant, supprimer quand même
                     if (resp.status === 409 || errorText.toLowerCase().includes('exist')) {
-                        console.log(`[ContractsSyncService] Contrat déjà existant (erreur API), suppression de la file`);
+                        console.log(`[ContractsSyncService] Document déjà existant (erreur API), suppression de la file`);
                         await deletePendingContract(item.id as number);
                         skipped++;
                     } else {
@@ -120,9 +163,9 @@ export const syncPendingContracts = async (): Promise<{ synced: number; failed: 
 
                 await deletePendingContract(item.id as number);
                 synced++;
-                console.log(`[ContractsSyncService] ✓ Contrat synchronisé pour victime ${item.victimId}`);
+                console.log(`[ContractsSyncService] ✓ ${label} synchronisé pour victime ${item.victimId}`);
             } catch (err) {
-                console.log('[ContractsSyncService] Erreur lors de la synchro d\'un contrat:', err);
+                console.log('[ContractsSyncService] Erreur lors de la synchro d\'un document:', err);
                 failed++;
             }
         }

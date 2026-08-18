@@ -223,20 +223,20 @@ interface FilterType {
     endDate: string;
 }
 
-type VictimTypeFilter = 'all' | 'luc' | 'mpu' | 'medical_urgent';
+type VictimTypeFilter = 'all' | 'luc' | 'mpu' | 'pecmu';
 
 const victimTypeExportLabels: Record<VictimTypeFilter, string> = {
     all: 'toutes',
     luc: 'luc',
     mpu: 'mpu',
-    medical_urgent: 'urgence_medicale',
+    pecmu: 'pecmu',
 };
 
 const victimTypeDisplayLabels: Record<VictimTypeFilter, string> = {
     all: 'Toutes les victimes',
     luc: 'Victimes LUC',
     mpu: 'Victimes MPU',
-    medical_urgent: 'Urgence médicale',
+    pecmu: 'PECMU',
 };
 
 const prejudiceFinalOptions = [
@@ -310,7 +310,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
     });
     const [filterRules, setFilterRules] = useState<FilterRule[]>([]);
     const [showFilterBuilder, setShowFilterBuilder] = useState(false);
-    const effectiveMention = victimTypeFilter === 'luc' || victimTypeFilter === 'mpu'
+    const effectiveMention = victimTypeFilter === 'luc' || victimTypeFilter === 'mpu' || victimTypeFilter === 'pecmu'
         ? victimTypeFilter
         : mention?.trim() || '';
 
@@ -338,12 +338,13 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                     return mentionValue === 'luc' || statusValue.includes('luc') || categorieValue.includes('luc') || programmeValue.includes('luc');
                 }
 
-                if (victimTypeFilter === 'medical_urgent') {
+                if (victimTypeFilter === 'pecmu') {
                     return (
-                        categorieValue.includes('urgence') ||
-                        categorieValue.includes('médicale') ||
-                        categorieValue.includes('medicale') ||
-                        programmeValue.includes('urgence')
+                        mentionValue === 'pecmu' ||
+                        statusValue.includes('pecmu') ||
+                        statusValue.includes('prise en charge medicale urgente') ||
+                        categorieValue.includes('pecmu') ||
+                        programmeValue.includes('pecmu')
                     );
                 }
 
@@ -1603,14 +1604,14 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => setVictimTypeFilter('medical_urgent')}
-                                        className={`px-3 py-2 border text-sm font-medium transition-colors ${victimTypeFilter === 'medical_urgent'
+                                        onClick={() => setVictimTypeFilter('pecmu')}
+                                        className={`px-3 py-2 border text-sm font-medium transition-colors ${victimTypeFilter === 'pecmu'
                                             ? 'bg-blue-50 border-blue-300 text-blue-700'
                                             : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
                                             }`}
                                     >
                                         <Stethoscope size={16} className="inline-block mr-2" />
-                                        Urgence médicale
+                                        PECMU
                                     </button>
                                 </div>
 

@@ -4,6 +4,8 @@ import type {
     ContractTemplateId,
     MesureReparationKey,
     MesuresReparation,
+    MpuMesureKey,
+    MpuVulnerabiliteKey,
     Victim,
 } from './types';
 
@@ -41,6 +43,34 @@ export const EMPTY_MESURES_REPARATION: MesuresReparation = {
     priseEnChargeMedicale: false,
     accompagnementPsychosocial: false,
 };
+
+export const MPU_MESURES: Array<{ key: MpuMesureKey; label: string; group: string }> = [
+    { key: 'abri_urgence', label: "Abri d'urgence ou de transition", group: 'Abris et biens essentiels' },
+    { key: 'baches_couvertures_nattes_moustiquaires', label: 'Bâches, couvertures, nattes, moustiquaires', group: 'Abris et biens essentiels' },
+    { key: 'vivres', label: 'Vivres', group: 'Sécurité alimentaire' },
+    { key: 'complements_nutritionnels', label: 'Compléments nutritionnels', group: 'Sécurité alimentaire' },
+    { key: 'acces_eau_potable', label: "Accès à l'eau potable", group: 'Eau, hygiène et assainissement' },
+    { key: 'kits_hygiene', label: "Kits d'hygiène", group: 'Eau, hygiène et assainissement' },
+    { key: 'installations_sanitaires', label: 'Installations sanitaires', group: 'Eau, hygiène et assainissement' },
+    { key: 'lumiere_energie_publique', label: 'Lumière et énergie publique', group: 'Eau, hygiène et assainissement' },
+    { key: 'consultation_medicale', label: 'Consultation médicale', group: 'Santé' },
+    { key: 'medicaments', label: 'Médicaments', group: 'Santé' },
+    { key: 'premiers_secours_psychologiques', label: 'Premiers secours psychologiques', group: 'Soutien psychosocial' },
+    { key: 'accompagnement_psychosocial', label: 'Accompagnement psychosocial', group: 'Soutien psychosocial' },
+    { key: 'documentation', label: 'Documentation', group: 'Protection' },
+    { key: 'orientation_juridique', label: 'Orientation juridique', group: 'Protection' },
+    { key: 'protection_enfance', label: "Protection de l'enfance", group: 'Protection' },
+    { key: 'autres_mesures_protection', label: 'Autres mesures de protection', group: 'Protection' },
+];
+
+export const MPU_VULNERABILITES: Array<{ key: MpuVulnerabiliteKey; label: string }> = [
+    { key: 'grossesse', label: 'Grossesse' },
+    { key: 'handicap', label: 'Handicap' },
+    { key: 'maladie_chronique', label: 'Maladie chronique' },
+    { key: 'enfant_protection_particuliere', label: 'Enfant nécessitant une protection particulière' },
+    { key: 'enfant_non_accompagne', label: 'Enfant non accompagné' },
+    { key: 'menage_monoparental', label: 'Ménage monoparental' },
+];
 
 const LUC_DJ_BAREMES: ContractTemplateBareme[] = [
     {
@@ -205,6 +235,23 @@ export const normalizeText = (value?: string): string => (
         .trim()
         .toLowerCase()
 );
+
+export const isMpuVictim = (victim?: Pick<Victim, 'mention' | 'status' | 'categorie' | 'programme' | 'variablesSpecifiques'>): boolean => {
+    const values = [
+        victim?.mention,
+        victim?.status,
+        victim?.categorie,
+        victim?.programme,
+        ...Object.values(victim?.variablesSpecifiques || {}),
+    ].map((value) => normalizeText(typeof value === 'string' ? value : ''));
+
+    return values.some((value) => (
+        value === 'mpu' ||
+        value.includes('mpu') ||
+        value.includes('mesure provisoire') ||
+        value.includes('provisoire urgente')
+    ));
+};
 
 export const getContractTemplateBareme = (
     templateId: ContractTemplateId,

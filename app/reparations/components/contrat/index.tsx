@@ -11,6 +11,7 @@ import { SignaturesSection } from './SignaturesSection';
 import { SignatureModal } from './SignatureModal';
 import { ContractTemplateSelector } from './ContractTemplateSelector';
 import { ReparationMeasuresSection } from './ReparationMeasuresSection';
+import { MpuConsentementForm } from './MpuConsentementForm';
 
 const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
     const {
@@ -47,8 +48,11 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
         selectFinalPrejudice,
         saveContract,
         exportToPDF,
+        isMpuConsentement,
     } = useContrat(victim);
     const usesLegacyContractText = selectedTemplateId === 'luc-decision-justice';
+    const documentLabel = isMpuConsentement ? 'Acte de consentement MPU' : 'Contrat de réparation';
+    const documentActionLabel = isMpuConsentement ? "l’acte de consentement MPU" : 'le contrat';
 
     return (
         <>
@@ -216,14 +220,16 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                 {loadingContrat && (
                     <div className="flex justify-center items-center py-12">
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-                        <p className="ml-4 text-gray-600">Chargement du contrat...</p>
+                        <p className="ml-4 text-gray-600">Chargement de {documentActionLabel}...</p>
                     </div>
                 )}
 
                 {/* Liste des contrats si un contrat existe et qu'on n'affiche pas le détail */}
                 {!loadingContrat && existingContrat && !showContratDetail && (
                     <div className="w-full px-4 py-4">
-                        <h2 className="text-lg font-semibold text-blue-600 mb-4">Liste des contrats</h2>
+                        <h2 className="text-lg font-semibold text-blue-600 mb-4">
+                            {isMpuConsentement ? 'Acte de consentement' : 'Liste des contrats'}
+                        </h2>
                         <div
                             onClick={() => setShowContratDetail(true)}
                             className="bg-blue-50 border border-blue-200 rounded-lg p-4 hover:bg-blue-100 cursor-pointer transition-colors flex items-center justify-between"
@@ -231,7 +237,7 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                             <div className="flex items-center gap-3">
                                 <FileText className="text-blue-600" size={24} />
                                 <div>
-                                    <p className="font-semibold text-gray-800">Contrat de réparation</p>
+                                    <p className="font-semibold text-gray-800">{documentLabel}</p>
                                     <p className="text-sm text-gray-600">
                                         Signé le {new Date(existingContrat.dateSignature).toLocaleDateString('fr-FR')}
                                     </p>
@@ -278,47 +284,60 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                         <div id="contrat-content">
                             <ContratHeader />
 
-                            <ContractTemplateSelector
-                                selectedTemplateId={selectedTemplateId}
-                                selectedPrejudiceLabel={contractForm.prejudiceFinal}
-                            />
-
-                            <VictimInfo
-                                victim={victim}
-                                selectedTemplateBareme={selectedTemplateBareme}
-                                useLegacyContractText={usesLegacyContractText}
-                                contractForm={contractForm}
-                                setContractForm={setContractForm}
-                                consentements={consentements}
-                                setConsentements={setConsentements}
-                                representant={representant}
-                                setRepresentant={setRepresentant}
-                                selectFinalPrejudice={selectFinalPrejudice}
-                                prejudiceOptions={prejudiceOptions}
-                                totalMontant={totalMontant}
-                            />
-
-                            <TranchesSection
-                                tranches={tranches}
-                                totalMontant={totalMontant}
-                                addTranche={addTranche}
-                                removeTranche={removeTranche}
-                                updateTranche={updateTranche}
-                                useLegacyLayout={usesLegacyContractText}
-                            />
-
-                            {!usesLegacyContractText && (
-                                <ReparationMeasuresSection
+                            {isMpuConsentement ? (
+                                <MpuConsentementForm
+                                    contractForm={contractForm}
+                                    setContractForm={setContractForm}
                                     consentements={consentements}
                                     setConsentements={setConsentements}
+                                    representant={representant}
+                                    setRepresentant={setRepresentant}
                                 />
-                            )}
+                            ) : (
+                                <>
+                                    <ContractTemplateSelector
+                                        selectedTemplateId={selectedTemplateId}
+                                        selectedPrejudiceLabel={contractForm.prejudiceFinal}
+                                    />
 
-                            <ConsentementsSection
-                                consentements={consentements}
-                                setConsentements={setConsentements}
-                                useLegacyContractText={usesLegacyContractText}
-                            />
+                                    <VictimInfo
+                                        victim={victim}
+                                        selectedTemplateBareme={selectedTemplateBareme}
+                                        useLegacyContractText={usesLegacyContractText}
+                                        contractForm={contractForm}
+                                        setContractForm={setContractForm}
+                                        consentements={consentements}
+                                        setConsentements={setConsentements}
+                                        representant={representant}
+                                        setRepresentant={setRepresentant}
+                                        selectFinalPrejudice={selectFinalPrejudice}
+                                        prejudiceOptions={prejudiceOptions}
+                                        totalMontant={totalMontant}
+                                    />
+
+                                    <TranchesSection
+                                        tranches={tranches}
+                                        totalMontant={totalMontant}
+                                        addTranche={addTranche}
+                                        removeTranche={removeTranche}
+                                        updateTranche={updateTranche}
+                                        useLegacyLayout={usesLegacyContractText}
+                                    />
+
+                                    {!usesLegacyContractText && (
+                                        <ReparationMeasuresSection
+                                            consentements={consentements}
+                                            setConsentements={setConsentements}
+                                        />
+                                    )}
+
+                                    <ConsentementsSection
+                                        consentements={consentements}
+                                        setConsentements={setConsentements}
+                                        useLegacyContractText={usesLegacyContractText}
+                                    />
+                                </>
+                            )}
 
                             <SignaturesSection
                                 victim={victim}
@@ -331,6 +350,8 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                                 pendingOfflineContrat={pendingOfflineContrat}
                                 setShowSignatureModal={setShowSignatureModal}
                                 useLegacyContractText={usesLegacyContractText}
+                                documentLabel={documentLabel}
+                                documentActionLabel={documentActionLabel}
                             />
                         </div>
                     </div>
@@ -348,6 +369,8 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                     stopDrawing={stopDrawing}
                     clearSignature={clearSignature}
                     saveContract={saveContract}
+                    documentLabel={documentLabel}
+                    documentActionLabel={documentActionLabel}
                     onClose={() => setShowSignatureModal(false)}
                 />
             )}

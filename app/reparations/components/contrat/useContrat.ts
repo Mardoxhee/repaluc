@@ -18,7 +18,10 @@ import {
     getDefaultTemplateTranches,
     getSelectedMesures,
     isDecisionJusticeVictim,
+    isMpuVictim,
     isContractTemplateId,
+    MPU_MESURES,
+    MPU_VULNERABILITES,
     mesuresFromKeys,
     normalizeText,
 } from './contractTemplates';
@@ -46,6 +49,7 @@ const getInitialContractForm = (victim: Victim): ContractForm => {
     const nomPostnom = [victim.nom, victim.postnom].filter(Boolean).join(' ').trim();
     const prenom = victim.prenom || '';
     const usesDecisionJusticeContract = template.id === 'luc-decision-justice';
+    const usesMpuConsentement = isMpuVictim(victim);
 
     return {
         nom: [nomPostnom, prenom].filter(Boolean).join(' ').trim(),
@@ -64,15 +68,25 @@ const getInitialContractForm = (victim: Victim): ContractForm => {
         province: victim.province || '',
         typeViolation: victim.typeViolation || '',
         typePrejudices: bareme.prejudiceLabel || victim.prejudicesSubis || '',
-        reparationAdministrative: 'Programme des Réparations Administratives Intégrales (PRAI)',
-        reparationJudiciaire: usesDecisionJusticeContract ? 'Décision de justice' : 'En attente de décision',
+        reparationAdministrative: usesMpuConsentement
+            ? 'Mesures Provisoires Urgentes (MPU)'
+            : 'Programme des Réparations Administratives Intégrales (PRAI)',
+        reparationJudiciaire: usesMpuConsentement
+            ? ''
+            : usesDecisionJusticeContract
+                ? 'Décision de justice'
+                : 'En attente de décision',
         codeBeneficiaire: victim.codeBeneficiaire || victim.codeUnique || '',
         decisionJustice: '',
         prejudiceFinal: victim.prejudiceFinal || bareme.prejudiceLabel,
-        typeContrat: usesDecisionJusticeContract ? template.label : 'Réparation Administrative',
+        typeContrat: usesMpuConsentement
+            ? 'Acte de consentement MPU'
+            : usesDecisionJusticeContract
+                ? template.label
+                : 'Réparation Administrative',
         lieuSignature: [victim.territoire, victim.province].filter(Boolean).join(', ') || 'Goma',
         dateSignature: new Date().toISOString().split('T')[0],
-        fonarevNom: 'FATA MAKUNGA Patrick',
+        fonarevNom: getConnectedAgentFullName() || 'FATA MAKUNGA Patrick',
         fonarevFonction: 'Directeur Général',
     };
 };
@@ -96,6 +110,17 @@ const createDefaultConsentements = (): Consentements => ({
     consentementRepresentant: false,
     mesuresAcceptees: cloneMesuresReparation(),
     mesuresRenoncees: cloneMesuresReparation(),
+    etatVictimisation: '',
+    situationVulnerabiliteUrgente: true,
+    mesuresProposees: Object.fromEntries(MPU_MESURES.map((mesure) => [mesure.key, false])) as Consentements['mesuresProposees'],
+    autresMesures: '',
+    vulnerabilites: Object.fromEntries(MPU_VULNERABILITES.map((vulnerabilite) => [vulnerabilite.key, false])) as Consentements['vulnerabilites'],
+    autresVulnerabilites: '',
+    informeMpu: true,
+    droitsExpliques: true,
+    engagementsAcceptes: true,
+    mediateurFonarev: false,
+    accompagnementPersonneConfiance: false,
 });
 
 const DEFAULT_REPRESENTANT: Representant = {
@@ -117,6 +142,20 @@ const coerceMesureKeys = (value: unknown): MesureReparationKey[] => {
     return value.filter((item): item is MesureReparationKey => (
         typeof item === 'string' && MESURE_KEYS.includes(item as MesureReparationKey)
     ));
+};
+
+const selectRecordKeys = <T extends string>(record: Record<T, boolean>): T[] => (
+    Object.entries(record)
+        .filter(([, checked]) => checked)
+        .map(([key]) => key as T)
+);
+
+const recordFromKeys = <T extends string>(
+    keys: readonly T[],
+    selected?: unknown
+): Record<T, boolean> => {
+    const selectedSet = new Set(Array.isArray(selected) ? selected.filter((item): item is T => typeof item === 'string') : []);
+    return Object.fromEntries(keys.map((key) => [key, selectedSet.has(key)])) as Record<T, boolean>;
 };
 
 const getContratTemplateIdFromData = (data: any, fallbackVictim: Victim): ContractTemplateId => {
@@ -142,6 +181,7 @@ const getContratTemplateIdFromData = (data: any, fallbackVictim: Victim): Contra
 };
 
 export function useContrat(victim: Victim) {
+    const isMpuConsentement = isMpuVictim(victim);
     const initialTemplate = getContractTemplateForVictim(victim);
     const [selectedTemplateId, setSelectedTemplateId] = useState<ContractTemplateId>(initialTemplate.id);
     const [tranches, setTranches] = useState<Tranche[]>(() => (
@@ -226,10 +266,92 @@ export function useContrat(victim: Victim) {
             try {
                 setLoadingContrat(true);
                 const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
-                const response = await authenticatedFetch(`${baseUrl}/contrat/${victim.id}`);
+                const response = await authenticatedFetch(
+                    isMpuConsentement
+                        ? `${baseUrl}/consentements-mpu/victime/${victim.id}`
+                        : `${baseUrl}/contrat/${victim.id}`
+                );
 
                 if (response.ok) {
-                    const data = await response.json();
+                    const rawData = await response.json();
+                    const data = rawData?.data ?? rawData;
+
+                    if (isMpuConsentement) {
+                        const signature = data.signatureBeneficiaire || data.signatureRepresentant || '';
+                        setExistingContrat({
+                            ...data,
+                            typeContrat: 'Acte de consentement MPU',
+                            reparationAdministrative: 'Mesures Provisoires Urgentes (MPU)',
+                            reparationJudiciaire: '',
+                            typePrejudiceReconnu: '',
+                            montantTotalUSD: 0,
+                            droitAccompagnement: Boolean(data.mediateurFonarev || data.accompagnementPersonneConfiance),
+                            avocatAccompagnement: false,
+                            organisationAccompagnement: data.organisationRepresentant || '',
+                            incapableConsentir: Boolean(data.incapableConsentir),
+                            qualiteRepresentant: data.qualiteRepresentant || null,
+                            pieceIdentiteRepresentant: data.pieceIdentiteRepresentant || null,
+                            accepteReparation: data.decisionConsentement !== 'refuse',
+                            dateSignature: data.dateConsentement || new Date().toISOString(),
+                            signature,
+                            lieuSignature: data.lieuConsentement || '',
+                            victimeId: data.victimeId || victim.id,
+                            planIndemnisation: [],
+                        });
+
+                        setContractForm((prev) => ({
+                            ...prev,
+                            typeContrat: 'Acte de consentement MPU',
+                            reparationAdministrative: 'Mesures Provisoires Urgentes (MPU)',
+                            reparationJudiciaire: '',
+                            lieuSignature: data.lieuConsentement || prev.lieuSignature,
+                            dateSignature: data.dateConsentement || prev.dateSignature,
+                            fonarevNom: data.nomAgentFonarev || prev.fonarevNom,
+                            fonarevFonction: data.fonctionAgentFonarev || prev.fonarevFonction,
+                        }));
+
+                        setConsentements((prev) => ({
+                            ...prev,
+                            faireMediateur: Boolean(data.mediateurFonarev),
+                            avocat: Boolean(data.accompagnementPersonneConfiance),
+                            exerceDroit: data.aExerceDroit === true,
+                            comprisDroit: data.aExerceDroit === false,
+                            accepteReparation: data.decisionConsentement !== 'refuse',
+                            refuseReparation: data.decisionConsentement === 'refuse',
+                            incapaciteConsentir: Boolean(data.incapableConsentir),
+                            consentementRepresentant: Boolean(data.incapableConsentir || data.nomRepresentant),
+                            etatVictimisation: data.etatVictimisation || '',
+                            situationVulnerabiliteUrgente: Boolean(data.situationVulnerabiliteUrgente),
+                            mesuresProposees: recordFromKeys(MPU_MESURES.map((mesure) => mesure.key), data.mesuresProposees),
+                            autresMesures: data.autresMesures || '',
+                            vulnerabilites: recordFromKeys(MPU_VULNERABILITES.map((vulnerabilite) => vulnerabilite.key), data.vulnerabilites),
+                            autresVulnerabilites: data.autresVulnerabilites || '',
+                            informeMpu: Boolean(data.informeMpu),
+                            droitsExpliques: Boolean(data.droitsExpliques),
+                            engagementsAcceptes: Boolean(data.engagementsAcceptes),
+                            mediateurFonarev: Boolean(data.mediateurFonarev),
+                            accompagnementPersonneConfiance: Boolean(data.accompagnementPersonneConfiance),
+                        }));
+
+                        setRepresentant({
+                            nom: data.nomRepresentant || '',
+                            qualite: data.qualiteRepresentant || '',
+                            organisation: data.organisationRepresentant || '',
+                            pieceIdentite: data.pieceIdentiteRepresentant || '',
+                        });
+
+                        if (signature && signature !== 'SIG_ELEC') {
+                            const signResp = await authenticatedFetch(`${baseUrl}/minio/files/${signature}`);
+                            if (signResp.ok) {
+                                const signData = await signResp.json();
+                                if (signData?.data?.src) {
+                                    setSignatureUrl(signData.data.src);
+                                }
+                            }
+                        }
+                        return;
+                    }
+
                     setExistingContrat(data);
                     const templateId = getContratTemplateIdFromData(data, victim);
                     const template = getContractTemplateById(templateId);
@@ -269,7 +391,8 @@ export function useContrat(victim: Victim) {
                     const mesuresRenoncees = coerceMesureKeys(data.mesuresReparationRenoncees || metadata.mesuresReparationRenoncees);
                     const telephone = metadata.telephone || {};
 
-                    setConsentements({
+                    setConsentements((prev) => ({
+                        ...prev,
                         faireMediateur: data.serviceMediateurUtilise || false,
                         avocat: data.avocatAccompagnement || false,
                         exerceDroit: data.droitAccompagnement || false,
@@ -288,7 +411,7 @@ export function useContrat(victim: Victim) {
                         consentementRepresentant: data.consentementRepresentant || metadata.consentementRepresentant || false,
                         mesuresAcceptees: mesuresFromKeys(mesuresAcceptees.length > 0 ? mesuresAcceptees : data.accepteReparation ? ['indemnisation'] : []),
                         mesuresRenoncees: mesuresFromKeys(mesuresRenoncees),
-                    });
+                    }));
 
                     setRepresentant({
                         nom: data.nomRepresentant || '',
@@ -316,14 +439,17 @@ export function useContrat(victim: Victim) {
         };
 
         fetchContrat();
-    }, [victim.id]);
+    }, [victim.id, isMpuConsentement]);
 
     // Vérifier s'il y a un contrat en attente offline pour cette victime
     useEffect(() => {
         const checkPendingOffline = async () => {
             try {
                 const pending = await getAllPendingContracts();
-                const victimPending = pending.find(p => p.victimId === victim.id);
+                const victimPending = pending.find(p => (
+                    p.victimId === victim.id &&
+                    (isMpuConsentement ? p.targetType === 'consentement-mpu' : p.targetType !== 'consentement-mpu')
+                ));
                 setPendingOfflineContrat(victimPending || null);
             } catch (error) {
                 console.log('Erreur lors de la vérification des contrats offline:', error);
@@ -335,7 +461,7 @@ export function useContrat(victim: Victim) {
         // Revérifier périodiquement (au cas où la synchro a eu lieu)
         const interval = setInterval(checkPendingOffline, 5000);
         return () => clearInterval(interval);
-    }, [victim.id]);
+    }, [victim.id, isMpuConsentement]);
 
     const uploadSignature = async (dataUrl: string): Promise<string> => {
         const uploadEndpoint = process.env.NEXT_PUBLIC_UPLOAD_ENDPOINT || 'https://360.fonasite.app:5521/minio/files/upload';
@@ -370,19 +496,37 @@ export function useContrat(victim: Victim) {
 
             for (const item of pending) {
                 try {
-                    let finalSignature = item.contractData.signature || 'SIG_ELEC';
+                    const targetType = item.targetType === 'consentement-mpu' ? 'consentement-mpu' : 'contrat';
+                    let finalSignature = item.contractData.signature
+                        || item.contractData.signatureBeneficiaire
+                        || item.contractData.signatureRepresentant
+                        || 'SIG_ELEC';
 
                     if (item.signatureDataUrl) {
                         finalSignature = await uploadSignature(item.signatureDataUrl);
                     }
 
-                    const payload = {
-                        ...item.contractData,
-                        signature: finalSignature,
-                        nomAgentFonarev: item.contractData?.nomAgentFonarev || getConnectedAgentFullName(),
-                    };
+                    const isRepresentantSignature = Boolean(
+                        item.contractData?.incapableConsentir ||
+                        item.contractData?.nomRepresentant ||
+                        item.contractData?.signatureRepresentant
+                    );
+                    const payload = targetType === 'consentement-mpu'
+                        ? {
+                            ...item.contractData,
+                            [isRepresentantSignature ? 'signatureRepresentant' : 'signatureBeneficiaire']: finalSignature,
+                            nomAgentFonarev: item.contractData?.nomAgentFonarev || getConnectedAgentFullName(),
+                        }
+                        : {
+                            ...item.contractData,
+                            signature: finalSignature,
+                            nomAgentFonarev: item.contractData?.nomAgentFonarev || getConnectedAgentFullName(),
+                        };
+                    const endpoint = targetType === 'consentement-mpu'
+                        ? `${baseUrl}/consentements-mpu`
+                        : `${baseUrl}/contrat`;
 
-                    const resp = await authenticatedFetch(`${baseUrl}/contrat`, {
+                    const resp = await authenticatedFetch(endpoint, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -568,6 +712,94 @@ export function useContrat(victim: Victim) {
 
             const usesLegacyContractText = selectedTemplateId === 'luc-decision-justice';
             const nomAgentFonarev = getConnectedAgentFullName();
+
+            if (isMpuConsentement) {
+                const signatureField = consentements.incapaciteConsentir || consentements.consentementRepresentant
+                    ? 'signatureRepresentant'
+                    : 'signatureBeneficiaire';
+                let finalSignature = signatureField === 'signatureRepresentant'
+                    ? existingContrat?.signatureRepresentant || ''
+                    : existingContrat?.signatureBeneficiaire || '';
+
+                if (signatureDataUrl && existingContrat) {
+                    finalSignature = await uploadSignature(signatureDataUrl);
+                }
+
+                const mpuPayload = {
+                    victimeId: victim.id,
+                    etatVictimisation: consentements.etatVictimisation || undefined,
+                    situationVulnerabiliteUrgente: consentements.situationVulnerabiliteUrgente,
+                    mesuresProposees: selectRecordKeys(consentements.mesuresProposees),
+                    autresMesures: consentements.autresMesures || undefined,
+                    vulnerabilites: selectRecordKeys(consentements.vulnerabilites),
+                    autresVulnerabilites: consentements.autresVulnerabilites || undefined,
+                    informeMpu: consentements.informeMpu,
+                    droitsExpliques: consentements.droitsExpliques,
+                    aExerceDroit: consentements.exerceDroit
+                        ? true
+                        : consentements.comprisDroit
+                            ? false
+                            : undefined,
+                    engagementsAcceptes: consentements.engagementsAcceptes,
+                    mediateurFonarev: consentements.mediateurFonarev || consentements.faireMediateur,
+                    accompagnementPersonneConfiance: consentements.accompagnementPersonneConfiance || consentements.avocat,
+                    incapableConsentir: consentements.incapaciteConsentir,
+                    nomRepresentant: representant.nom || undefined,
+                    qualiteRepresentant: representant.qualite || undefined,
+                    organisationRepresentant: representant.organisation || undefined,
+                    pieceIdentiteRepresentant: representant.pieceIdentite || undefined,
+                    decisionConsentement: consentements.refuseReparation ? 'refuse' : 'accepte',
+                    dateConsentement: contractForm.dateSignature || new Date().toISOString().split('T')[0],
+                    lieuConsentement: contractForm.lieuSignature,
+                    nomAgentFonarev,
+                    fonctionAgentFonarev: contractForm.fonarevFonction || undefined,
+                    [signatureField]: finalSignature || 'SIG_ELEC',
+                };
+
+                if (existingContrat) {
+                    if (!isOnline()) {
+                        setSaveMessage({ type: 'error', text: 'Connecte-toi pour enregistrer les modifications d’un acte de consentement MPU déjà existant.' });
+                        return;
+                    }
+
+                    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
+                    const response = await authenticatedFetch(`${baseUrl}/consentements-mpu/${existingContrat.id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(mpuPayload),
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Erreur lors de la mise à jour de l’acte de consentement MPU');
+                    }
+
+                    const updated = await response.json().catch(() => ({ ...existingContrat, ...mpuPayload }));
+                    const updatedData = updated?.data ?? updated;
+                    setExistingContrat({
+                        ...existingContrat,
+                        ...updatedData,
+                        dateSignature: updatedData.dateConsentement || existingContrat.dateSignature,
+                        signature: updatedData.signatureBeneficiaire || updatedData.signatureRepresentant || existingContrat.signature,
+                    });
+                    setSaveMessage({ type: 'success', text: 'Acte de consentement MPU enregistré.' });
+                    setTimeout(() => setSaveMessage(null), 3000);
+                    return;
+                }
+
+                await savePendingContract({
+                    victimId: victim.id,
+                    contractData: mpuPayload,
+                    signatureDataUrl,
+                    targetType: 'consentement-mpu',
+                });
+
+                await syncPendingContracts();
+
+                setSaveMessage({ type: 'success', text: 'Acte de consentement MPU enregistré (hors ligne si nécessaire). La synchronisation se fera automatiquement.' });
+                setTimeout(() => setSaveMessage(null), 3000);
+                return;
+            }
+
             const mesuresReparationAcceptees = usesLegacyContractText
                 ? (consentements.accepteReparation ? ['indemnisation' as MesureReparationKey] : [])
                 : getSelectedMesures(consentements.mesuresAcceptees);
@@ -775,7 +1007,8 @@ export function useContrat(victim: Victim) {
                 pageNumber++;
             }
 
-            pdf.save(`Contrat_${victim.nom || 'Victime'}_${new Date().toISOString().split('T')[0]}.pdf`);
+                const pdfPrefix = isMpuConsentement ? 'Acte_consentement_MPU' : 'Contrat';
+                pdf.save(`${pdfPrefix}_${victim.nom || 'Victime'}_${new Date().toISOString().split('T')[0]}.pdf`);
         } finally {
             element.classList.remove('pdf-export-mode');
             buttons.forEach(btn => (btn as HTMLElement).style.display = '');
@@ -802,6 +1035,7 @@ export function useContrat(victim: Victim) {
         formattedSignatureDate,
         totalMontant,
         pendingOfflineContrat,
+        isMpuConsentement,
         prejudiceOptions,
 
         // Setters

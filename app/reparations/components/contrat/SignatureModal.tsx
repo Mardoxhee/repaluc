@@ -13,6 +13,8 @@ interface SignatureModalProps {
     clearSignature: () => void;
     saveContract: () => Promise<void>;
     onClose: () => void;
+    documentLabel?: string;
+    documentActionLabel?: string;
 }
 
 export const SignatureModal: React.FC<SignatureModalProps> = ({
@@ -25,12 +27,14 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
     clearSignature,
     saveContract,
     onClose,
+    documentLabel = 'contrat',
+    documentActionLabel = 'le contrat',
 }) => {
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
             <div className="bg-white w-full max-w-3xl mx-4 rounded-lg shadow-xl relative">
                 <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-                    <h3 className="text-base font-semibold text-gray-800">Signature du contrat</h3>
+                    <h3 className="text-base font-semibold text-gray-800">Signature - {documentLabel}</h3>
                     <button
                         type="button"
                         onClick={onClose}
@@ -85,7 +89,7 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
                                 disabled={isSaving}
                                 className="px-4 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                {isSaving ? 'Sauvegarde...' : 'Sauvegarder le contrat'}
+                                {isSaving ? 'Sauvegarde...' : `Sauvegarder ${documentActionLabel}`}
                             </button>
                         )}
                     </div>

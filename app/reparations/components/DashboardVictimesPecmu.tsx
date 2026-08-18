@@ -18,7 +18,17 @@ import { getMockPecmuKpis, getMockPecmuTimeline } from '../mocks/data';
 import { COLORS } from './dashboard/constants';
 import { useFetch } from '../../context/FetchContext';
 import { getVictimsFromCache } from '../../utils/victimsCache';
-import { normalizeApiList, normalizeGlobalProgress, normalizeText, type GlobalProgressStats } from '../utils/mentionStats';
+import {
+  normalizeApiList,
+  normalizeGlobalProgress,
+  normalizeSexeRows,
+  normalizeText,
+  normalizeTrancheAgeRows,
+  toNumber,
+  totalIndemnisationFromPayload,
+  type CountRow,
+  type GlobalProgressStats,
+} from '../utils/mentionStats';
 
 interface DashboardVictimesPecmuProps {
   onSelectAgentReparation?: (fullName: string) => void;
@@ -32,6 +42,32 @@ const EMPTY_PROGRESS: GlobalProgressStats = {
   piece: { withPiece: 0, withoutPiece: 0 },
   contrat: { withContrat: 0, withoutContrat: 0 },
   indemnisation: { commencee: 0, nonCommencee: 0, montantTotalIndemnise: 0 },
+};
+
+type PecmuServerStats = {
+  sexe: CountRow[];
+  trancheAge: CountRow[];
+  province: CountRow[];
+  territoire: CountRow[];
+  prejudiceFinal: CountRow[];
+  agents: CountRow[];
+  mesures: CountRow[];
+  contratsCount: number;
+  recontactesCount: number;
+  totalIndemnisationUSD: number;
+};
+
+const EMPTY_PECMU_SERVER_STATS: PecmuServerStats = {
+  sexe: [],
+  trancheAge: [],
+  province: [],
+  territoire: [],
+  prejudiceFinal: [],
+  agents: [],
+  mesures: [],
+  contratsCount: 0,
+  recontactesCount: 0,
+  totalIndemnisationUSD: 0,
 };
 
 const isPecmuVictim = (victim: any): boolean => {
@@ -112,12 +148,78 @@ const isPecmuProcessInProgress = (victim: any): boolean => {
   return hasActeConsentement(victim) || hasPhoto(victim) || hasPieceIdentite(victim);
 };
 
-const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = ({ onShowSignedContractVictims }) => {
+const normalizeCountRows = (
+  payload: any,
+  labelKeys: string[],
+  fallback = 'Non renseigné'
+): CountRow[] => {
+  const grouped = new Map<string, number>();
+
+  normalizeApiList(payload).forEach((item: any) => {
+    const rawLabel = labelKeys
+      .map((key) => item?.[key])
+      .find((value) => typeof value === 'string' && value.trim().length > 0);
+    const label = String(rawLabel ?? item?.label ?? item?.name ?? fallback).trim() || fallback;
+    const value = toNumber(item?.total ?? item?.count ?? item?.nombre ?? item?.value);
+    grouped.set(label, (grouped.get(label) || 0) + value);
+  });
+
+  return Array.from(grouped.entries())
+    .map(([name, value]) => ({ name, fullName: name, value }))
+    .filter((row) => row.value > 0 || row.name !== fallback)
+    .sort((a, b) => b.value - a.value);
+};
+
+const getPayloadTotal = (payload: any): number => (
+  toNumber(payload?.meta?.total)
+  || toNumber(payload?.data?.meta?.total)
+  || toNumber(payload?.total)
+  || toNumber(payload?.data?.total)
+  || normalizeApiList(payload).length
+);
+
+const formatMesureLabel = (key: string): string => {
+  const normalized = normalizeText(key).replace(/\s/g, '');
+  const labels: Record<string, string> = {
+    indemnisation: 'Indemnisation',
+    reinsertioneconomique: 'Réinsertion économique',
+    priseenchargemedicale: 'Prise en charge médicale',
+    accompagnementpsychosocial: 'Accompagnement psychosocial',
+    accompagnementpsychologique: 'Accompagnement psychologique',
+  };
+  if (labels[normalized]) return labels[normalized];
+
+  return key
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .trim()
+    .replace(/^./, (char) => char.toUpperCase());
+};
+
+const normalizeMesuresRows = (payload: any): CountRow[] => {
+  const data = payload?.data ?? payload ?? {};
+  const mesuresObject = data?.mesuresReparationAcceptees;
+
+  if (mesuresObject && typeof mesuresObject === 'object' && !Array.isArray(mesuresObject)) {
+    return Object.entries(mesuresObject)
+      .map(([key, value]) => ({
+        name: formatMesureLabel(key),
+        fullName: formatMesureLabel(key),
+        value: toNumber(value),
+      }))
+      .filter((row) => row.value > 0)
+      .sort((a, b) => b.value - a.value);
+  }
+
+  return normalizeCountRows(payload, ['mesure', 'nom', 'type', 'label', 'name']);
+};
+
+const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = ({ onSelectAgentReparation, onShowRecontactedVictims, onShowSignedContractVictims }) => {
   const { fetcher } = useFetch();
   const kpis = useMemo(() => getMockPecmuKpis(), []);
   const timeline = useMemo(() => getMockPecmuTimeline(), []);
   const [progress, setProgress] = useState<GlobalProgressStats>(EMPTY_PROGRESS);
-  const [actesConsentementCount, setActesConsentementCount] = useState(0);
+  const [pecmuServerStats, setPecmuServerStats] = useState<PecmuServerStats>(EMPTY_PECMU_SERVER_STATS);
   const [victimsFromCache, setVictimsFromCache] = useState<any[]>([]);
   const [loadingOfficial, setLoadingOfficial] = useState(true);
   const [loadingCache, setLoadingCache] = useState(true);
@@ -128,17 +230,49 @@ const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = ({ onShowS
     const loadOfficialStats = async () => {
       setLoadingOfficial(true);
       try {
-        const [progressResp, consentementsResp] = await Promise.all([
-          fetcher('/victime/stats/reparation/globalProgress/PECMU'),
-          fetcher('/contrat/PECMU'),
+        const safeFetch = (endpoint: string) => fetcher(endpoint).catch(() => null);
+        const [
+          contratsResp,
+          mesuresResp,
+          progressResp,
+          sexeResp,
+          trancheAgeResp,
+          provinceResp,
+          territoireResp,
+          prejudiceFinalResp,
+          totalIndemnisationResp,
+          recontacteResp,
+        ] = await Promise.all([
+          safeFetch('/contrat/PECMU?page=1&limit=20'),
+          safeFetch('/contrat/stats/mesures-reparation/PECMU'),
+          safeFetch('/victime/stats/reparation/globalProgress/PECMU'),
+          safeFetch('/victime/stats/sexe/PECMU'),
+          safeFetch('/victime/stats/tranche-age/PECMU'),
+          safeFetch('/victime/stats/province/PECMU'),
+          safeFetch('/victime/stats/territoire/PECMU'),
+          safeFetch('/victime/stats/prejudice-final/PECMU'),
+          safeFetch('/victime/stats/total-indemnisation/PECMU'),
+          safeFetch('/victime/recontacte/PECMU?page=1&limit=20'),
         ]);
+
         if (!mounted) return;
         setProgress(normalizeGlobalProgress(progressResp));
-        setActesConsentementCount(normalizeApiList(consentementsResp).length);
+        setPecmuServerStats({
+          sexe: normalizeSexeRows(sexeResp),
+          trancheAge: normalizeTrancheAgeRows(trancheAgeResp),
+          province: normalizeCountRows(provinceResp, ['province']),
+          territoire: normalizeCountRows(territoireResp, ['territoire']),
+          prejudiceFinal: normalizeCountRows(prejudiceFinalResp, ['prejudiceFinal', 'prejudice_final', 'prejudice', 'libelle']),
+          agents: [],
+          mesures: normalizeMesuresRows(mesuresResp),
+          contratsCount: getPayloadTotal(contratsResp),
+          recontactesCount: getPayloadTotal(recontacteResp),
+          totalIndemnisationUSD: totalIndemnisationFromPayload(totalIndemnisationResp),
+        });
       } catch {
         if (!mounted) return;
         setProgress(EMPTY_PROGRESS);
-        setActesConsentementCount(0);
+        setPecmuServerStats(EMPTY_PECMU_SERVER_STATS);
       } finally {
         if (mounted) setLoadingOfficial(false);
       }
@@ -191,13 +325,16 @@ const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = ({ onShowS
 
   const recontactedCount = recontactedFromCache > 0
     ? recontactedFromCache
-    : Math.max(progress.photo.withPhoto, progress.piece.withPiece);
-  const consentementCount = progress.contrat.withContrat || actesConsentementCount || consentementsFromCache;
+    : (pecmuServerStats.recontactesCount || Math.max(progress.photo.withPhoto, progress.piece.withPiece));
+  const consentementCount = progress.contrat.withContrat || pecmuServerStats.contratsCount || consentementsFromCache;
   const finProcessusCount = finProcessusFromCache;
   const circuitCount = circuitFromCache > 0
     ? circuitFromCache
     : Math.max(0, totalPecmu - finProcessusCount);
   const priseEnChargeDocumentee = Math.max(0, finProcessusCount + circuitCount);
+  const percentRecontacted = totalPecmu > 0 ? Math.round((recontactedCount / totalPecmu) * 100) : 0;
+  const percentConsentement = totalPecmu > 0 ? Math.round((consentementCount / totalPecmu) * 100) : 0;
+  const percentCircuit = totalPecmu > 0 ? Math.round((circuitCount / totalPecmu) * 100) : 0;
   const timelineSansChirurgie = useMemo(
     () => timeline.filter((step) => step.key !== 'chirurgie'),
     [timeline]
@@ -221,14 +358,115 @@ const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = ({ onShowS
     [kpis]
   );
 
-  const provinceCount = useMemo(() => {
-    const provinces = new Set<string>();
+  const provinceRowsFromCache = useMemo(() => {
+    const counts = new Map<string, number>();
     victimsFromCache.forEach((v) => {
       const province = typeof v?.province === 'string' ? v.province.trim() : '';
-      if (province) provinces.add(province);
+      if (province) counts.set(province, (counts.get(province) || 0) + 1);
     });
-    return provinces.size;
+    return Array.from(counts.entries())
+      .map(([name, value]) => ({ name, fullName: name, value }))
+      .sort((a, b) => b.value - a.value);
   }, [victimsFromCache]);
+  const provinceRows = pecmuServerStats.province.length > 0 ? pecmuServerStats.province : provinceRowsFromCache;
+  const topProvinceRows = provinceRows.slice(0, 6);
+  const maxProvince = Math.max(1, ...topProvinceRows.map((row) => row.value));
+  const provinceCount = provinceRows.length;
+
+  const territoireRowsFromCache = useMemo(() => {
+    const counts = new Map<string, number>();
+    victimsFromCache.forEach((v) => {
+      const territoire = typeof v?.territoire === 'string' ? v.territoire.trim() : '';
+      if (territoire) counts.set(territoire, (counts.get(territoire) || 0) + 1);
+    });
+    return Array.from(counts.entries())
+      .map(([name, value]) => ({ name, fullName: name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [victimsFromCache]);
+  const territoireRows = pecmuServerStats.territoire.length > 0 ? pecmuServerStats.territoire : territoireRowsFromCache;
+  const topTerritoireRows = territoireRows.slice(0, 6);
+  const maxTerritoire = Math.max(1, ...topTerritoireRows.map((row) => row.value));
+
+  const agentRowsFromCache = useMemo(() => {
+    const counts = new Map<string, number>();
+    victimsFromCache.forEach((v) => {
+      const agent = typeof v?.variablesSpecifiques?.agentReparation === 'string'
+        ? v.variablesSpecifiques.agentReparation.trim()
+        : typeof v?.agentReparation === 'string'
+          ? v.agentReparation.trim()
+          : '';
+      if (agent) counts.set(agent, (counts.get(agent) || 0) + 1);
+    });
+    return Array.from(counts.entries())
+      .map(([name, value]) => ({ name, fullName: name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [victimsFromCache]);
+  const agentRows = agentRowsFromCache.slice(0, 6);
+  const maxAgent = Math.max(1, ...agentRows.map((row) => row.value));
+
+  const sexeRows = pecmuServerStats.sexe;
+  const ageRows = pecmuServerStats.trancheAge;
+  const maxAge = Math.max(1, ...ageRows.map((row) => row.value));
+  const prejudiceRows = pecmuServerStats.prejudiceFinal.slice(0, 6);
+  const maxPrejudice = Math.max(1, ...prejudiceRows.map((row) => row.value));
+  const mesureRows = pecmuServerStats.mesures.slice(0, 6);
+  const maxMesure = Math.max(1, ...mesureRows.map((row) => row.value));
+
+  const renderRankedRows = (
+    rows: CountRow[],
+    maxValue: number,
+    colorClass: string,
+    emptyLabel: string,
+    onRowClick?: (row: CountRow) => void
+  ) => {
+    if (loadingOfficial && rows.length === 0) {
+      return (
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-6 bg-gray-100 animate-pulse rounded" />
+          ))}
+        </div>
+      );
+    }
+
+    if (rows.length === 0) {
+      return <div className="text-sm text-gray-500 italic">{emptyLabel}</div>;
+    }
+
+    return (
+      <div className="space-y-3">
+        {rows.map((row) => {
+          const pct = Math.round((row.value / maxValue) * 100);
+          const content = (
+            <>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm font-medium text-gray-800 truncate pr-3">{row.name}</span>
+                <span className="text-sm font-bold text-gray-900 whitespace-nowrap">{row.value.toLocaleString()}</span>
+              </div>
+              <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                <div className={`h-full rounded-full ${colorClass}`} style={{ width: `${pct}%` }} />
+              </div>
+            </>
+          );
+
+          if (onRowClick) {
+            return (
+              <button
+                key={row.name}
+                type="button"
+                onClick={() => onRowClick(row)}
+                className="w-full text-left rounded-md border border-transparent p-1 transition-colors hover:border-red-100 hover:bg-red-50/60"
+              >
+                {content}
+              </button>
+            );
+          }
+
+          return <div key={row.name}>{content}</div>;
+        })}
+      </div>
+    );
+  };
 
   return (
     <div className="w-full">
@@ -239,10 +477,10 @@ const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = ({ onShowS
         </div>
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
-            Tableau de bord — Prise en charge médicale urgente (PECMU)
+            Tableau de bord — PECMU
           </h1>
           <p className="text-sm text-gray-600">
-            Suivi des victimes en urgence médicale : recontact, acte de consentement et avancement du circuit.
+            Suivi PECMU : recontact, acte de consentement, avancement du circuit et indemnisation.
           </p>
         </div>
       </div>
@@ -262,15 +500,16 @@ const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = ({ onShowS
           value={loadingOfficial && loadingCache ? '...' : recontactedCount.toLocaleString()}
           icon={<FiCamera className="text-white text-xl" />}
           color="bg-gradient-to-br from-sky-500 to-blue-600"
-          subtitle={`${totalPecmu > 0 ? Math.round((recontactedCount / totalPecmu) * 100) : 0}% des PECMU`}
+          subtitle={`${percentRecontacted}% des PECMU`}
           loading={loadingOfficial && loadingCache}
+          onClick={onShowRecontactedVictims}
         />
         <StatCard
           title="Consentement"
           value={loadingOfficial && loadingCache ? '...' : consentementCount.toLocaleString()}
           icon={<FiFileText className="text-white text-xl" />}
           color="bg-gradient-to-br from-violet-500 to-purple-600"
-          subtitle="Acte de consentement signé"
+          subtitle={`${percentConsentement}% des PECMU`}
           loading={loadingOfficial && loadingCache}
           onClick={onShowSignedContractVictims}
         />
@@ -279,7 +518,7 @@ const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = ({ onShowS
           value={loadingOfficial && loadingCache ? '...' : circuitCount.toLocaleString()}
           icon={<FiActivity className="text-white text-xl" />}
           color="bg-gradient-to-br from-emerald-500 to-teal-600"
-          subtitle="Processus en cours"
+          subtitle={`${percentCircuit}% des PECMU`}
           loading={loadingOfficial && loadingCache}
         />
         <StatCard
@@ -298,12 +537,59 @@ const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = ({ onShowS
           <div className="mt-1 text-sm text-red-900">Les chiffres ci-dessus viennent des endpoints filtrés par mention.</div>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-4">
-          <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Provinces cache</div>
-          <div className="mt-1 text-2xl font-black text-slate-950">{loadingCache ? '...' : provinceCount.toLocaleString()}</div>
+          <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Provinces</div>
+          <div className="mt-1 text-2xl font-black text-slate-950">{loadingOfficial && loadingCache ? '...' : provinceCount.toLocaleString()}</div>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-4">
-          <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Victimes cache</div>
-          <div className="mt-1 text-2xl font-black text-slate-950">{loadingCache ? '...' : victimsFromCache.length.toLocaleString()}</div>
+          <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Indemnisation</div>
+          <div className="mt-1 text-2xl font-black text-slate-950">{loadingOfficial ? '...' : `${pecmuServerStats.totalIndemnisationUSD.toLocaleString()} USD`}</div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="p-2 rounded-lg bg-red-50">
+              <FiActivity className="text-red-600" size={20} />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Provinces PECMU</h3>
+              <p className="text-xs text-gray-500">Endpoint province PECMU, avec secours cache.</p>
+            </div>
+          </div>
+          {renderRankedRows(topProvinceRows, maxProvince, 'bg-red-500', 'Aucune donnée province disponible.')}
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="p-2 rounded-lg bg-teal-50">
+              <FiHeart className="text-teal-600" size={20} />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Territoires PECMU</h3>
+              <p className="text-xs text-gray-500">Endpoint territoire PECMU, avec secours cache.</p>
+            </div>
+          </div>
+          {renderRankedRows(topTerritoireRows, maxTerritoire, 'bg-teal-500', 'Aucune donnée territoire disponible.')}
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="p-2 rounded-lg bg-violet-50">
+              <FiUsers className="text-violet-600" size={20} />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Agents PECMU</h3>
+              <p className="text-xs text-gray-500">Cliquez pour ouvrir les victimes PECMU de l’agent.</p>
+            </div>
+          </div>
+          {renderRankedRows(
+            agentRows,
+            maxAgent,
+            'bg-violet-500',
+            'Aucune donnée agent disponible dans le cache.',
+            (row) => onSelectAgentReparation?.(row.fullName || row.name)
+          )}
         </div>
       </div>
 
@@ -332,6 +618,56 @@ const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = ({ onShowS
             { label: 'Accompagnement psychologique', count: kpis.psychologique.enCours + kpis.psychologique.terminees, color: '#ec4899' },
           ]}
         />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="p-2 rounded-lg bg-emerald-50">
+              <FiCheckCircle className="text-emerald-600" size={20} />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Mesures PECMU acceptées</h3>
+              <p className="text-xs text-gray-500">Endpoint mesures de réparation PECMU.</p>
+            </div>
+          </div>
+          {renderRankedRows(mesureRows, maxMesure, 'bg-emerald-500', 'Aucune mesure PECMU disponible.')}
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="p-2 rounded-lg bg-amber-50">
+              <FiAlertCircle className="text-amber-600" size={20} />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Préjudices finaux PECMU</h3>
+              <p className="text-xs text-gray-500">Endpoint préjudice final PECMU.</p>
+            </div>
+          </div>
+          {renderRankedRows(prejudiceRows, maxPrejudice, 'bg-amber-500', 'Aucune donnée de préjudice final disponible.')}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="p-2 rounded-lg bg-pink-50">
+              <FiUsers className="text-pink-600" size={20} />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900">Répartition par sexe PECMU</h3>
+          </div>
+          {renderRankedRows(sexeRows, Math.max(1, ...sexeRows.map((row) => row.value)), 'bg-pink-500', 'Aucune donnée sexe disponible.')}
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="p-2 rounded-lg bg-blue-50">
+              <FiUsers className="text-blue-600" size={20} />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900">Tranches d’âge PECMU</h3>
+          </div>
+          {renderRankedRows(ageRows, maxAge, 'bg-blue-500', 'Aucune donnée âge disponible.')}
+        </div>
       </div>
 
       {/* État de victimisation (pie) + Partenaires (bar) */}
@@ -436,7 +772,7 @@ const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = ({ onShowS
           </div>
           <div>
             <h3 className="text-lg font-bold text-gray-900">Circuit type PECMU</h3>
-            <p className="text-xs text-gray-500">Parcours de prise en charge médicale urgente d'une victime</p>
+            <p className="text-xs text-gray-500">Parcours PECMU d'une victime</p>
           </div>
         </div>
         <ProgressionTimeline steps={timelineSansChirurgie} orientation="horizontal" />
@@ -450,12 +786,12 @@ const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = ({ onShowS
           </div>
           <div>
             <h3 className="text-xl font-bold">Résumé PECMU</h3>
-            <p className="text-red-100">Prise en charge médicale urgente</p>
+            <p className="text-red-100">Parcours PECMU</p>
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
           <div className="bg-white/10 rounded-lg p-4">
-            <div className="text-2xl font-bold">{kpis.totalVictimes}</div>
+            <div className="text-2xl font-bold">{totalPecmu.toLocaleString()}</div>
             <div className="text-red-100 text-sm">Victimes total</div>
           </div>
           <div className="bg-white/10 rounded-lg p-4">

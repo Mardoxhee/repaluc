@@ -12,7 +12,7 @@ export type ReparationsDashboardKey = 'toutes' | 'luc' | 'mpu' | 'pecmu' | 'repa
 
 interface DashboardReparationsProps {
   defaultDashboard?: ReparationsDashboardKey;
-  onSelectAgentReparation?: (fullName: string) => void;
+  onSelectAgentReparation?: (fullName: string, mention?: string) => void;
   onShowRecontactedVictims?: (mention?: string) => void;
   onShowSignedContractVictims?: (mention?: string) => void;
   onSelectMention?: (mention: string) => void;
@@ -57,7 +57,7 @@ const DashboardReparations: React.FC<DashboardReparationsProps> = ({
       {
         key: 'pecmu',
         label: 'PECMU',
-        description: 'Prise en charge médicale urgente.',
+        description: 'Parcours PECMU.',
         icon: <FiHeart size={18} className="text-red-600" />,
       },
       {
@@ -131,7 +131,7 @@ const DashboardReparations: React.FC<DashboardReparationsProps> = ({
 
       {selected === 'luc' && (
         <DashboardVictimsLuc
-          onSelectAgentReparation={onSelectAgentReparation}
+          onSelectAgentReparation={(fullName) => onSelectAgentReparation?.(fullName, 'LUC')}
           onShowRecontactedVictims={() => onShowRecontactedVictims?.('LUC')}
           onShowSignedContractVictims={() => onShowSignedContractVictims?.('LUC')}
         />
@@ -139,7 +139,7 @@ const DashboardReparations: React.FC<DashboardReparationsProps> = ({
 
       {selected === 'mpu' && (
         <DashboardVictimsMpu
-          onSelectAgentReparation={onSelectAgentReparation}
+          onSelectAgentReparation={(fullName) => onSelectAgentReparation?.(fullName, 'MPU')}
           onShowRecontactedVictims={() => onShowRecontactedVictims?.('MPU')}
           onShowSignedContractVictims={() => onShowSignedContractVictims?.('MPU')}
         />
@@ -147,7 +147,7 @@ const DashboardReparations: React.FC<DashboardReparationsProps> = ({
 
       {selected === 'pecmu' && (
         <DashboardVictimesPecmu
-          onSelectAgentReparation={onSelectAgentReparation}
+          onSelectAgentReparation={(fullName) => onSelectAgentReparation?.(fullName, 'PECMU')}
           onShowRecontactedVictims={() => onShowRecontactedVictims?.('PECMU')}
           onShowSignedContractVictims={() => onShowSignedContractVictims?.('PECMU')}
         />

@@ -108,7 +108,7 @@ const StatsRapports: React.FC = () => {
           value={kpis.totalVictimesPecmu.toLocaleString()}
           icon={<FiUsers className="text-white text-xl" />}
           color="bg-gradient-to-br from-red-400 to-red-500"
-          subtitle="Prise en charge médicale urgente"
+          subtitle="Parcours PECMU"
         />
       </div>
 

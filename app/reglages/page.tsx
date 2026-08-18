@@ -670,8 +670,8 @@ const ReglagesPage = () => {
 
     const result = await Swal.fire({
       icon: 'question',
-      title: 'Resoumettre les contrats',
-      text: `Voulez-vous resoumettre les ${pendingContracts.length} contrat(s) en attente ?`,
+      title: 'Resoumettre les documents',
+      text: `Voulez-vous resoumettre les ${pendingContracts.length} document(s) en attente ?`,
       showCancelButton: true,
       confirmButtonText: 'Oui, resoumettre',
       cancelButtonText: 'Annuler',
@@ -694,18 +694,18 @@ const ReglagesPage = () => {
         icon: syncResult.failed === 0 ? 'success' : 'warning',
         title: 'Resoumission terminée',
         html: `
-          <p>${syncResult.synced} contrat(s) synchronisé(s)</p>
-          ${syncResult.skipped > 0 ? `<p>${syncResult.skipped} contrat(s) déjà existant(s)</p>` : ''}
+          <p>${syncResult.synced} document(s) synchronisé(s)</p>
+          ${syncResult.skipped > 0 ? `<p>${syncResult.skipped} document(s) déjà existant(s)</p>` : ''}
           ${syncResult.failed > 0 ? `<p class="text-red-600">${syncResult.failed} échec(s)</p>` : ''}
         `,
         confirmButtonColor: '#901c67'
       });
     } catch (error: any) {
-      console.error('[Reglages] Erreur resoumission contrats:', error);
+      console.error('[Reglages] Erreur resoumission documents:', error);
       await Swal.fire({
         icon: 'error',
         title: 'Erreur',
-        text: error?.message || 'Impossible de resoumettre les contrats',
+        text: error?.message || 'Impossible de resoumettre les documents',
         confirmButtonColor: '#901c67'
       });
     } finally {
@@ -774,6 +774,7 @@ const ReglagesPage = () => {
   };
 
   const getContractTypeLabel = (contract: PendingContract) => {
+    if (contract.targetType === 'consentement-mpu') return 'Acte de consentement MPU';
     const data = contract.contractData || {};
     return data.typeContrat || data.typePrejudiceReconnu || data.prejudiceFinal || 'Contrat';
   };
@@ -1240,8 +1241,8 @@ const ReglagesPage = () => {
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Contrats en attente</h2>
-                  <p className="text-sm text-gray-600">Contrats stockés localement dans IndexedDB, resoumis avec la même logique que la synchronisation automatique.</p>
+                  <h2 className="text-lg font-semibold text-gray-900">Contrats et actes MPU en attente</h2>
+                  <p className="text-sm text-gray-600">Contrats et actes MPU stockés localement dans IndexedDB, resoumis avec la même logique que la synchronisation automatique.</p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
@@ -1275,7 +1276,7 @@ const ReglagesPage = () => {
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-2 text-sm font-semibold text-gray-900">
                       <CloudUpload size={16} />
-                      <span>{contractsSyncResult.total} contrat(s) traité(s)</span>
+                      <span>{contractsSyncResult.total} document(s) traité(s)</span>
                     </div>
                     <div className="text-xs font-medium text-gray-700">
                       {contractsSyncResult.synced} synchronisé(s)
@@ -1340,8 +1341,8 @@ const ReglagesPage = () => {
                   {pendingContracts.length === 0 && (
                     <div className="p-12 text-center">
                       <FileText size={44} className="text-green-500 mx-auto mb-4" />
-                      <p className="text-gray-700 font-medium">Tous les contrats sont synchronisés</p>
-                      <p className="text-sm text-gray-500 mt-1">Les contrats dont la synchronisation a échoué resteront ici pour être resoumis.</p>
+                      <p className="text-gray-700 font-medium">Tous les contrats et actes MPU sont synchronisés</p>
+                      <p className="text-sm text-gray-500 mt-1">Les documents dont la synchronisation a échoué resteront ici pour être resoumis.</p>
                     </div>
                   )}
                 </div>

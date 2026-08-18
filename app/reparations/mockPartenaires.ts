@@ -7,7 +7,7 @@ export const mockPartenaires = [
 export const mockCategories = [
   { id: 1, nom: "Victimes des ménages ordinaires" },
   { id: 2, nom: "Victimes des ménages collectifs" },
-  { id: 3, nom: "Victimes en urgence médicale" },
+  { id: 3, nom: "Victimes PECMU" },
 ];
 
 export const mockPrejudices = [
