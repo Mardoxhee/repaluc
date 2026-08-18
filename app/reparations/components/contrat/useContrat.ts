@@ -26,6 +26,9 @@ import {
     normalizeText,
 } from './contractTemplates';
 
+const FONAREV_DIRECTEUR_GENERAL_NOM = 'Patrick FATA MAKUNGA';
+const FONAREV_DIRECTEUR_GENERAL_FONCTION = 'Directeur Général';
+
 const createTemplateTranches = (templateId: ContractTemplateId, prejudiceFinal?: string): Tranche[] => {
     return getDefaultTemplateTranches(templateId, prejudiceFinal).map((tranche, index) => ({
         id: String(index + 1),
@@ -86,8 +89,8 @@ const getInitialContractForm = (victim: Victim): ContractForm => {
                 : 'Réparation Administrative',
         lieuSignature: [victim.territoire, victim.province].filter(Boolean).join(', ') || 'Goma',
         dateSignature: new Date().toISOString().split('T')[0],
-        fonarevNom: getConnectedAgentFullName() || 'FATA MAKUNGA Patrick',
-        fonarevFonction: 'Directeur Général',
+        fonarevNom: FONAREV_DIRECTEUR_GENERAL_NOM,
+        fonarevFonction: FONAREV_DIRECTEUR_GENERAL_FONCTION,
     };
 };
 
@@ -306,8 +309,8 @@ export function useContrat(victim: Victim) {
                             reparationJudiciaire: '',
                             lieuSignature: data.lieuConsentement || prev.lieuSignature,
                             dateSignature: data.dateConsentement || prev.dateSignature,
-                            fonarevNom: data.nomAgentFonarev || prev.fonarevNom,
-                            fonarevFonction: data.fonctionAgentFonarev || prev.fonarevFonction,
+                            fonarevNom: FONAREV_DIRECTEUR_GENERAL_NOM,
+                            fonarevFonction: FONAREV_DIRECTEUR_GENERAL_FONCTION,
                         }));
 
                         setConsentements((prev) => ({

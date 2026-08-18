@@ -282,7 +282,7 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                         </div>
 
                         <div id="contrat-content">
-                            <ContratHeader />
+                            <ContratHeader showConsentementTitle={!isMpuConsentement} />
 
                             {isMpuConsentement ? (
                                 <MpuConsentementForm

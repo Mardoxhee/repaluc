@@ -1,7 +1,11 @@
 'use client';
 import React from 'react';
 
-export const ContratHeader: React.FC = () => {
+interface ContratHeaderProps {
+    showConsentementTitle?: boolean;
+}
+
+export const ContratHeader: React.FC<ContratHeaderProps> = ({ showConsentementTitle = true }) => {
     return (
         <div className="text-center mb-6">
             <div className="flex justify-center mb-4">
@@ -18,12 +22,16 @@ export const ContratHeader: React.FC = () => {
                 et des victimes des crimes contre la paix et la sécurité de l'humanité
             </h2>
             <div className="mx-auto mb-3 h-px w-40 bg-blue-700" />
-            <h3 className="text-sm font-extrabold tracking-wide text-blue-900">
-                FICHE DE CONSENTEMENT À RECEVOIR LES MESURES ADMINISTRATIVES
-            </h3>
-            <h3 className="text-sm font-extrabold tracking-wide text-blue-900">
-                INDIVIDUELLES DE RÉPARATION
-            </h3>
+            {showConsentementTitle && (
+                <>
+                    <h3 className="text-sm font-extrabold tracking-wide text-blue-900">
+                        FICHE DE CONSENTEMENT À RECEVOIR LES MESURES ADMINISTRATIVES
+                    </h3>
+                    <h3 className="text-sm font-extrabold tracking-wide text-blue-900">
+                        INDIVIDUELLES DE RÉPARATION
+                    </h3>
+                </>
+            )}
         </div>
     );
 };
