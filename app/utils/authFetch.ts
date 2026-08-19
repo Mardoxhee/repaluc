@@ -1,5 +1,10 @@
 'use client';
 
+const AUTH_STORAGE_KEYS = ['token', 'usr', 'auth', 'apps', 'repaluc_auth'];
+const SESSION_LOCK_KEY = 'repaluc_session_locked';
+
+let unauthorizedLogoutInProgress = false;
+
 export const getAuthToken = (): string | null => {
   if (typeof window === 'undefined') return null;
 
@@ -33,7 +38,61 @@ const shouldSkipAuthHeaders = (input: RequestInfo | URL): boolean => {
   return url.startsWith('data:') || url.startsWith('blob:');
 };
 
-export const authenticatedFetch = (
+const getRequestUrl = (input: RequestInfo | URL): string => {
+  if (typeof input === 'string') return input;
+  if (input instanceof URL) return input.href;
+  return input.url;
+};
+
+const isAuthRequest = (input: RequestInfo | URL): boolean => {
+  const url = getRequestUrl(input);
+  return url.includes('/auth/login') || url.includes('/auth/verify-token');
+};
+
+const clearAuthSession = () => {
+  try {
+    AUTH_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
+    localStorage.setItem(SESSION_LOCK_KEY, JSON.stringify({
+      reason: 'unauthorized',
+      ts: Date.now(),
+    }));
+  } catch {
+    // ignore
+  }
+
+  void import('./authCache')
+    .then(({ clearOfflineCredentials }) => clearOfflineCredentials())
+    .catch(() => undefined);
+};
+
+const redirectToOnlineLogin = async () => {
+  if (typeof window === 'undefined') return;
+  if (window.location.pathname.startsWith('/login')) return;
+  if (unauthorizedLogoutInProgress) return;
+
+  unauthorizedLogoutInProgress = true;
+  clearAuthSession();
+
+  try {
+    const Swal = (await import('sweetalert2')).default;
+    await Swal.fire({
+      icon: 'warning',
+      title: 'Session expirée',
+      text: 'Votre session a expiré. Reconnectez-vous en ligne pour obtenir un nouveau token.',
+      confirmButtonText: 'Se reconnecter',
+      confirmButtonColor: '#901c67',
+      timer: 2500,
+      timerProgressBar: true,
+      allowOutsideClick: false,
+    });
+  } catch {
+    window.alert('Votre session a expiré. Reconnectez-vous en ligne pour obtenir un nouveau token.');
+  } finally {
+    window.location.assign('/login?reason=session-expired');
+  }
+};
+
+export const authenticatedFetch = async (
   input: RequestInfo | URL,
   init: RequestInit = {}
 ): Promise<Response> => {
@@ -43,8 +102,14 @@ export const authenticatedFetch = (
 
   const baseHeaders = init.headers ?? (input instanceof Request ? input.headers : undefined);
 
-  return fetch(input, {
+  const response = await fetch(input, {
     ...init,
     headers: withAuthHeaders(baseHeaders),
   });
+
+  if (response.status === 401 && !isAuthRequest(input)) {
+    void redirectToOnlineLogin();
+  }
+
+  return response;
 };

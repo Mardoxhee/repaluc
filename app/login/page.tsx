@@ -108,6 +108,17 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       if (!online) {
+        const sessionLocked = localStorage.getItem('repaluc_session_locked');
+        if (sessionLocked) {
+          await Swal.fire({
+            icon: 'warning',
+            title: 'Reconnexion en ligne requise',
+            text: 'Votre session a expiré. Reconnectez-vous en ligne pour obtenir un nouveau token.',
+            confirmButtonColor: '#901c67'
+          });
+          return;
+        }
+
         const ok = await verifyOfflineCredentials(username, password);
         if (!ok) {
           await Swal.fire({
