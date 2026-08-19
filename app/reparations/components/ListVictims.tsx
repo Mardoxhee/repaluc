@@ -1039,6 +1039,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                     !searchTerm &&
                     serverFilters
                 );
+                const shouldUseMpuConsentements = selectedContractMention === 'MPU';
 
                 const mapContractsToVictims = (contractRows: any[], endpointMention = '') => {
                     const seen = new Set<string>();
@@ -1067,6 +1068,51 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                     }, []);
                 };
 
+                const mapConsentementsMpuToVictims = (consentementRows: any[]) => {
+                    const seen = new Set<string>();
+
+                    return consentementRows.reduce((acc: any[], item: any) => {
+                        const victimId = getContractVictimId(item);
+                        if (victimId === null) return acc;
+
+                        const victimKey = String(victimId);
+                        if (seen.has(victimKey)) return acc;
+                        seen.add(victimKey);
+
+                        const victimFromConsentement = getVictimFromContractItem(item);
+                        const cachedVictim = cacheById.get(victimKey);
+                        acc.push({
+                            ...victimFromConsentement,
+                            ...cachedVictim,
+                            id: cachedVictim?.id ?? victimFromConsentement?.id ?? victimId,
+                            mention: cachedVictim?.mention ?? victimFromConsentement?.mention ?? 'MPU',
+                            consentementMpuId: item?.id,
+                            acteConsentementSigne: true,
+                            contratSigne: true,
+                        });
+                        return acc;
+                    }, []);
+                };
+
+                const loadAllSignedConsentementsMpu = async () => {
+                    const rows: any[] = [];
+                    const limit = 100;
+                    let page = 1;
+                    let hasNextPage = true;
+
+                    while (hasNextPage) {
+                        const payload = await fetchCtx.fetcher(`/consentements-mpu/victimes-signees?page=${page}&limit=${limit}`);
+                        rows.push(...normalizeApiList(payload));
+
+                        const metaPayload = payload?.meta;
+                        hasNextPage = Boolean(metaPayload?.hasNextPage);
+                        if (!metaPayload && normalizeApiList(payload).length < limit) hasNextPage = false;
+                        page += 1;
+                    }
+
+                    return rows;
+                };
+
                 const loadAllContractsForMention = async (contractMention: string) => {
                     const rows: any[] = [];
                     const limit = 100;
@@ -1091,6 +1137,31 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                     signedVictims = cachedRows
                         .filter((victim: any) => hasSignedContract(victim, signedContractVictimIds))
                         .map((victim: any) => ({ ...victim, contratSigne: true }));
+                } else if (shouldUseMpuConsentements && !searchTerm && filterRules.length === 0) {
+                    const payload = await fetchCtx.fetcher(`/consentements-mpu/victimes-signees?page=${meta.page}&limit=${meta.limit}`);
+                    const pageData = mapConsentementsMpuToVictims(normalizeApiList(payload));
+                    const metaPayload = payload?.meta;
+                    const totalItems = Number(metaPayload?.total ?? pageData.length);
+                    const totalPages = Number(metaPayload?.totalPages ?? Math.max(1, Math.ceil(totalItems / meta.limit)));
+                    const currentPage = Number(metaPayload?.page ?? meta.page);
+
+                    setVictims(pageData);
+                    setMeta(prev => ({
+                        ...prev,
+                        page: Number.isFinite(currentPage) && currentPage > 0 ? currentPage : prev.page,
+                        total: Number.isFinite(totalItems) ? totalItems : pageData.length,
+                        totalPages: Number.isFinite(totalPages) ? totalPages : Math.max(1, Math.ceil(pageData.length / meta.limit)),
+                        hasNextPage: Boolean(metaPayload?.hasNextPage),
+                        hasPreviousPage: Boolean(metaPayload?.hasPreviousPage),
+                    }));
+                    setUsingCache(false);
+                    setLoading(false);
+                    return;
+                } else if (shouldUseMpuConsentements) {
+                    const consentementRows = searchTerm.trim()
+                        ? normalizeApiList(await fetchCtx.fetcher(`/consentements-mpu/victimes-signees/recherche?nom=${encodeURIComponent(searchTerm.trim())}`))
+                        : await loadAllSignedConsentementsMpu();
+                    signedVictims = mapConsentementsMpuToVictims(consentementRows);
                 } else if (canUseContractServerPagination && serverFilters) {
                     const query = buildContractQuery(meta.page, meta.limit, serverFilters);
                     const endpoint = `${getSignedContractsEndpoint(selectedContractMention)}?${query}`;

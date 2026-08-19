@@ -311,13 +311,23 @@ const normalizeMesuresRows = (payload: any): CountRow[] => {
     .filter((row) => !normalizeText(row.name).includes('indemnisation'));
 };
 
+const getPayloadTotal = (payload: any): number => (
+  toNumber(payload?.meta?.total)
+  || toNumber(payload?.data?.meta?.total)
+  || toNumber(payload?.total)
+  || toNumber(payload?.data?.total)
+  || normalizeApiList(payload).length
+);
+
 const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onSelectAgentReparation, onShowRecontactedVictims, onShowSignedContractVictims }) => {
   const { fetcher } = useFetch();
   const [victims, setVictims] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [progressLoading, setProgressLoading] = useState<boolean>(true);
+  const [consentementLoading, setConsentementLoading] = useState<boolean>(true);
   const [statsLoading, setStatsLoading] = useState<boolean>(true);
   const [progress, setProgress] = useState<GlobalProgressStats>(EMPTY_PROGRESS);
+  const [signedConsentementsCount, setSignedConsentementsCount] = useState<number>(0);
   const [mpuServerStats, setMpuServerStats] = useState<MpuServerStats>(EMPTY_MPU_SERVER_STATS);
   const [showConsultationsModal, setShowConsultationsModal] = useState<boolean>(false);
 
@@ -334,6 +344,19 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onSelectAgent
         if (mounted) setProgress(EMPTY_PROGRESS);
       } finally {
         if (mounted) setProgressLoading(false);
+      }
+    };
+
+    const loadSignedConsentements = async () => {
+      setConsentementLoading(true);
+      try {
+        const signedResp = await fetcher('/consentements-mpu/victimes-signees?page=1&limit=1');
+        if (!mounted) return;
+        setSignedConsentementsCount(getPayloadTotal(signedResp));
+      } catch {
+        if (mounted) setSignedConsentementsCount(0);
+      } finally {
+        if (mounted) setConsentementLoading(false);
       }
     };
 
@@ -381,6 +404,7 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onSelectAgent
     };
 
     loadMpuProgress();
+    loadSignedConsentements();
     loadMpuServerStats();
     return () => {
       mounted = false;
@@ -466,7 +490,7 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onSelectAgent
   const totalMesuresCommenceesServer = mpuServerStats.mesures.reduce((max, row) => Math.max(max, row.value), 0);
   const totalMesuresCommencees = officialStatsLoading ? 0 : (totalMesuresCommenceesServer || totalMesuresCommenceesCache);
 
-  const consentementCount = progressLoading ? 0 : progress.contrat.withContrat;
+  const consentementCount = consentementLoading ? 0 : signedConsentementsCount;
   const recontactedCount = progressLoading ? 0 : progress.photo.withPhoto;
   const percentConsentement = totalMpu > 0 ? Math.round((consentementCount / totalMpu) * 100) : 0;
   const percentRecontacted = totalMpu > 0 ? Math.round((recontactedCount / totalMpu) * 100) : 0;
@@ -572,11 +596,11 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onSelectAgent
         />
         <KpiCard
           title="Actes de consentement"
-          value={officialLoading ? '…' : consentementCount.toLocaleString()}
+          value={consentementLoading ? '…' : consentementCount.toLocaleString()}
           icon={<FiFileText className="text-white" size={18} />}
           color="bg-emerald-500"
           subtitle={`${percentConsentement}% des MPU`}
-          loading={officialLoading}
+          loading={consentementLoading}
           onClick={onShowSignedContractVictims}
         />
         <KpiCard
