@@ -54,16 +54,6 @@ const isMpuVictim = (victim: any): boolean => {
   );
 };
 
-const hasConsentementSigne = (victim: any): boolean => {
-  if (victim?.consentementSigne === true) return true;
-  if (victim?.acteConsentementSigne === true) return true;
-  if (victim?.contratSigne === true) return true;
-  if (victim?.contrat && (victim.contrat.accepteReparation === true || victim.contrat.dateSignature)) return true;
-  const c = victim?.consentements;
-  if (c && (c.signataire === true || c.accepteReparation === true)) return true;
-  return false;
-};
-
 const getSiteDeplaces = (victim: any): string => {
   const raw =
     victim?.siteDeplaces ||
@@ -215,7 +205,6 @@ type MpuServerStats = {
   prejudiceFinal: CountRow[];
   agents: CountRow[];
   mesures: CountRow[];
-  contratsCount: number;
 };
 
 const EMPTY_MPU_SERVER_STATS: MpuServerStats = {
@@ -226,7 +215,6 @@ const EMPTY_MPU_SERVER_STATS: MpuServerStats = {
   prejudiceFinal: [],
   agents: [],
   mesures: [],
-  contratsCount: 0,
 };
 
 const KpiCard: React.FC<KpiProps> = ({ title, value, icon, color, subtitle, loading, onClick }) => (
@@ -328,6 +316,7 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onSelectAgent
   const [victims, setVictims] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [progressLoading, setProgressLoading] = useState<boolean>(true);
+  const [statsLoading, setStatsLoading] = useState<boolean>(true);
   const [progress, setProgress] = useState<GlobalProgressStats>(EMPTY_PROGRESS);
   const [mpuServerStats, setMpuServerStats] = useState<MpuServerStats>(EMPTY_MPU_SERVER_STATS);
   const [showConsultationsModal, setShowConsultationsModal] = useState<boolean>(false);
@@ -335,12 +324,24 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onSelectAgent
   useEffect(() => {
     let mounted = true;
 
-    const loadMpuServerStats = async () => {
+    const loadMpuProgress = async () => {
       setProgressLoading(true);
+      try {
+        const progressResp = await fetcher('/victime/stats/reparation/globalProgress/MPU');
+        if (!mounted) return;
+        setProgress(normalizeGlobalProgress(progressResp));
+      } catch {
+        if (mounted) setProgress(EMPTY_PROGRESS);
+      } finally {
+        if (mounted) setProgressLoading(false);
+      }
+    };
+
+    const loadMpuServerStats = async () => {
+      setStatsLoading(true);
       try {
         const safeFetch = (endpoint: string) => fetcher(endpoint).catch(() => null);
         const [
-          progressResp,
           agentsResp,
           sexeResp,
           trancheAgeResp,
@@ -349,9 +350,7 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onSelectAgent
           prejudiceFinalResp,
           ,
           mesuresResp,
-          contratsResp,
         ] = await Promise.all([
-          safeFetch('/victime/stats/reparation/globalProgress/MPU'),
           safeFetch('/victime/filtre/agent-reparation/MPU'),
           safeFetch('/victime/stats/sexe/MPU'),
           safeFetch('/victime/stats/tranche-age/MPU'),
@@ -360,11 +359,9 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onSelectAgent
           safeFetch('/victime/stats/prejudice-final/MPU'),
           safeFetch('/victime/stats/total-indemnisation/MPU'),
           safeFetch('/contrat/stats/mesures-reparation/MPU'),
-          safeFetch('/contrat/MPU'),
         ]);
 
         if (!mounted) return;
-        setProgress(normalizeGlobalProgress(progressResp));
         setMpuServerStats({
           sexe: normalizeSexeRows(sexeResp),
           trancheAge: normalizeTrancheAgeRows(trancheAgeResp),
@@ -373,18 +370,17 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onSelectAgent
           prejudiceFinal: normalizeCountRows(prejudiceFinalResp, ['prejudiceFinal', 'prejudice_final', 'prejudice', 'libelle']),
           agents: normalizeCountRows(agentsResp, ['agentReparation', 'agent_reparation', 'agent', 'fullName', 'nom']),
           mesures: normalizeMesuresRows(mesuresResp),
-          contratsCount: normalizeApiList(contratsResp).length,
         });
       } catch {
         if (mounted) {
-          setProgress(EMPTY_PROGRESS);
           setMpuServerStats(EMPTY_MPU_SERVER_STATS);
         }
       } finally {
-        if (mounted) setProgressLoading(false);
+        if (mounted) setStatsLoading(false);
       }
     };
 
+    loadMpuProgress();
     loadMpuServerStats();
     return () => {
       mounted = false;
@@ -413,8 +409,9 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onSelectAgent
   const mpuVictims = useMemo(() => victims.filter(isMpuVictim), [victims]);
 
   const totalMpuFromCache = mpuVictims.length;
-  const totalMpu = progress.total > 0 ? progress.total : totalMpuFromCache;
+  const totalMpu = progressLoading ? 0 : (progress.total > 0 ? progress.total : totalMpuFromCache);
   const officialLoading = progressLoading;
+  const officialStatsLoading = statsLoading;
 
   const provinceRowsFromCache = useMemo(() => {
     const counts = new Map<string, number>();
@@ -427,27 +424,10 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onSelectAgent
       .sort((a, b) => b.value - a.value);
   }, [mpuVictims]);
 
-  const provinceRows = mpuServerStats.province.length > 0 ? mpuServerStats.province : provinceRowsFromCache;
+  const provinceRows = officialStatsLoading
+    ? []
+    : (mpuServerStats.province.length > 0 ? mpuServerStats.province : provinceRowsFromCache);
   const provinces = provinceRows.length;
-
-  const totalConsentement = useMemo(
-    () => mpuVictims.filter(hasConsentementSigne).length,
-    [mpuVictims]
-  );
-  const totalRecontactes = useMemo(
-    () => mpuVictims.filter((victim) => {
-      const hasVictimPhoto = typeof victim?.photo === 'string' && victim.photo.trim().length > 0;
-      const hasPieceIdentiteFromProgress = victim?.progression?.hasPieceIdentite === true;
-      const hasPieceIdentiteFromDocs = Array.isArray(victim?.documentVictime)
-        ? victim.documentVictime.some((d: any) => {
-          const label = normalizeText(d?.label ?? d?.type ?? d?.nom);
-          return label === "piece d'identite" || label === 'piece identite' || label === 'piece_identite';
-        })
-        : false;
-      return hasVictimPhoto || hasPieceIdentiteFromProgress || hasPieceIdentiteFromDocs;
-    }).length,
-    [mpuVictims]
-  );
 
   const perSite = useMemo(() => {
     const counts = new Map<string, number>();
@@ -464,9 +444,11 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onSelectAgent
     return rows;
   }, [mpuVictims, totalMpu]);
 
-  const territoireRows = mpuServerStats.territoire.length > 0
-    ? mpuServerStats.territoire
-    : perSite.map((row) => ({ name: row.site, fullName: row.site, value: row.count }));
+  const territoireRows = officialStatsLoading
+    ? []
+    : (mpuServerStats.territoire.length > 0
+      ? mpuServerStats.territoire
+      : perSite.map((row) => ({ name: row.site, fullName: row.site, value: row.count })));
   const topTerritoireRows = territoireRows.slice(0, 8);
   const maxTerritoire = Math.max(1, ...topTerritoireRows.map((row) => row.value));
 
@@ -482,13 +464,10 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onSelectAgent
     [mpuVictims]
   );
   const totalMesuresCommenceesServer = mpuServerStats.mesures.reduce((max, row) => Math.max(max, row.value), 0);
-  const totalMesuresCommencees = totalMesuresCommenceesServer || totalMesuresCommenceesCache;
+  const totalMesuresCommencees = officialStatsLoading ? 0 : (totalMesuresCommenceesServer || totalMesuresCommenceesCache);
 
-  const consentementCount = progress.contrat.withContrat || mpuServerStats.contratsCount || totalConsentement;
-  const recontactedOfficialCount = Math.max(progress.photo.withPhoto, progress.piece.withPiece);
-  const recontactedCount = recontactedOfficialCount > 0
-    ? recontactedOfficialCount
-    : totalRecontactes;
+  const consentementCount = progressLoading ? 0 : progress.contrat.withContrat;
+  const recontactedCount = progressLoading ? 0 : progress.photo.withPhoto;
   const percentConsentement = totalMpu > 0 ? Math.round((consentementCount / totalMpu) * 100) : 0;
   const percentRecontacted = totalMpu > 0 ? Math.round((recontactedCount / totalMpu) * 100) : 0;
   const percentMesuresCommencees = totalMpu > 0 ? Math.round((totalMesuresCommencees / totalMpu) * 100) : 0;
@@ -535,7 +514,7 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onSelectAgent
   }, [mpuVictims]);
   const sexeRows = mpuServerStats.sexe.length > 0
     ? mpuServerStats.sexe
-    : [
+    : officialStatsLoading ? [] : [
       { name: 'Femmes', fullName: 'Femmes', value: sexeStats.femmes },
       { name: 'Hommes', fullName: 'Hommes', value: sexeStats.hommes },
       ...(sexeStats.autres > 0 ? [{ name: 'Non précisé', fullName: 'Non précisé', value: sexeStats.autres }] : []),
@@ -554,7 +533,7 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onSelectAgent
   }, [mpuVictims]);
   const ageRows = mpuServerStats.trancheAge.length > 0
     ? mpuServerStats.trancheAge
-    : ageBuckets.map((bucket) => ({ name: bucket.bucket, fullName: bucket.bucket, value: bucket.count }));
+    : (officialStatsLoading ? [] : ageBuckets.map((bucket) => ({ name: bucket.bucket, fullName: bucket.bucket, value: bucket.count })));
   const maxAge = Math.max(1, ...ageRows.map((row) => row.value));
   const prejudiceRows = mpuServerStats.prejudiceFinal.slice(0, 6);
   const maxPrejudice = Math.max(1, ...prejudiceRows.map((row) => row.value));
@@ -583,30 +562,30 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onSelectAgent
       {/* KPI principaux */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
         <KpiCard
-          title="Recontacté (photo et/ou pièce)"
-          value={officialLoading && loading ? '…' : recontactedCount.toLocaleString()}
+          title="Recontactés avec photo"
+          value={officialLoading ? '…' : recontactedCount.toLocaleString()}
           icon={<FiCamera className="text-white" size={18} />}
           color="bg-sky-500"
           subtitle={`${percentRecontacted}% des MPU`}
-          loading={officialLoading && loading}
+          loading={officialLoading}
           onClick={onShowRecontactedVictims}
         />
         <KpiCard
           title="Actes de consentement"
-          value={officialLoading && loading ? '…' : consentementCount.toLocaleString()}
+          value={officialLoading ? '…' : consentementCount.toLocaleString()}
           icon={<FiFileText className="text-white" size={18} />}
           color="bg-emerald-500"
           subtitle={`${percentConsentement}% des MPU`}
-          loading={officialLoading && loading}
+          loading={officialLoading}
           onClick={onShowSignedContractVictims}
         />
         <KpiCard
           title="A commencé à bénéficier des mesures"
-          value={officialLoading && loading ? '…' : totalMesuresCommencees.toLocaleString()}
+          value={officialStatsLoading ? '…' : totalMesuresCommencees.toLocaleString()}
           icon={<FiActivity className="text-white" size={18} />}
           color="bg-orange-500"
           subtitle={`${percentMesuresCommencees}% des MPU`}
-          loading={officialLoading && loading}
+          loading={officialStatsLoading}
         />
       </div>
 
@@ -621,19 +600,19 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onSelectAgent
         />
         <KpiCard
           title="Provinces couvertes"
-          value={officialLoading && loading ? '…' : provinces}
+          value={officialStatsLoading ? '…' : provinces}
           icon={<FiMapPin className="text-white" size={18} />}
           color="bg-purple-500"
           subtitle="Statistiques province MPU"
-          loading={officialLoading && loading}
+          loading={officialStatsLoading}
         />
         <KpiCard
           title="Territoires couverts"
-          value={officialLoading && loading ? '…' : territoireRows.length.toLocaleString()}
+          value={officialStatsLoading ? '…' : territoireRows.length.toLocaleString()}
           icon={<FiHome className="text-white" size={18} />}
           color="bg-teal-500"
           subtitle="Statistiques territoire MPU"
-          loading={officialLoading && loading}
+          loading={officialStatsLoading}
         />
       </div>
 
@@ -658,7 +637,7 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onSelectAgent
           </div>
         </div>
 
-        {officialLoading && loading ? (
+        {officialStatsLoading ? (
           <div className="space-y-3">
             {[1, 2, 3, 4].map((i) => (
               <div key={i} className="h-6 bg-gray-100 animate-pulse rounded" />
@@ -766,7 +745,7 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onSelectAgent
               <p className="text-sm text-gray-600">Actes de consentement avec mesures MPU acceptées.</p>
             </div>
           </div>
-          {officialLoading ? (
+          {officialStatsLoading ? (
             <div className="space-y-3">
               {[1, 2, 3].map((i) => (
                 <div key={i} className="h-6 bg-gray-100 animate-pulse rounded" />
@@ -805,7 +784,7 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onSelectAgent
               <p className="text-sm text-gray-600">Répartition issue de l’endpoint agent-réparation MPU.</p>
             </div>
           </div>
-          {officialLoading ? (
+          {officialStatsLoading ? (
             <div className="space-y-3">
               {[1, 2, 3].map((i) => (
                 <div key={i} className="h-6 bg-gray-100 animate-pulse rounded" />
@@ -851,7 +830,7 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onSelectAgent
               <p className="text-sm text-gray-600">Statistiques préjudice final filtrées sur MPU.</p>
             </div>
           </div>
-          {officialLoading ? (
+          {officialStatsLoading ? (
             <div className="space-y-3">
               {[1, 2, 3, 4, 5].map((i) => (
                 <div key={i} className="h-6 bg-gray-100 animate-pulse rounded" />
@@ -898,7 +877,7 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onSelectAgent
             </div>
             <h3 className="text-lg font-bold text-gray-900">Répartition par sexe</h3>
           </div>
-          {officialLoading && loading ? (
+          {officialStatsLoading ? (
             <div className="h-24 bg-gray-100 animate-pulse rounded" />
           ) : sexeRows.length === 0 ? (
             <div className="text-sm text-gray-500 italic">Aucune donnée de sexe disponible.</div>
@@ -943,7 +922,7 @@ const DashboardVictimsMpu: React.FC<DashboardVictimsMpuProps> = ({ onSelectAgent
             <p className="text-sm text-gray-600">Âge calculé à partir de la date de naissance.</p>
           </div>
         </div>
-        {officialLoading && loading ? (
+        {officialStatsLoading ? (
           <div className="h-24 bg-gray-100 animate-pulse rounded" />
         ) : ageRows.length === 0 ? (
           <div className="text-sm text-gray-500 italic">Aucune donnée d’âge disponible.</div>
