@@ -400,8 +400,8 @@ const LucTerritoryIndemnisationStats: React.FC = () => {
                 <p className="text-sm text-gray-500">Détail opérationnel pour lecture et comparaison rapide.</p>
               </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-[1180px] w-full text-sm">
+            <div className="overflow-hidden">
+              <table className="w-full table-fixed text-[11px] md:text-xs">
                 <thead className="bg-gray-50 text-gray-600">
                   <tr>
                     {[
@@ -418,7 +418,7 @@ const LucTerritoryIndemnisationStats: React.FC = () => {
                       'Payé',
                       'Reste à payer',
                     ].map((label) => (
-                      <th key={label} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">
+                      <th key={label} className="px-2 py-3 text-left text-[10px] font-semibold uppercase tracking-wide break-words">
                         {label}
                       </th>
                     ))}
@@ -427,33 +427,33 @@ const LucTerritoryIndemnisationStats: React.FC = () => {
                 <tbody className="divide-y divide-gray-100">
                   {territoires.map((row) => (
                     <tr key={row.territoire} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-semibold text-gray-900">{row.territoire}</td>
-                      <td className="px-4 py-3">{formatNombre.format(row.cibleTotale)}</td>
-                      <td className="px-4 py-3">{formatNombre.format(row.victimesRecontactees)}</td>
-                      <td className="px-4 py-3 text-blue-700 font-medium">{formatPercent(row.pourcentageRecontactees)}</td>
-                      <td className="px-4 py-3">{formatNombre.format(row.contratsSignes)}</td>
-                      <td className="px-4 py-3 text-emerald-700 font-medium">{formatPercent(row.pourcentageContratsSignes)}</td>
-                      <td className="px-4 py-3">{formatNombre.format(row.victimesAyantCommenceIndemnisation)}</td>
-                      <td className="px-4 py-3 text-orange-700 font-medium">{formatPercent(row.pourcentageVictimesAyantCommenceIndemnisation)}</td>
-                      <td className="px-4 py-3">{formatNombre.format(row.resteVictimesACommencerIndemnisation)}</td>
-                      <td className="px-4 py-3">{formatUSD.format(row.montantTotalPlanifieUSD)}</td>
-                      <td className="px-4 py-3">{formatUSD.format(row.montantTotalPayeUSD)}</td>
-                      <td className="px-4 py-3 font-semibold text-rose-700">{formatUSD.format(row.resteAPayer)}</td>
+                      <td className="px-2 py-3 font-semibold text-gray-900 break-words">{row.territoire}</td>
+                      <td className="px-2 py-3 break-words">{formatNombre.format(row.cibleTotale)}</td>
+                      <td className="px-2 py-3 break-words">{formatNombre.format(row.victimesRecontactees)}</td>
+                      <td className="px-2 py-3 text-blue-700 font-medium break-words">{formatPercent(row.pourcentageRecontactees)}</td>
+                      <td className="px-2 py-3 break-words">{formatNombre.format(row.contratsSignes)}</td>
+                      <td className="px-2 py-3 text-emerald-700 font-medium break-words">{formatPercent(row.pourcentageContratsSignes)}</td>
+                      <td className="px-2 py-3 break-words">{formatNombre.format(row.victimesAyantCommenceIndemnisation)}</td>
+                      <td className="px-2 py-3 text-orange-700 font-medium break-words">{formatPercent(row.pourcentageVictimesAyantCommenceIndemnisation)}</td>
+                      <td className="px-2 py-3 break-words">{formatNombre.format(row.resteVictimesACommencerIndemnisation)}</td>
+                      <td className="px-2 py-3 break-words">{formatUSD.format(row.montantTotalPlanifieUSD)}</td>
+                      <td className="px-2 py-3 break-words">{formatUSD.format(row.montantTotalPayeUSD)}</td>
+                      <td className="px-2 py-3 font-semibold text-rose-700 break-words">{formatUSD.format(row.resteAPayer)}</td>
                     </tr>
                   ))}
                   <tr className="bg-gray-900 text-white">
-                    <td className="px-4 py-3 font-bold">TOTAL GÉNÉRAL</td>
-                    <td className="px-4 py-3">{formatNombre.format(total.cibleTotale)}</td>
-                    <td className="px-4 py-3">{formatNombre.format(total.victimesRecontactees)}</td>
-                    <td className="px-4 py-3">{formatPercent(total.pourcentageRecontactees)}</td>
-                    <td className="px-4 py-3">{formatNombre.format(total.contratsSignes)}</td>
-                    <td className="px-4 py-3">{formatPercent(total.pourcentageContratsSignes)}</td>
-                    <td className="px-4 py-3">{formatNombre.format(total.victimesAyantCommenceIndemnisation)}</td>
-                    <td className="px-4 py-3">{formatPercent(total.pourcentageVictimesAyantCommenceIndemnisation)}</td>
-                    <td className="px-4 py-3">{formatNombre.format(total.resteVictimesACommencerIndemnisation)}</td>
-                    <td className="px-4 py-3">{formatUSD.format(total.montantTotalPlanifieUSD)}</td>
-                    <td className="px-4 py-3">{formatUSD.format(total.montantTotalPayeUSD)}</td>
-                    <td className="px-4 py-3 font-bold">{formatUSD.format(total.resteAPayer)}</td>
+                    <td className="px-2 py-3 font-bold break-words">TOTAL GÉNÉRAL</td>
+                    <td className="px-2 py-3 break-words">{formatNombre.format(total.cibleTotale)}</td>
+                    <td className="px-2 py-3 break-words">{formatNombre.format(total.victimesRecontactees)}</td>
+                    <td className="px-2 py-3 break-words">{formatPercent(total.pourcentageRecontactees)}</td>
+                    <td className="px-2 py-3 break-words">{formatNombre.format(total.contratsSignes)}</td>
+                    <td className="px-2 py-3 break-words">{formatPercent(total.pourcentageContratsSignes)}</td>
+                    <td className="px-2 py-3 break-words">{formatNombre.format(total.victimesAyantCommenceIndemnisation)}</td>
+                    <td className="px-2 py-3 break-words">{formatPercent(total.pourcentageVictimesAyantCommenceIndemnisation)}</td>
+                    <td className="px-2 py-3 break-words">{formatNombre.format(total.resteVictimesACommencerIndemnisation)}</td>
+                    <td className="px-2 py-3 break-words">{formatUSD.format(total.montantTotalPlanifieUSD)}</td>
+                    <td className="px-2 py-3 break-words">{formatUSD.format(total.montantTotalPayeUSD)}</td>
+                    <td className="px-2 py-3 font-bold break-words">{formatUSD.format(total.resteAPayer)}</td>
                   </tr>
                 </tbody>
               </table>

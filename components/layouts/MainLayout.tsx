@@ -151,7 +151,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, noZoom }) => {
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-gray-50 overflow-x-hidden">
       {/* Sidebar avec menu hamburger sur mobile */}
       {isMobile ? (
         <HamburgerMenu isOpen={isMenuOpen} toggleMenu={toggleMenu}>
@@ -163,10 +163,10 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, noZoom }) => {
         </div>
       )}
 
-      <div className={`flex-1 ${!isMobile ? 'md:ml-64' : ''} transition-all duration-300`}>
+      <div className={`flex-1 min-w-0 ${!isMobile ? 'md:pl-64' : ''} transition-all duration-300 overflow-x-hidden`}>
         <Header onMenuToggle={toggleMenu} isMobile={isMobile} />
-        <main className={`${noZoom ? '' : 'pt-24'} transition-all duration-300`}>
-          <div className={noZoom ? '' : 'zoom-90'}>
+        <main className={`${noZoom ? '' : 'pt-24'} transition-all duration-300 w-full min-w-0 overflow-x-hidden`}>
+          <div className={noZoom ? 'w-full min-w-0 overflow-x-hidden' : 'zoom-90'}>
             {children}
           </div>
         </main>

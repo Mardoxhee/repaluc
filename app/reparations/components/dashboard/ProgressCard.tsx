@@ -29,7 +29,7 @@ const ProgressCard: React.FC<ProgressCardProps> = ({
 
   return (
     <div
-      className={`relative overflow-hidden bg-white/95 rounded-lg shadow-[0_14px_40px_-28px_rgba(15,23,42,0.55)] border border-slate-200/70 p-5 hover:-translate-y-0.5 hover:shadow-[0_18px_44px_-26px_rgba(15,23,42,0.62)] transition-all duration-300 group ${onClick ? 'cursor-pointer' : ''}`}
+      className={`relative min-w-0 overflow-hidden bg-white/95 rounded-lg shadow-[0_14px_40px_-28px_rgba(15,23,42,0.55)] border border-slate-200/70 p-5 hover:-translate-y-0.5 hover:shadow-[0_18px_44px_-26px_rgba(15,23,42,0.62)] transition-all duration-300 group ${onClick ? 'cursor-pointer' : ''}`}
       onClick={onClick}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
@@ -40,7 +40,7 @@ const ProgressCard: React.FC<ProgressCardProps> = ({
     >
       <div className={`absolute inset-y-0 left-0 w-1 ${color}`} />
       <div className="flex items-start justify-between">
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <div className="flex items-start gap-3 mb-4">
             <div className={`p-2.5 rounded-md ${color} shadow-sm ring-1 ring-white/40 group-hover:scale-105 transition-transform duration-300`}>
               {icon}
@@ -52,13 +52,13 @@ const ProgressCard: React.FC<ProgressCardProps> = ({
           </div>
 
           <div>
-            <div className="flex items-end justify-between gap-4">
-              <div>
+            <div className="flex min-w-0 flex-wrap items-end justify-between gap-4">
+              <div className="min-w-0">
                 {loading ? (
                   <div className="h-8 w-24 bg-slate-100 animate-pulse rounded-lg" />
                 ) : (
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-black tracking-tight text-slate-950">{safeCurrent.toLocaleString()}</span>
+                  <div className="flex min-w-0 flex-wrap items-baseline gap-2">
+                    <span className="break-words text-3xl font-black tracking-tight text-slate-950">{safeCurrent.toLocaleString()}</span>
                     <span className="text-sm text-slate-500 font-medium">/ {safeTotal.toLocaleString()}</span>
                   </div>
                 )}

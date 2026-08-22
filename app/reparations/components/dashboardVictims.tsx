@@ -422,7 +422,7 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
   }));
 
   return (
-    <div className="w-full px-6 py-8 bg-gray-50 min-h-screen">
+    <div className="w-full min-w-0 overflow-x-hidden px-4 py-8 bg-gray-50 min-h-screen md:px-6">
       <OfflineIndicator
         isOffline={isOffline}
         showOfflineIndicator={showOfflineIndicator}
@@ -430,7 +430,7 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
       />
       {extraSection}
       {/* Cartes de statistiques principales */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-10">
 
 
         <StatCard
@@ -469,7 +469,7 @@ const DashboardVictims: React.FC<DashboardVictimsProps> = ({ onSelectAgentRepara
         />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-12">
 
         <ProgressCard
           title="Victimes recontactées"

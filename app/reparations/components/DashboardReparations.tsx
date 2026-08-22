@@ -73,7 +73,7 @@ const DashboardReparations: React.FC<DashboardReparationsProps> = ({
   const [selected, setSelected] = useState<ReparationsDashboardKey>(defaultDashboard);
 
   return (
-    <div className="w-full">
+    <div className="w-full min-w-0 overflow-x-hidden">
       <div className="mb-7 rounded-lg border border-primary-100 bg-gradient-to-br from-white via-slate-50 to-primary-50/40 p-5 shadow-[0_20px_55px_-42px_rgba(0,127,186,0.55)]">
         {showIntro && (
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -85,7 +85,7 @@ const DashboardReparations: React.FC<DashboardReparationsProps> = ({
           </div>
         )}
 
-        <div className={`${showIntro ? 'mt-5' : ''} grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3`}>
+        <div className={`${showIntro ? 'mt-5' : ''} grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3`}>
           {options.map((o) => {
             const active = o.key === selected;
             return (
