@@ -121,6 +121,8 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
     const locality = getSpecificValue(victim.variablesSpecifiques, ['LOCALITE', 'LOCALITÉ']);
     const householdNumber = getSpecificValue(victim.variablesSpecifiques, ['NUMÉRO DU MÉNAGE', 'NUMERO DU MENAGE']);
     const householdBlock = getSpecificValue(victim.variablesSpecifiques, ['NUMÉRO BLOC DU MÉNAGE', 'NUMERO BLOC DU MENAGE']);
+    const shelterName = getSpecificValue(victim.variablesSpecifiques, ['nomAbris', 'NOM ABRIS', 'NOM ABRI']);
+    const shelterNumber = getSpecificValue(victim.variablesSpecifiques, ['numeroAbris', 'NUMERO ABRIS', 'NUMÉRO ABRIS', 'NUMERO ABRI', 'NUMÉRO ABRI']);
     const declaredAge = getSpecificValue(victim.variablesSpecifiques, ['AGE']);
     const householdHead = getSpecificValue(victim.variablesSpecifiques, ['NOM DU CHEF DE MENAGE', 'NOM DU CHEF DE MÉNAGE']);
     const tanganyikaGroup = getSpecificValue(victim.variablesSpecifiques, ['GROUPES_TANGANYIKA']);
@@ -129,6 +131,8 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
         locality ||
         householdNumber ||
         householdBlock ||
+        shelterName ||
+        shelterNumber ||
         declaredAge ||
         householdHead ||
         tanganyikaGroup
@@ -914,6 +918,12 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
                                                 <span className="text-sm text-gray-800">{householdHead}</span>
                                             </div>
                                         )}
+                                        {shelterName && (
+                                            <div className="flex">
+                                                <span className="text-sm font-semibold text-gray-600 uppercase w-32 flex-shrink-0">Nom abris :</span>
+                                                <span className="text-sm text-gray-800">{shelterName}</span>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="p-4 space-y-3">
                                         {householdNumber && (
@@ -926,6 +936,12 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
                                             <div className="flex">
                                                 <span className="text-sm font-semibold text-gray-600 uppercase w-32 flex-shrink-0">N° Bloc :</span>
                                                 <span className="text-sm text-gray-800">{householdBlock}</span>
+                                            </div>
+                                        )}
+                                        {shelterNumber && (
+                                            <div className="flex">
+                                                <span className="text-sm font-semibold text-gray-600 uppercase w-32 flex-shrink-0">N° Abris :</span>
+                                                <span className="text-sm text-gray-800">{shelterNumber}</span>
                                             </div>
                                         )}
                                         {declaredAge && (
