@@ -17,7 +17,8 @@ import {
   Stethoscope,
   ClipboardList,
   ChevronRight,
-  Trash2
+  Trash2,
+  Home
 } from 'lucide-react';
 import { getQuestions } from '../../utils/planVieQuestionsCache';
 import { FetchContext } from '../../context/FetchContext';
@@ -32,6 +33,8 @@ import { isOnline } from '@/app/utils/victimsCache';
 import { deletePendingVictimDocById, getPendingDocsForVictim, getPendingVictimDocById, savePendingVictimDoc } from '@/app/utils/victimDocsCache';
 import { authenticatedFetch } from '@/app/utils/authFetch';
 import { readUploadResponseLink } from '@/app/utils/uploadResponse';
+import { savePendingVictimUpdate } from '@/app/utils/victimUpdatesCache';
+import { syncPendingVictimUpdates } from '@/app/utils/victimUpdatesSyncService';
 
 // Fonction pour obtenir le lien réel du fichier
 const getFileLink = async (lien: string): Promise<string> => {
@@ -114,6 +117,7 @@ interface Victim {
   commentaire?: string;
   prejudiceFinal?: string;
   indemnisation?: number;
+  mention?: string;
   variablesSpecifiques?: {
     [key: string]: string | null | undefined;
   };
@@ -137,10 +141,16 @@ interface VictimDetailModalProps {
 
 const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, onClose, onVictimUpdate, onDeletePhoto, onViewEvaluation }) => {
   const fetchCtx = useContext(FetchContext);
-  const useMpuPlanVie = mention?.trim().toLowerCase() === 'mpu';
-  const [tab, setTab] = useState<'info' | 'dossier' | 'progression' | 'reglages' | 'formulaires' | 'plan-de-vie' | 'contrat' | 'paiement'>('info');
+  const isMpuVictim = [mention, victim?.mention].some((value) => value?.trim().toLowerCase() === 'mpu');
+  const useMpuPlanVie = isMpuVictim;
+  const [tab, setTab] = useState<'info' | 'dossier' | 'progression' | 'reglages' | 'formulaires' | 'plan-de-vie' | 'contrat' | 'paiement' | 'camp-details'>('info');
   const [hasContrat, setHasContrat] = useState(false);
   const [currentVictim, setCurrentVictim] = useState<Victim>(victim);
+  const [campDetailsForm, setCampDetailsForm] = useState({
+    nomAbris: victim?.variablesSpecifiques?.nomAbris || '',
+    numeroAbris: victim?.variablesSpecifiques?.numeroAbris || '',
+  });
+  const [savingCampDetails, setSavingCampDetails] = useState(false);
   const [selectedForm, setSelectedForm] = useState<string | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
   const [files, setFiles] = useState<Array<{ id: number; label: string; name?: string; lien?: string }>>([]);
@@ -175,7 +185,133 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
 
   useEffect(() => {
     setCurrentVictim(victim);
+    setCampDetailsForm({
+      nomAbris: victim?.variablesSpecifiques?.nomAbris || '',
+      numeroAbris: victim?.variablesSpecifiques?.numeroAbris || '',
+    });
   }, [victim]);
+
+  const handleCampDetailsSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!currentVictim?.id) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'ID manquant',
+        text: 'Impossible de modifier les détails du camp sans ID de victime.',
+        confirmButtonColor: '#901c67',
+      });
+      return;
+    }
+
+    const nextVariables = {
+      nomAbris: campDetailsForm.nomAbris.trim(),
+      numeroAbris: campDetailsForm.numeroAbris.trim(),
+    };
+
+    const currentVariables = currentVictim.variablesSpecifiques || {};
+    const changedVariables = Object.fromEntries(
+      Object.entries(nextVariables).filter(([key, value]) => (currentVariables[key] || '') !== value)
+    );
+
+    if (Object.keys(changedVariables).length === 0) {
+      await Swal.fire({
+        icon: 'info',
+        title: 'Aucune modification',
+        text: 'Les détails du camp sont déjà à jour.',
+        confirmButtonColor: '#901c67',
+      });
+      return;
+    }
+
+    const payload = {
+      variablesSpecifiques: changedVariables,
+    };
+
+    setSavingCampDetails(true);
+    try {
+      if (!isOnline()) {
+        await savePendingVictimUpdate(currentVictim.id, payload);
+      } else {
+        const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
+        const response = await authenticatedFetch(`${baseUrl}/victime/${currentVictim.id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          const error = new Error('Erreur lors de la mise à jour des détails du camp') as Error & { skipOfflineSave?: boolean };
+          error.skipOfflineSave = true;
+          throw error;
+        }
+      }
+
+      const updatedVictim = {
+        ...currentVictim,
+        variablesSpecifiques: {
+          ...currentVictim.variablesSpecifiques,
+          ...changedVariables,
+        },
+      };
+      setCurrentVictim(updatedVictim);
+      onVictimUpdate?.(updatedVictim);
+
+      if (isOnline()) {
+        syncPendingVictimUpdates().catch(() => undefined);
+      }
+
+      await Swal.fire({
+        icon: 'success',
+        title: 'Détails du camp enregistrés',
+        text: isOnline()
+          ? 'Les informations ont été mises à jour.'
+          : 'Les informations sont sauvegardées hors ligne et seront synchronisées à la reconnexion.',
+        timer: 1800,
+        showConfirmButton: false,
+      });
+    } catch (error: any) {
+      if (error?.skipOfflineSave) {
+        await Swal.fire({
+          icon: 'error',
+          title: 'Enregistrement impossible',
+          text: error?.message || 'Impossible d’enregistrer les détails du camp.',
+          confirmButtonColor: '#901c67',
+        });
+        return;
+      }
+
+      try {
+        await savePendingVictimUpdate(currentVictim.id, payload);
+        const updatedVictim = {
+          ...currentVictim,
+          variablesSpecifiques: {
+            ...currentVictim.variablesSpecifiques,
+            ...changedVariables,
+          },
+        };
+        setCurrentVictim(updatedVictim);
+        onVictimUpdate?.(updatedVictim);
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Sauvegarde hors ligne',
+          text: 'La mise à jour réseau a échoué. Les détails du camp sont gardés hors ligne et seront synchronisés plus tard.',
+          confirmButtonColor: '#901c67',
+        });
+      } catch {
+        await Swal.fire({
+          icon: 'error',
+          title: 'Enregistrement impossible',
+          text: error?.message || 'Impossible d’enregistrer les détails du camp.',
+          confirmButtonColor: '#901c67',
+        });
+      }
+    } finally {
+      setSavingCampDetails(false);
+    }
+  };
 
   const stopDocStream = (s: MediaStream | null) => {
     if (!s) return;
@@ -745,6 +881,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
     { id: 'progression', label: 'Progression', icon: BarChart2 },
     { id: 'formulaires', label: 'Formulaires', icon: ClipboardList },
     { id: 'plan-de-vie', label: 'Plan de vie', icon: FileText },
+    ...(isMpuVictim ? [{ id: 'camp-details', label: 'Détails du camp', icon: Home }] : []),
     { id: 'contrat', label: 'Contrat', icon: FileText },
     // Afficher l'onglet Suivi Paiement uniquement si la victime a un contrat
     ...(hasContrat ? [{ id: 'paiement', label: 'Suivi Paiement', icon: GiReceiveMoney }] : []),
@@ -1586,6 +1723,67 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
           {tab === 'paiement' && hasContrat && (
             <div className="!bg-white !text-gray-900">
               <SuiviPaiement victim={currentVictim} />
+            </div>
+          )}
+
+          {tab === 'camp-details' && isMpuVictim && (
+            <div className="!bg-white !text-gray-900">
+              <div className="max-w-2xl">
+                <div className="mb-5">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    <Home className="text-pink-600" size={20} />
+                    Détails du camp
+                  </h3>
+                </div>
+
+                <form onSubmit={handleCampDetailsSubmit} className="space-y-4">
+                  <div>
+                    <label htmlFor="nomAbris" className="block text-sm font-medium text-gray-700 mb-1">
+                      Nom abris
+                    </label>
+                    <input
+                      id="nomAbris"
+                      type="text"
+                      value={campDetailsForm.nomAbris}
+                      onChange={(event) => setCampDetailsForm((prev) => ({ ...prev, nomAbris: event.target.value }))}
+                      className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-pink-500 focus:outline-none focus:ring-2 focus:ring-pink-500/20"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="numeroAbris" className="block text-sm font-medium text-gray-700 mb-1">
+                      Numéro abris
+                    </label>
+                    <input
+                      id="numeroAbris"
+                      type="text"
+                      value={campDetailsForm.numeroAbris}
+                      onChange={(event) => setCampDetailsForm((prev) => ({ ...prev, numeroAbris: event.target.value }))}
+                      className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-pink-500 focus:outline-none focus:ring-2 focus:ring-pink-500/20"
+                    />
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <button
+                      type="submit"
+                      disabled={savingCampDetails}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-pink-600 text-white text-sm font-medium rounded hover:bg-pink-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {savingCampDetails ? (
+                        <>
+                          <Loader2 className="animate-spin" size={16} />
+                          Enregistrement...
+                        </>
+                      ) : (
+                        <>
+                          <Check size={16} />
+                          Enregistrer
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           )}
 

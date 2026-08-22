@@ -3,6 +3,7 @@ import MainLayout from "@/components/layouts/MainLayout";
 import { ContractsSyncProvider } from "../components/ContractsSyncProvider";
 import { VictimPhotosSyncProvider } from "../components/VictimPhotosSyncProvider";
 import { VictimDocsSyncProvider } from "../components/VictimDocsSyncProvider";
+import { VictimUpdatesSyncProvider } from "../components/VictimUpdatesSyncProvider";
 
 export default function ClientsLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -10,7 +11,9 @@ export default function ClientsLayout({ children }: { children: React.ReactNode 
       <ContractsSyncProvider>
         <VictimPhotosSyncProvider>
           <VictimDocsSyncProvider>
-            {children}
+            <VictimUpdatesSyncProvider>
+              {children}
+            </VictimUpdatesSyncProvider>
           </VictimDocsSyncProvider>
         </VictimPhotosSyncProvider>
       </ContractsSyncProvider>
