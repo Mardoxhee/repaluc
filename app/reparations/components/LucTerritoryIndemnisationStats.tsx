@@ -385,187 +385,185 @@ const LucTerritoryIndemnisationStats: React.FC = () => {
         doc.text(`Page ${page}`, pageWidth - margin, pageHeight - 7, { align: 'right' });
       };
 
+      const contentWidth = pageWidth - margin * 2;
+      const paidRatio = Math.min(1, total.montantTotalPayeUSD / Math.max(total.montantTotalPlanifieUSD, 1));
+      const topReste = [...territoires].sort((a, b) => b.resteAPayer - a.resteAPayer).slice(0, 6);
+
+      const drawSectionTitle = (title: string, y: number, note?: string) => {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10.5);
+        setText(darkText);
+        doc.text(title, margin, y);
+        if (note) {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8);
+          setText(grayText);
+          doc.text(note, pageWidth - margin, y, { align: 'right' });
+        }
+      };
+
       setFill(primary);
-      doc.rect(0, 0, pageWidth, 7, 'F');
-      setFill('#ffffff');
-      doc.rect(0, 7, pageWidth, 45, 'F');
-      setDraw(border);
-      doc.setLineWidth(0.35);
-      doc.line(margin, 52, pageWidth - margin, 52);
-      setFill(primarySoft);
-      doc.roundedRect(margin, 16, 14, 14, 2.5, 2.5, 'F');
+      doc.rect(0, 0, pageWidth, 34, 'F');
+      setFill(primaryDark);
+      doc.rect(0, 0, 9, 34, 'F');
       doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      setText('#bfdbfe');
+      doc.text('REPUBLIQUE DEMOCRATIQUE DU CONGO', margin, 9);
+      doc.setFontSize(15);
+      setText('#ffffff');
+      doc.text('FONAREV OPERATIONAL', margin, 18);
+      doc.setFont('helvetica', 'normal');
       doc.setFontSize(8.5);
+      doc.text('Systeme de Suivi des Victimes - Reparations administratives integrales', margin, 27);
+      setFill('#ffffff');
+      doc.roundedRect(pageWidth - margin - 32, 8, 32, 14, 2, 2, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
       setText(primary);
-      doc.text('LUC', margin + 7, 25, { align: 'center' });
+      doc.text('LUC', pageWidth - margin - 16, 17, { align: 'center' });
+      doc.setFontSize(7.5);
+      setText('#dbeafe');
+      doc.text('RAPPORT D\'EXTRACTION', pageWidth - margin, 29, { align: 'right' });
+
+      const contextY = 42;
+      const contextW = (contentWidth - 8) / 3;
+      [
+        { label: 'Province', value: provinceLabel },
+        { label: 'Date d\'export', value: generatedAt.toLocaleString('fr-FR') },
+        { label: 'Territoires suivis', value: `${formatPdfNumber(data?.totalTerritoires || territoires.length)}` },
+      ].forEach((item, index) => {
+        const x = margin + index * (contextW + 4);
+        setFill('#ffffff');
+        setDraw(border);
+        doc.roundedRect(x, contextY, contextW, 13, 2, 2, 'FD');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(6.5);
+        setText(grayText);
+        doc.text(item.label.toUpperCase(), x + 4, contextY + 5);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8.5);
+        setText(darkText);
+        doc.text(item.value, x + 4, contextY + 10, { maxWidth: contextW - 8 });
+      });
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(18);
+      setText(darkText);
+      doc.text('Suivi de l\'indemnisation', margin, 70);
+      doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
       setText(grayText);
-      doc.text('REPUBLIQUE DEMOCRATIQUE DU CONGO', margin + 20, 17);
-      doc.setFontSize(14);
-      setText(darkText);
-      doc.text('FONAREV OPERATIONAL', margin + 20, 25);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8.5);
-      setText(grayText);
-      doc.text('Systeme de Suivi des Victimes - Reparations administratives integrales', margin + 20, 32);
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8);
-      setText(primaryDark);
-      doc.text('RAPPORT D\'EXTRACTION', pageWidth - margin, 19, { align: 'right' });
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      setText(grayText);
-      doc.text(`Province: ${provinceLabel}`, pageWidth - margin, 27, { align: 'right' });
-      doc.text(`Export: ${generatedAt.toLocaleString('fr-FR')}`, pageWidth - margin, 34, { align: 'right' });
+      doc.text('Contrats, paiements et reste a payer consolides par territoire LUC.', margin, 78);
 
-      setText(darkText);
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(20);
-      doc.text('Extraction suivi indemnisation', margin, 68);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10);
-      setText(grayText);
-      doc.text('Lecture consolidee des contrats, paiements et restes a payer par territoire LUC.', margin, 76);
-
-      setText(darkText);
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(11);
-      doc.text('Synthese generale', margin, 93);
-
-      const summaryTop = 100;
-      const summaryHeight = 35;
-      const leftPanelW = 96;
+      drawSectionTitle('Synthese financiere', 94);
+      const financeY = 101;
       setFill('#ffffff');
       setDraw(border);
-      doc.roundedRect(margin, summaryTop, leftPanelW, summaryHeight, 3, 3, 'FD');
+      doc.roundedRect(margin, financeY, contentWidth, 38, 3, 3, 'FD');
       setFill(primarySoft);
-      doc.rect(margin, summaryTop, leftPanelW, 8, 'F');
+      doc.roundedRect(margin + 4, financeY + 4, 69, 30, 2.5, 2.5, 'F');
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(7.5);
       setText(primaryDark);
-      doc.text('SITUATION FINANCIERE', margin + 5, summaryTop + 5.5);
+      doc.text('MASSE PLANIFIEE', margin + 9, financeY + 12);
       doc.setFontSize(17);
       setText(darkText);
-      doc.text(money(total.montantTotalPlanifieUSD), margin + 5, summaryTop + 19);
+      doc.text(money(total.montantTotalPlanifieUSD), margin + 9, financeY + 24);
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
+      doc.setFontSize(7.5);
       setText(grayText);
-      doc.text(`Planifie - ${money(total.montantTotalPayeUSD)} deja paye`, margin + 5, summaryTop + 27);
-      setFill('#e5e7eb');
-      doc.roundedRect(margin + 5, summaryTop + 30, leftPanelW - 10, 2.8, 1.4, 1.4, 'F');
-      setFill(primary);
-      doc.roundedRect(
-        margin + 5,
-        summaryTop + 30,
-        (leftPanelW - 10) * Math.min(1, total.montantTotalPayeUSD / Math.max(total.montantTotalPlanifieUSD, 1)),
-        2.8,
-        1.4,
-        1.4,
-        'F'
-      );
+      doc.text(`${percent(paidRatio * 100)} deja verse`, margin + 9, financeY + 31);
 
-      const rightPanelX = margin + leftPanelW + 8;
-      const rightPanelW = pageWidth - margin - rightPanelX;
-      setFill('#ffffff');
-      setDraw(border);
-      doc.roundedRect(rightPanelX, summaryTop, rightPanelW, summaryHeight, 3, 3, 'FD');
-      const metricColumns = [
-        { label: 'Cible', value: formatPdfNumber(total.cibleTotale), meta: `${data?.totalTerritoires || territoires.length} territoires` },
-        { label: 'Recontactees', value: formatPdfNumber(total.victimesRecontactees), meta: percent(total.pourcentageRecontactees) },
-        { label: 'Contrats signes', value: formatPdfNumber(total.contratsSignes), meta: percent(total.pourcentageContratsSignes) },
-        { label: 'Indemnisation', value: formatPdfNumber(total.victimesAyantCommenceIndemnisation), meta: percent(total.pourcentageVictimesAyantCommenceIndemnisation) },
-      ];
-      metricColumns.forEach((metric, index) => {
-        const colW = rightPanelW / 4;
-        const x = rightPanelX + index * colW;
-        if (index > 0) {
-          setDraw('#e2e8f0');
-          doc.line(x, summaryTop + 8, x, summaryTop + summaryHeight - 7);
-        }
+      const financeMetricX = margin + 82;
+      const financeMetricW = (contentWidth - 92) / 2;
+      [
+        { label: 'Deja paye', value: money(total.montantTotalPayeUSD), color: COLORS.paye },
+        { label: 'Reste a payer', value: money(total.resteAPayer), color: COLORS.reste },
+      ].forEach((item, index) => {
+        const x = financeMetricX + index * (financeMetricW + 10);
+        setDraw('#e2e8f0');
+        doc.line(x - 5, financeY + 8, x - 5, financeY + 30);
+        setFill(item.color);
+        doc.roundedRect(x, financeY + 10, 3, 14, 1, 1, 'F');
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7);
+        doc.setFontSize(7.5);
         setText(grayText);
-        doc.text(metric.label.toUpperCase(), x + 5, summaryTop + 10);
+        doc.text(item.label.toUpperCase(), x + 7, financeY + 13);
+        doc.setFontSize(item.value.length > 15 ? 12 : 14);
+        setText(darkText);
+        doc.text(item.value, x + 7, financeY + 24, { maxWidth: financeMetricW - 7 });
+      });
+      setFill('#e5e7eb');
+      doc.roundedRect(margin + 4, financeY + 34, contentWidth - 8, 2.5, 1.2, 1.2, 'F');
+      setFill(primary);
+      doc.roundedRect(margin + 4, financeY + 34, (contentWidth - 8) * paidRatio, 2.5, 1.2, 1.2, 'F');
+
+      const kpiY = 151;
+      const kpiW = (contentWidth - 9) / 4;
+      [
+        { label: 'Cible totale', value: formatPdfNumber(total.cibleTotale), meta: `${data?.totalTerritoires || territoires.length} territoires`, color: primary },
+        { label: 'Recontactees', value: formatPdfNumber(total.victimesRecontactees), meta: percent(total.pourcentageRecontactees), color: COLORS.recontact },
+        { label: 'Contrats signes', value: formatPdfNumber(total.contratsSignes), meta: percent(total.pourcentageContratsSignes), color: COLORS.contrat },
+        { label: 'Indemnisation demarree', value: formatPdfNumber(total.victimesAyantCommenceIndemnisation), meta: percent(total.pourcentageVictimesAyantCommenceIndemnisation), color: COLORS.indemnisation },
+      ].forEach((metric, index) => {
+        const x = margin + index * (kpiW + 3);
+        setFill('#ffffff');
+        setDraw('#e2e8f0');
+        doc.roundedRect(x, kpiY, kpiW, 28, 2.5, 2.5, 'FD');
+        setFill(metric.color);
+        doc.rect(x, kpiY, kpiW, 2.2, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(6.7);
+        setText(grayText);
+        doc.text(metric.label.toUpperCase(), x + 4, kpiY + 8, { maxWidth: kpiW - 8 });
         doc.setFontSize(15);
         setText(darkText);
-        doc.text(metric.value, x + 5, summaryTop + 22);
+        doc.text(metric.value, x + 4, kpiY + 19, { maxWidth: kpiW - 8 });
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(8);
-        setText(primaryDark);
-        doc.text(metric.meta, x + 5, summaryTop + 30);
+        doc.setFontSize(7.5);
+        setText(metric.color);
+        doc.text(metric.meta, x + 4, kpiY + 25);
       });
 
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(11);
-      setText(darkText);
-      doc.text('Circuit de reporting', margin, 153);
-      const stepY = 161;
-      const stepW = (pageWidth - margin * 2 - 10) / 3;
+      drawSectionTitle('Circuit de reporting', 196, 'Progression des victimes dans le parcours LUC');
+      const timelineY = 210;
+      const timelineX = margin + 8;
+      const timelineW = contentWidth - 16;
+      setDraw('#bfdbfe');
+      doc.setLineWidth(0.6);
+      doc.line(timelineX, timelineY, timelineX + timelineW, timelineY);
       reportingSteps.forEach((step, index) => {
-        const x = margin + index * (stepW + 5);
-        setFill(index === 0 ? '#f8fafc' : '#ffffff');
-        setDraw(border);
-        doc.roundedRect(x, stepY, stepW, 33, 3, 3, 'FD');
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(8);
-        setText(grayText);
-        doc.text(step.label.toUpperCase(), x + 5, stepY + 8);
-        doc.setFontSize(16);
-        setText(darkText);
-        doc.text(formatPdfNumber(step.value), x + 5, stepY + 18);
-        setFill('#e5e7eb');
-        doc.roundedRect(x + 5, stepY + 24, stepW - 10, 3, 1.5, 1.5, 'F');
+        const x = timelineX + index * (timelineW / 2);
         setFill(step.color);
-        doc.roundedRect(x + 5, stepY + 24, (stepW - 10) * Math.min(100, Math.max(0, step.pct)) / 100, 3, 1.5, 1.5, 'F');
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(8);
-        setText(grayText);
-        doc.text(percent(step.pct), x + stepW - 5, stepY + 18, { align: 'right' });
-      });
-
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(11);
-      setText(darkText);
-      doc.text('Lecture financiere', margin, 210);
-      const maxMoney = Math.max(total.montantTotalPlanifieUSD, total.montantTotalPayeUSD, total.resteAPayer, 1);
-      [
-        { label: 'Planifié', value: total.montantTotalPlanifieUSD, color: COLORS.planifie },
-        { label: 'Payé', value: total.montantTotalPayeUSD, color: COLORS.paye },
-        { label: 'Reste à payer', value: total.resteAPayer, color: COLORS.reste },
-      ].forEach((item, index) => {
-        const y = 219 + index * 12;
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9);
-        setText(darkText);
-        doc.text(item.label, margin, y);
-        setFill('#edf2f7');
-        doc.roundedRect(margin + 35, y - 4, 104, 6, 2, 2, 'F');
-        setFill(item.color);
-        doc.roundedRect(margin + 35, y - 4, 104 * item.value / maxMoney, 6, 2, 2, 'F');
+        doc.circle(x, timelineY, 3.2, 'F');
         doc.setFont('helvetica', 'bold');
-        doc.text(money(item.value), pageWidth - margin, y, { align: 'right' });
+        doc.setFontSize(13);
+        setText(darkText);
+        doc.text(formatPdfNumber(step.value), x, timelineY + 13, { align: 'center' });
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        setText(grayText);
+        doc.text(step.label, x, timelineY + 20, { align: 'center', maxWidth: 45 });
+        doc.setFont('helvetica', 'bold');
+        setText(step.color);
+        doc.text(percent(step.pct), x, timelineY + 26, { align: 'center' });
       });
 
-      const topReste = [...territoires].sort((a, b) => b.resteAPayer - a.resteAPayer).slice(0, 5);
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(11);
-      setText(darkText);
-      doc.text('Masse par territoire', margin, 259);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      setText(grayText);
-      doc.text('Montant represente: reste a payer par territoire', margin + 52, 259);
+      drawSectionTitle('Masse par territoire', 248, 'Montant represente: reste a payer par territoire');
       const maxReste = Math.max(...topReste.map((row) => row.resteAPayer), 1);
       topReste.forEach((row, index) => {
-        const y = 268 + index * 4.8;
+        const y = 258 + index * 5.5;
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(7.5);
         setText(darkText);
-        doc.text(row.territoire.slice(0, 18), margin, y);
-        setFill('#fee2e2');
-        doc.rect(margin + 36, y - 3, 80, 3, 'F');
-        setFill(COLORS.reste);
-        doc.rect(margin + 36, y - 3, 80 * row.resteAPayer / maxReste, 3, 'F');
+        doc.text(row.territoire.slice(0, 22), margin, y);
+        setFill('#e2e8f0');
+        doc.roundedRect(margin + 42, y - 3.2, 86, 3.2, 1.6, 1.6, 'F');
+        setFill(primary);
+        doc.roundedRect(margin + 42, y - 3.2, 86 * row.resteAPayer / maxReste, 3.2, 1.6, 1.6, 'F');
+        doc.setFont('helvetica', 'bold');
+        setText(darkText);
         doc.text(money(row.resteAPayer), pageWidth - margin, y, { align: 'right' });
       });
       drawFooter(1);
