@@ -15,6 +15,7 @@ import {
   FiAlertCircle,
   FiCheckCircle,
   FiCreditCard,
+  FiDownload,
   FiDollarSign,
   FiFileText,
   FiMapPin,
@@ -44,6 +45,7 @@ type TableauBordLucTotal = Omit<TableauBordLucTerritoire, 'territoire'>;
 interface TableauBordLucResponse {
   success: boolean;
   mention: 'LUC';
+  province?: string;
   totalTerritoires: number;
   territoires: TableauBordLucTerritoire[];
   totalGeneral: TableauBordLucTotal;
@@ -102,6 +104,9 @@ const normalizeTerritory = (row: any): TableauBordLucTerritoire => ({
 
 const normalizeResponse = (payload: any): TableauBordLucResponse => {
   const data = payload?.data ?? payload ?? {};
+  const province = [data?.province, data?.provinceName, data?.nomProvince]
+    .find((value) => typeof value === 'string' && value.trim().length > 0)
+    ?.trim() || 'Toutes-provinces';
   const territoires = Array.isArray(data?.territoires)
     ? data.territoires.map(normalizeTerritory)
     : [];
@@ -112,6 +117,7 @@ const normalizeResponse = (payload: any): TableauBordLucResponse => {
   return {
     success: Boolean(data?.success ?? true),
     mention: 'LUC',
+    province,
     totalTerritoires: toNumber(data?.totalTerritoires ?? territoires.length),
     territoires,
     totalGeneral: {
@@ -131,6 +137,47 @@ const normalizeResponse = (payload: any): TableauBordLucResponse => {
 };
 
 const formatPercent = (value: number) => `${value.toFixed(2)} %`;
+
+const formatDateForFile = (date = new Date()) => {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}_${pad(date.getHours())}${pad(date.getMinutes())}`;
+};
+
+const normalizeFileSegment = (value: string) => (
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'Toutes-provinces'
+);
+
+const getExportFileBaseName = (response: TableauBordLucResponse | null, date = new Date()) => {
+  const province = normalizeFileSegment(response?.province || 'Toutes-provinces');
+  return `Extraction_Suivi-idenmnisation_${province}_${formatDateForFile(date)}`;
+};
+
+const hexToRgb = (hex: string): [number, number, number] => {
+  const clean = hex.replace('#', '');
+  const value = parseInt(clean, 16);
+  return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+};
+
+const getExportRows = (territoires: TableauBordLucTerritoire[]) => (
+  territoires.map((row) => ({
+    Territoire: row.territoire,
+    'Cible totale': row.cibleTotale,
+    'Victimes recontactées': row.victimesRecontactees,
+    '% recontactées': row.pourcentageRecontactees,
+    'Contrats signés': row.contratsSignes,
+    '% contrats signés': row.pourcentageContratsSignes,
+    'Indemnisation commencée': row.victimesAyantCommenceIndemnisation,
+    '% indemnisation commencée': row.pourcentageVictimesAyantCommenceIndemnisation,
+    'Victimes restant à commencer': row.resteVictimesACommencerIndemnisation,
+    'Montant planifié USD': row.montantTotalPlanifieUSD,
+    'Montant payé USD': row.montantTotalPayeUSD,
+    'Reste à payer USD': row.resteAPayer,
+  }))
+);
 
 const KpiCard = ({
   title,
@@ -164,6 +211,8 @@ const LucTerritoryIndemnisationStats: React.FC = () => {
   const [data, setData] = useState<TableauBordLucResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exportingExcel, setExportingExcel] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   const loadStats = async () => {
     setLoading(true);
@@ -226,6 +275,341 @@ const LucTerritoryIndemnisationStats: React.FC = () => {
     },
   ];
 
+  const canExport = territoires.length > 0 && !loading && !error;
+
+  const handleExportExcel = async () => {
+    if (!canExport) return;
+
+    setExportingExcel(true);
+    try {
+      const XLSX = await import('xlsx');
+      const workbook = XLSX.utils.book_new();
+      const generatedAt = new Date();
+
+      const summaryRows = [
+        ['Rapport', 'Suivi LUC par territoire'],
+        ['Date d’export', generatedAt.toLocaleString('fr-FR')],
+        ['Mention', 'LUC'],
+        ['Province', data?.province || 'Toutes-provinces'],
+        ['Territoires suivis', data?.totalTerritoires || territoires.length],
+        [],
+        ['Indicateur', 'Valeur', 'Pourcentage'],
+        ['Cible totale', total.cibleTotale, ''],
+        ['Victimes recontactées', total.victimesRecontactees, total.pourcentageRecontactees],
+        ['Contrats signés', total.contratsSignes, total.pourcentageContratsSignes],
+        ['Indemnisation commencée', total.victimesAyantCommenceIndemnisation, total.pourcentageVictimesAyantCommenceIndemnisation],
+        ['Victimes restant à commencer', total.resteVictimesACommencerIndemnisation, ''],
+        ['Montant planifié USD', total.montantTotalPlanifieUSD, ''],
+        ['Montant payé USD', total.montantTotalPayeUSD, ''],
+        ['Reste à payer USD', total.resteAPayer, ''],
+      ];
+      const summarySheet = XLSX.utils.aoa_to_sheet(summaryRows);
+      summarySheet['!cols'] = [{ wch: 34 }, { wch: 22 }, { wch: 18 }];
+      XLSX.utils.book_append_sheet(workbook, summarySheet, 'Synthèse');
+
+      const territorySheet = XLSX.utils.json_to_sheet(getExportRows(territoires));
+      territorySheet['!cols'] = [
+        { wch: 22 },
+        { wch: 14 },
+        { wch: 20 },
+        { wch: 16 },
+        { wch: 16 },
+        { wch: 18 },
+        { wch: 24 },
+        { wch: 26 },
+        { wch: 28 },
+        { wch: 22 },
+        { wch: 18 },
+        { wch: 20 },
+      ];
+      territorySheet['!autofilter'] = { ref: `A1:L${territoires.length + 1}` };
+      XLSX.utils.book_append_sheet(workbook, territorySheet, 'Territoires');
+
+      const chartSheet = XLSX.utils.json_to_sheet([
+        ...territoires.map((row) => ({
+          Territoire: row.territoire,
+          Cible: row.cibleTotale,
+          Recontactées: row.victimesRecontactees,
+          Contrats: row.contratsSignes,
+          'Indemnisation commencée': row.victimesAyantCommenceIndemnisation,
+          Planifié: row.montantTotalPlanifieUSD,
+          Payé: row.montantTotalPayeUSD,
+          'Reste à payer': row.resteAPayer,
+        })),
+      ]);
+      chartSheet['!cols'] = [{ wch: 22 }, { wch: 12 }, { wch: 16 }, { wch: 14 }, { wch: 24 }, { wch: 16 }, { wch: 16 }, { wch: 18 }];
+      XLSX.utils.book_append_sheet(workbook, chartSheet, 'Données graphiques');
+
+      XLSX.writeFile(workbook, `${getExportFileBaseName(data, generatedAt)}.xlsx`);
+    } finally {
+      setExportingExcel(false);
+    }
+  };
+
+  const handleExportPdf = async () => {
+    if (!canExport) return;
+
+    setExportingPdf(true);
+    try {
+      const { jsPDF } = await import('jspdf');
+      const generatedAt = new Date();
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 14;
+      const primary = '#1f4e78';
+      const softBlue = '#eaf3fb';
+      const grayText = '#64748b';
+      const darkText = '#0f172a';
+
+      const setFill = (hex: string) => doc.setFillColor(...hexToRgb(hex));
+      const setText = (hex: string) => doc.setTextColor(...hexToRgb(hex));
+      const setDraw = (hex: string) => doc.setDrawColor(...hexToRgb(hex));
+      const money = (value: number) => `${Math.round(value).toLocaleString('fr-FR')} USD`;
+      const percent = (value: number) => `${value.toFixed(1)}%`;
+
+      const drawFooter = (page: number) => {
+        setDraw('#dbeafe');
+        doc.setLineWidth(0.2);
+        doc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        setText(grayText);
+        doc.text('FONAREV OPS - Tableau de bord LUC par territoire', margin, pageHeight - 7);
+        doc.text(`Page ${page}`, pageWidth - margin, pageHeight - 7, { align: 'right' });
+      };
+
+      setFill(primary);
+      doc.rect(0, 0, pageWidth, 46, 'F');
+      setFill('#2f80c8');
+      doc.roundedRect(margin, 12, 15, 15, 3, 3, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      setText('#ffffff');
+      doc.text('LUC', margin + 7.5, 21.5, { align: 'center' });
+      doc.setFontSize(20);
+      doc.text('Suivi LUC par territoire', margin + 22, 18);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.text('Contrats, indemnisations et reste à payer - synthèse opérationnelle', margin + 22, 27);
+      doc.text(`Exporté le ${generatedAt.toLocaleString('fr-FR')}`, margin + 22, 35);
+
+      setText(darkText);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.text('Synthèse générale', margin, 58);
+
+      const cardW = (pageWidth - margin * 2 - 8) / 2;
+      const cards = [
+        { label: 'Cible totale', value: formatNombre.format(total.cibleTotale), meta: `${data?.totalTerritoires || territoires.length} territoire(s)`, color: COLORS.cible },
+        { label: 'Contrats signés', value: formatNombre.format(total.contratsSignes), meta: percent(total.pourcentageContratsSignes), color: COLORS.contrat },
+        { label: 'Indemnisation commencée', value: formatNombre.format(total.victimesAyantCommenceIndemnisation), meta: `${formatNombre.format(total.resteVictimesACommencerIndemnisation)} à démarrer`, color: COLORS.indemnisation },
+        { label: 'Reste à payer', value: money(total.resteAPayer), meta: `${money(total.montantTotalPayeUSD)} payé`, color: COLORS.reste },
+      ];
+
+      cards.forEach((card, index) => {
+        const x = margin + (index % 2) * (cardW + 8);
+        const y = 64 + Math.floor(index / 2) * 31;
+        setFill('#ffffff');
+        setDraw('#dbeafe');
+        doc.roundedRect(x, y, cardW, 24, 3, 3, 'FD');
+        setFill(card.color);
+        doc.roundedRect(x, y, 3, 24, 2, 2, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        setText(grayText);
+        doc.text(card.label.toUpperCase(), x + 8, y + 8);
+        doc.setFontSize(card.value.length > 15 ? 12 : 15);
+        setText(darkText);
+        doc.text(card.value, x + 8, y + 16);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        setText(grayText);
+        doc.text(card.meta, x + 8, y + 21);
+      });
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      setText(darkText);
+      doc.text('Circuit de reporting', margin, 136);
+      const stepY = 144;
+      const stepW = (pageWidth - margin * 2 - 10) / 3;
+      reportingSteps.forEach((step, index) => {
+        const x = margin + index * (stepW + 5);
+        setFill(softBlue);
+        setDraw('#dbeafe');
+        doc.roundedRect(x, stepY, stepW, 33, 3, 3, 'FD');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        setText(grayText);
+        doc.text(step.label.toUpperCase(), x + 5, stepY + 8);
+        doc.setFontSize(16);
+        setText(darkText);
+        doc.text(formatNombre.format(step.value), x + 5, stepY + 18);
+        setFill('#ffffff');
+        doc.roundedRect(x + 5, stepY + 24, stepW - 10, 3, 1.5, 1.5, 'F');
+        setFill(step.color);
+        doc.roundedRect(x + 5, stepY + 24, (stepW - 10) * Math.min(100, Math.max(0, step.pct)) / 100, 3, 1.5, 1.5, 'F');
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        setText(grayText);
+        doc.text(percent(step.pct), x + stepW - 5, stepY + 18, { align: 'right' });
+      });
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      setText(darkText);
+      doc.text('Lecture financière', margin, 193);
+      const maxMoney = Math.max(total.montantTotalPlanifieUSD, total.montantTotalPayeUSD, total.resteAPayer, 1);
+      [
+        { label: 'Planifié', value: total.montantTotalPlanifieUSD, color: COLORS.planifie },
+        { label: 'Payé', value: total.montantTotalPayeUSD, color: COLORS.paye },
+        { label: 'Reste à payer', value: total.resteAPayer, color: COLORS.reste },
+      ].forEach((item, index) => {
+        const y = 202 + index * 15;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        setText(darkText);
+        doc.text(item.label, margin, y);
+        setFill('#edf2f7');
+        doc.roundedRect(margin + 35, y - 4, 104, 6, 2, 2, 'F');
+        setFill(item.color);
+        doc.roundedRect(margin + 35, y - 4, 104 * item.value / maxMoney, 6, 2, 2, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.text(money(item.value), pageWidth - margin, y, { align: 'right' });
+      });
+
+      const topReste = [...territoires].sort((a, b) => b.resteAPayer - a.resteAPayer).slice(0, 5);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      setText(darkText);
+      doc.text('Territoires à suivre en priorité', margin, 254);
+      const maxReste = Math.max(...topReste.map((row) => row.resteAPayer), 1);
+      topReste.forEach((row, index) => {
+        const y = 264 + index * 5.2;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        setText(darkText);
+        doc.text(row.territoire.slice(0, 18), margin, y);
+        setFill('#fee2e2');
+        doc.rect(margin + 36, y - 3, 80, 3, 'F');
+        setFill(COLORS.reste);
+        doc.rect(margin + 36, y - 3, 80 * row.resteAPayer / maxReste, 3, 'F');
+        doc.text(money(row.resteAPayer), pageWidth - margin, y, { align: 'right' });
+      });
+      drawFooter(1);
+
+      doc.addPage('a4', 'landscape');
+      const tablePageWidth = doc.internal.pageSize.getWidth();
+      const tablePageHeight = doc.internal.pageSize.getHeight();
+      const landscapeMargin = 10;
+      const columns = [
+        { label: 'Territoire', width: 34 },
+        { label: 'Cible', width: 18 },
+        { label: 'Recontact', width: 29 },
+        { label: 'Contrats', width: 29 },
+        { label: 'Indemnisation', width: 33 },
+        { label: 'À démarrer', width: 24 },
+        { label: 'Payé USD', width: 34 },
+        { label: 'Reste USD', width: 34 },
+      ];
+      let page = 2;
+      let y = 28;
+
+      const drawTableHeader = () => {
+        setFill(primary);
+        doc.rect(0, 0, tablePageWidth, 17, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(12);
+        setText('#ffffff');
+        doc.text('Détail territorial LUC', landscapeMargin, 11);
+        doc.setFontSize(8);
+        doc.text(`Exporté le ${generatedAt.toLocaleDateString('fr-FR')}`, tablePageWidth - landscapeMargin, 11, { align: 'right' });
+        setFill('#f8fafc');
+        setDraw('#cbd5e1');
+        doc.rect(landscapeMargin, 21, tablePageWidth - landscapeMargin * 2, 8, 'FD');
+        let x = landscapeMargin;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(6.8);
+        setText('#334155');
+        columns.forEach((col) => {
+          doc.text(col.label, x + 2, 26);
+          x += col.width;
+        });
+      };
+
+      drawTableHeader();
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      territoires.forEach((row, index) => {
+        if (y > tablePageHeight - 16) {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8);
+          setText(grayText);
+          doc.text(`Page ${page}`, tablePageWidth - landscapeMargin, tablePageHeight - 7, { align: 'right' });
+          doc.addPage('a4', 'landscape');
+          page += 1;
+          y = 28;
+          drawTableHeader();
+        }
+        if (index % 2 === 0) {
+          setFill('#f8fafc');
+          doc.rect(landscapeMargin, y - 5, tablePageWidth - landscapeMargin * 2, 7, 'F');
+        }
+        let x = landscapeMargin;
+        const cells = [
+          row.territoire,
+          formatNombre.format(row.cibleTotale),
+          `${formatNombre.format(row.victimesRecontactees)} (${percent(row.pourcentageRecontactees)})`,
+          `${formatNombre.format(row.contratsSignes)} (${percent(row.pourcentageContratsSignes)})`,
+          `${formatNombre.format(row.victimesAyantCommenceIndemnisation)} (${percent(row.pourcentageVictimesAyantCommenceIndemnisation)})`,
+          formatNombre.format(row.resteVictimesACommencerIndemnisation),
+          money(row.montantTotalPayeUSD),
+          money(row.resteAPayer),
+        ];
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(6.6);
+        setText(darkText);
+        cells.forEach((cell, cellIndex) => {
+          doc.text(String(cell), x + 2, y, {
+            maxWidth: columns[cellIndex].width - 4,
+          });
+          x += columns[cellIndex].width;
+        });
+        y += 7;
+      });
+
+      setFill('#0f172a');
+      doc.rect(landscapeMargin, y - 5, tablePageWidth - landscapeMargin * 2, 8, 'F');
+      const totalCells = [
+        'TOTAL GÉNÉRAL',
+        formatNombre.format(total.cibleTotale),
+        `${formatNombre.format(total.victimesRecontactees)} (${percent(total.pourcentageRecontactees)})`,
+        `${formatNombre.format(total.contratsSignes)} (${percent(total.pourcentageContratsSignes)})`,
+        `${formatNombre.format(total.victimesAyantCommenceIndemnisation)} (${percent(total.pourcentageVictimesAyantCommenceIndemnisation)})`,
+        formatNombre.format(total.resteVictimesACommencerIndemnisation),
+        money(total.montantTotalPayeUSD),
+        money(total.resteAPayer),
+      ];
+      let totalX = landscapeMargin;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(6.5);
+      setText('#ffffff');
+      totalCells.forEach((cell, cellIndex) => {
+        doc.text(String(cell), totalX + 2, y, { maxWidth: columns[cellIndex].width - 4 });
+        totalX += columns[cellIndex].width;
+      });
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      setText(grayText);
+      doc.text(`Page ${page}`, tablePageWidth - landscapeMargin, tablePageHeight - 7, { align: 'right' });
+
+      doc.save(`${getExportFileBaseName(data, generatedAt)}.pdf`);
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
   return (
     <section className="mb-8">
       <div className="mb-5 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3">
@@ -241,15 +625,35 @@ const LucTerritoryIndemnisationStats: React.FC = () => {
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={loadStats}
-          disabled={loading}
-          className="inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-60"
-        >
-          <FiRefreshCw className={loading ? 'animate-spin' : ''} size={16} />
-          Actualiser
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            disabled={!canExport || exportingExcel}
+            className="inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 disabled:opacity-60"
+          >
+            <FiDownload size={16} />
+            {exportingExcel ? 'Excel...' : 'Excel'}
+          </button>
+          <button
+            type="button"
+            onClick={handleExportPdf}
+            disabled={!canExport || exportingPdf}
+            className="inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100 disabled:opacity-60"
+          >
+            <FiFileText size={16} />
+            {exportingPdf ? 'PDF...' : 'PDF'}
+          </button>
+          <button
+            type="button"
+            onClick={loadStats}
+            disabled={loading}
+            className="inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+          >
+            <FiRefreshCw className={loading ? 'animate-spin' : ''} size={16} />
+            Actualiser
+          </button>
+        </div>
       </div>
 
       {loading ? (
