@@ -381,7 +381,7 @@ const LucTerritoryIndemnisationStats: React.FC = () => {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8);
         setText(grayText);
-        doc.text('FONAREV OPERATIONAL - Extraction suivi indemnisation LUC', margin, pageHeight - 7);
+        doc.text('FONOPS - Extraction suivi indemnisation LUC', margin, pageHeight - 7);
         doc.text(`Page ${page}`, pageWidth - margin, pageHeight - 7, { align: 'right' });
       };
 
@@ -412,7 +412,7 @@ const LucTerritoryIndemnisationStats: React.FC = () => {
       doc.text('REPUBLIQUE DEMOCRATIQUE DU CONGO', margin, 9);
       doc.setFontSize(15);
       setText('#ffffff');
-      doc.text('FONAREV OPERATIONAL', margin, 18);
+      doc.text('FONOPS', margin, 18);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8.5);
       doc.text('Systeme de Suivi des Victimes - Reparations administratives integrales', margin, 27);
