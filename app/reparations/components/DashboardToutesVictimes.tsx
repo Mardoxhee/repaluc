@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { FiUsers } from 'react-icons/fi';
 import { useFetch } from '../../context/FetchContext';
 import DashboardVictimsLuc from './DashboardVictimsLuc';
+import VictimesContratSigneNonIndemnisees from './VictimesContratSigneNonIndemnisees';
 
 type MentionStat = {
   mention: string;
@@ -98,62 +99,66 @@ const DashboardToutesVictimes: React.FC<DashboardToutesVictimesProps> = ({
       onShowRecontactedVictims={onShowRecontactedVictims}
       onShowSignedContractVictims={onShowSignedContractVictims}
       beforeProgression={
-        <div className="mb-8 bg-white border border-gray-100 rounded-2xl shadow-lg p-6">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-5">
-            <div className="flex items-start gap-3">
-              <div className="p-2 rounded-lg bg-indigo-50">
-                <FiUsers className="text-indigo-600" size={20} />
+        <>
+          <div className="mb-8 bg-white border border-gray-100 rounded-2xl shadow-lg p-6">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-5">
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-lg bg-indigo-50">
+                  <FiUsers className="text-indigo-600" size={20} />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">Victimes par mention</h2>
+                  <p className="text-sm text-gray-600">LUC, PECMU, MPU et autres mentions enregistrées.</p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-lg font-bold text-gray-900">Victimes par mention</h2>
-                <p className="text-sm text-gray-600">LUC, PECMU, MPU et autres mentions enregistrées.</p>
+              <div className="text-sm font-semibold text-gray-700">
+                Total: {loading ? '...' : totalVictimes.toLocaleString()}
               </div>
             </div>
-            <div className="text-sm font-semibold text-gray-700">
-              Total: {loading ? '...' : totalVictimes.toLocaleString()}
-            </div>
+
+            {loading ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <div key={index} className="h-24 bg-gray-100 rounded-xl animate-pulse" />
+                ))}
+              </div>
+            ) : mentions.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {mentions.map((item) => (
+                  <button
+                    key={item.mention}
+                    type="button"
+                    onClick={() => onSelectMention?.(item.mention)}
+                    className="text-left p-4 bg-gray-50 border border-gray-200 rounded-xl hover:bg-white hover:border-indigo-300 hover:shadow-sm transition-all"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-bold text-gray-900 uppercase truncate">{item.mention}</div>
+                        <div className="text-xs text-gray-500 mt-1">Voir la liste filtrée</div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <div className="text-xl font-bold text-indigo-700">{item.total.toLocaleString()}</div>
+                        <div className="text-xs font-semibold text-indigo-500">{formatPercentage(item.percentage)}</div>
+                      </div>
+                    </div>
+                    <div className="mt-4 h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-indigo-500"
+                        style={{ width: `${Math.min(100, Math.max(0, item.percentage))}%` }}
+                      />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-xl p-4">
+                Aucune statistique par mention disponible.
+              </div>
+            )}
           </div>
 
-          {loading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {Array.from({ length: 4 }).map((_, index) => (
-                <div key={index} className="h-24 bg-gray-100 rounded-xl animate-pulse" />
-              ))}
-            </div>
-          ) : mentions.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {mentions.map((item) => (
-                <button
-                  key={item.mention}
-                  type="button"
-                  onClick={() => onSelectMention?.(item.mention)}
-                  className="text-left p-4 bg-gray-50 border border-gray-200 rounded-xl hover:bg-white hover:border-indigo-300 hover:shadow-sm transition-all"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-sm font-bold text-gray-900 uppercase truncate">{item.mention}</div>
-                      <div className="text-xs text-gray-500 mt-1">Voir la liste filtrée</div>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <div className="text-xl font-bold text-indigo-700">{item.total.toLocaleString()}</div>
-                      <div className="text-xs font-semibold text-indigo-500">{formatPercentage(item.percentage)}</div>
-                    </div>
-                  </div>
-                  <div className="mt-4 h-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-indigo-500"
-                      style={{ width: `${Math.min(100, Math.max(0, item.percentage))}%` }}
-                    />
-                  </div>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-xl p-4">
-              Aucune statistique par mention disponible.
-            </div>
-          )}
-        </div>
+          <VictimesContratSigneNonIndemnisees />
+        </>
       }
     />
   );

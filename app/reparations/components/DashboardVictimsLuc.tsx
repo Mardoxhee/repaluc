@@ -4,6 +4,7 @@ import React from 'react';
 import { FiShield } from 'react-icons/fi';
 import DashboardVictims from './dashboardVictims';
 import LucTerritoryIndemnisationStats from './LucTerritoryIndemnisationStats';
+import LucIncoherencesTranches from './LucIncoherencesTranches';
 import ProgressionMesuresLuc from './ProgressionMesuresLuc';
 import ProgressionDetailLuc from './ProgressionDetailLuc';
 
@@ -50,6 +51,7 @@ const DashboardVictimsLuc: React.FC<DashboardVictimsLucProps> = ({
       }
       afterMainStats={
         <>
+          {dashboardScope === 'luc' && <LucIncoherencesTranches />}
           {dashboardScope === 'luc' && <LucTerritoryIndemnisationStats />}
           <ProgressionMesuresLuc />
           <div className="mt-8">
