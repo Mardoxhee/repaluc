@@ -286,10 +286,12 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                                 />
                             ) : (
                                 <>
-                                    <ContractTemplateSelector
-                                        selectedTemplateId={selectedTemplateId}
-                                        selectedPrejudiceLabel={contractForm.prejudiceFinal}
-                                    />
+                                    {!existingContrat && (
+                                        <ContractTemplateSelector
+                                            selectedTemplateId={selectedTemplateId}
+                                            selectedPrejudiceLabel={contractForm.prejudiceFinal}
+                                        />
+                                    )}
 
                                     <VictimInfo
                                         victim={victim}
