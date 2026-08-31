@@ -270,15 +270,6 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                                 <Download size={18} />
                                 Exporter en PDF
                             </button>
-                            {existingContrat && (
-                                <button
-                                    onClick={saveContract}
-                                    disabled={isSaving}
-                                    className="ml-2 flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                                >
-                                    {isSaving ? 'Enregistrement...' : 'Enregistrer les modifications'}
-                                </button>
-                            )}
                         </div>
 
                         <div id="contrat-content">
