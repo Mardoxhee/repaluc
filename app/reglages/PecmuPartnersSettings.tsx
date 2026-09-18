@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Building2, Edit3, MapPin, Plus, Search, Trash2, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Building2, Edit3, Mail, MapPin, Phone, Plus, Search, Trash2, X } from 'lucide-react';
 import Swal from 'sweetalert2';
 
 const STORAGE_KEY = 'pecmu-partenaires-prise-en-charge-v1';
@@ -46,6 +47,15 @@ export default function PecmuPartnersSettings() {
       setPartners([]);
     }
   }, []);
+
+  useEffect(() => {
+    if (!editing) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [editing]);
 
   const visiblePartners = useMemo(() => {
     const term = search.trim().toLocaleLowerCase('fr');
@@ -130,21 +140,62 @@ export default function PecmuPartnersSettings() {
         </table>
       </div>
 
-      {editing && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gray-950/60 p-4" role="dialog" aria-modal="true">
-          <form onSubmit={savePartner} className="w-full max-w-3xl bg-white shadow-2xl">
-            <div className="flex items-start justify-between border-b border-gray-200 px-6 py-5"><div><h3 className="text-xl font-bold text-gray-900">{editing.id ? 'Modifier le partenaire' : 'Ajouter un partenaire PECMU'}</h3><p className="mt-1 text-sm text-gray-500">Structure de prise en charge médicale</p></div><button type="button" onClick={() => setEditing(null)} className="p-2 text-gray-500 hover:bg-gray-100" aria-label="Fermer"><X size={20} /></button></div>
-            <div className="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
-              <label className="md:col-span-2"><span className="text-sm font-semibold text-gray-700">Nom du partenaire *</span><input required value={editing.nom} onChange={(e) => updateEditing('nom', e.target.value)} className="mt-1 w-full border border-gray-300 px-3 py-2.5" /></label>
-              <label><span className="text-sm font-semibold text-gray-700">Domaine</span><input value={editing.domaine} onChange={(e) => updateEditing('domaine', e.target.value)} className="mt-1 w-full border border-gray-300 px-3 py-2.5" /></label>
-              <label><span className="text-sm font-semibold text-gray-700">Province *</span><select required value={editing.province} onChange={(e) => updateEditing('province', e.target.value)} className="mt-1 w-full border border-gray-300 px-3 py-2.5"><option value="">Sélectionner</option>{provinces.map((province) => <option key={province}>{province}</option>)}</select></label>
-              <label><span className="text-sm font-semibold text-gray-700">Téléphone</span><input value={editing.contact} onChange={(e) => updateEditing('contact', e.target.value)} className="mt-1 w-full border border-gray-300 px-3 py-2.5" /></label>
-              <label><span className="text-sm font-semibold text-gray-700">E-mail</span><input type="email" value={editing.email} onChange={(e) => updateEditing('email', e.target.value)} className="mt-1 w-full border border-gray-300 px-3 py-2.5" /></label>
-              <label className="md:col-span-2"><span className="text-sm font-semibold text-gray-700">Adresse</span><textarea value={editing.adresse} onChange={(e) => updateEditing('adresse', e.target.value)} className="mt-1 min-h-24 w-full border border-gray-300 px-3 py-2.5" /></label>
+      {editing && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm md:p-8" role="dialog" aria-modal="true" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditing(null); }}>
+          <form onSubmit={savePartner} className="flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-lg border border-white/60 bg-white shadow-[0_28px_90px_-24px_rgba(15,23,42,0.55)] md:max-h-[calc(100vh-4rem)]">
+            <div className="relative border-b border-gray-200 px-5 py-5 md:px-7">
+              <div className="absolute inset-y-0 left-0 w-1.5 bg-[#901c67]" />
+              <div className="flex items-start gap-3 pr-10">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-[#f8edf5] text-[#901c67]">
+                  <Building2 size={20} />
+                </div>
+                <div>
+                  <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#901c67]">Configuration PECMU</div>
+                  <h3 className="mt-0.5 text-xl font-black text-gray-950">{editing.id ? 'Modifier le partenaire' : 'Nouveau partenaire'}</h3>
+                  <p className="mt-1 text-sm text-gray-500">Enregistrez une structure disponible pour la prise en charge.</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => setEditing(null)} className="absolute right-4 top-4 p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-900" aria-label="Fermer"><X size={20} /></button>
             </div>
-            <div className="flex justify-end gap-3 border-t border-gray-200 px-6 py-4"><button type="button" onClick={() => setEditing(null)} className="border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700">Annuler</button><button type="submit" className="bg-[#901c67] px-4 py-2 text-sm font-semibold text-white">Enregistrer</button></div>
+
+            <div className="overflow-y-auto px-5 py-5 md:px-7">
+              <div className="space-y-6">
+                <section>
+                  <h4 className="mb-3 text-xs font-black uppercase tracking-wide text-gray-500">Identification de la structure</h4>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <label className="md:col-span-2">
+                      <span className="text-sm font-semibold text-gray-800">Nom du partenaire <span className="text-red-600">*</span></span>
+                      <div className="relative mt-1.5"><Building2 size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" /><input required autoFocus placeholder="Ex. Hôpital général de Goma" value={editing.nom} onChange={(e) => updateEditing('nom', e.target.value)} className="w-full rounded-md border border-gray-300 py-2.5 pl-10 pr-3 text-sm outline-none focus:border-[#901c67] focus:ring-2 focus:ring-[#901c67]/10" /></div>
+                    </label>
+                    <label>
+                      <span className="text-sm font-semibold text-gray-800">Domaine</span>
+                      <input placeholder="Ex. Santé, psychologie" value={editing.domaine} onChange={(e) => updateEditing('domaine', e.target.value)} className="mt-1.5 w-full rounded-md border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-[#901c67] focus:ring-2 focus:ring-[#901c67]/10" />
+                    </label>
+                    <label>
+                      <span className="text-sm font-semibold text-gray-800">Province <span className="text-red-600">*</span></span>
+                      <div className="relative mt-1.5"><MapPin size={17} className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-gray-400" /><select required value={editing.province} onChange={(e) => updateEditing('province', e.target.value)} className="w-full appearance-none rounded-md border border-gray-300 py-2.5 pl-10 pr-9 text-sm outline-none focus:border-[#901c67] focus:ring-2 focus:ring-[#901c67]/10"><option value="">Sélectionner une province</option>{provinces.map((province) => <option key={province}>{province}</option>)}</select></div>
+                    </label>
+                  </div>
+                </section>
+
+                <section className="border-t border-gray-200 pt-5">
+                  <h4 className="mb-3 text-xs font-black uppercase tracking-wide text-gray-500">Contact et localisation</h4>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <label><span className="text-sm font-semibold text-gray-800">Téléphone</span><div className="relative mt-1.5"><Phone size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" /><input type="tel" placeholder="+243 ..." value={editing.contact} onChange={(e) => updateEditing('contact', e.target.value)} className="w-full rounded-md border border-gray-300 py-2.5 pl-10 pr-3 text-sm outline-none focus:border-[#901c67] focus:ring-2 focus:ring-[#901c67]/10" /></div></label>
+                    <label><span className="text-sm font-semibold text-gray-800">E-mail</span><div className="relative mt-1.5"><Mail size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" /><input type="email" placeholder="contact@structure.cd" value={editing.email} onChange={(e) => updateEditing('email', e.target.value)} className="w-full rounded-md border border-gray-300 py-2.5 pl-10 pr-3 text-sm outline-none focus:border-[#901c67] focus:ring-2 focus:ring-[#901c67]/10" /></div></label>
+                    <label className="md:col-span-2"><span className="text-sm font-semibold text-gray-800">Adresse complète</span><textarea placeholder="Commune, avenue, numéro et repère" value={editing.adresse} onChange={(e) => updateEditing('adresse', e.target.value)} className="mt-1.5 min-h-20 w-full resize-y rounded-md border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-[#901c67] focus:ring-2 focus:ring-[#901c67]/10" /></label>
+                  </div>
+                </section>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 border-t border-gray-200 bg-gray-50 px-5 py-4 md:px-7">
+              <button type="button" onClick={() => setEditing(null)} className="rounded-md border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-100">Annuler</button>
+              <button type="submit" className="inline-flex items-center gap-2 rounded-md bg-[#901c67] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#771654]"><Plus size={17} />{editing.id ? 'Enregistrer les modifications' : 'Ajouter le partenaire'}</button>
+            </div>
           </form>
-        </div>
+        </div>,
+        document.body
       )}
     </section>
   );

@@ -22,6 +22,7 @@ import {
   listFichesPecmu,
 } from '../services/pecmuApi';
 import PecmuDossierModal from './PecmuDossierModal';
+import PecmuPartnersSettings from '../../reglages/PecmuPartnersSettings';
 
 type Victim = {
   id: number;
@@ -368,6 +369,7 @@ const PecmuModulePage: React.FC = () => {
   const [selectedVictim, setSelectedVictim] = useState<Victim | null>(null);
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [openDossierId, setOpenDossierId] = useState<number | null>(null);
+  const [activeView, setActiveView] = useState<'victimes' | 'partenaires'>('victimes');
   const [alerts, setAlerts] = useState<PecmuAlert[]>([]);
   const [medicalActs, setMedicalActs] = useState<MedicalAct[]>([]);
   const [medicalActCounts, setMedicalActCounts] = useState<Record<number, number>>({});
@@ -626,7 +628,7 @@ const PecmuModulePage: React.FC = () => {
           <button
             type="button"
             onClick={() => openAlertModal()}
-            className="inline-flex items-center justify-center gap-2 bg-red-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-red-700"
+            className={`${activeView === 'victimes' ? 'inline-flex' : 'hidden'} items-center justify-center gap-2 bg-red-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-red-700`}
           >
             <Plus size={16} />
             Nouvelle alerte
@@ -634,6 +636,24 @@ const PecmuModulePage: React.FC = () => {
         </div>
       </section>
 
+      <div className="mb-4 flex border-b border-gray-200 bg-white px-4">
+        <button
+          type="button"
+          onClick={() => setActiveView('victimes')}
+          className={`border-b-2 px-4 py-3 text-sm font-bold transition-colors ${activeView === 'victimes' ? 'border-[#901c67] text-[#901c67]' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
+        >
+          Victimes PECMU
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveView('partenaires')}
+          className={`border-b-2 px-4 py-3 text-sm font-bold transition-colors ${activeView === 'partenaires' ? 'border-[#901c67] text-[#901c67]' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
+        >
+          Partenaires de prise en charge
+        </button>
+      </div>
+
+      {activeView === 'partenaires' ? <PecmuPartnersSettings /> : (
       <section className="min-w-0 border border-gray-200 bg-white">
           <div className="border-b border-gray-200 p-6">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -880,6 +900,7 @@ const PecmuModulePage: React.FC = () => {
             </div>
           </div>
       </section>
+      )}
 
       <Modal show={showAlertModal} onClose={() => setShowAlertModal(false)} size="7xl">
         <ModalBody className="!p-0">
