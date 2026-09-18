@@ -18,12 +18,18 @@ NEXT_PUBLIC_LOGOUT_URL=http://10.140.0.106:4201/login
 ## 📝 Description des Variables
 
 ### `NEXT_PUBLIC_API_BASE_URL`
-- **Utilisation** : API principale pour les victimes et documents
+- **Utilisation** : API principale pour les victimes, documents et PECMU
 - **Endpoints** :
   - `/victime/*` - Gestion des victimes
   - `/victime/document/*` - Documents des victimes
   - `/minio/files/*` - Fichiers MinIO
   - `/minio/files/upload` - Upload de fichiers
+  - `/fiche-pecmu/*` - Fiches d'enregistrement PECMU
+  - `/acte-consentement-pecmu/*` - Actes de consentement PECMU
+  - `/acte-medical-pecmu/*` - Actes médicaux PECMU
+  - `/suivi-accompagnement/*` - Suivis et accompagnements PECMU
+
+> PECMU n'ajoute pas de secret côté front. Cette URL doit pointer vers un backend qui expose les routes PECMU protégées par le JWT existant.
 
 ### `NEXT_PUBLIC_API_PLANVIE_URL`
 - **Utilisation** : API pour le formulaire Plan de Vie
@@ -77,6 +83,9 @@ Les fichiers suivants utilisent maintenant les variables d'environnement :
 
 5. **`app/context/FetchContext.tsx`**
    - `NEXT_PUBLIC_API_BASE_URL` comme base URL par défaut
+
+6. **`app/reparations/services/pecmuApi.ts`**
+   - `NEXT_PUBLIC_API_BASE_URL` via le `FetchContext` pour les endpoints PECMU
 
 ## ✅ Vérification
 

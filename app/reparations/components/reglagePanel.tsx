@@ -16,6 +16,37 @@ interface ReglagesProps {
     mockCategories: { id: number; nom: string }[];
 }
 
+const PECMU_PARTENAIRES_STORAGE_KEY = 'pecmu-partenaires-prise-en-charge-v1';
+
+const rdcProvinces = [
+    'Bas-Uele',
+    'Equateur',
+    'Haut-Katanga',
+    'Haut-Lomami',
+    'Haut-Uele',
+    'Ituri',
+    'Kasai',
+    'Kasai-Central',
+    'Kasai-Oriental',
+    'Kinshasa',
+    'Kongo-Central',
+    'Kwango',
+    'Kwilu',
+    'Lomami',
+    'Lualaba',
+    'Mai-Ndombe',
+    'Maniema',
+    'Mongala',
+    'Nord-Kivu',
+    'Nord-Ubangi',
+    'Sankuru',
+    'Sud-Kivu',
+    'Sud-Ubangi',
+    'Tanganyika',
+    'Tshopo',
+    'Tshuapa',
+];
+
 const ReglagesPanel: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, mockProgrammes, mockCategories }) => {
     const { fetcher, loading: fetchLoading, error: fetchError } = useFetch();
     // Partenaires
@@ -25,18 +56,36 @@ const ReglagesPanel: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, m
     const [editPartenaire, setEditPartenaire] = useState<any | null>(null);
     const filteredPartenaires = partenaires.filter((p: any) =>
         p.nom.toLowerCase().includes(searchPartenaire.toLowerCase()) ||
+        (p.province && p.province.toLowerCase().includes(searchPartenaire.toLowerCase())) ||
         (p.domaine && p.domaine.toLowerCase().includes(searchPartenaire.toLowerCase())) ||
         (p.contact && p.contact.toLowerCase().includes(searchPartenaire.toLowerCase())) ||
         (p.email && p.email.toLowerCase().includes(searchPartenaire.toLowerCase()))
     );
-    const handleAddPartenaire = () => { setEditPartenaire({ id: null, nom: "", contact: "", domaine: "", email: "" }); setShowPartenaireModal(true); };
+    const persistPartenaires = (nextPartenaires: any[]) => {
+        setPartenaires(nextPartenaires);
+        if (typeof window !== 'undefined') {
+            window.localStorage.setItem(PECMU_PARTENAIRES_STORAGE_KEY, JSON.stringify(nextPartenaires));
+        }
+    };
+    const handleAddPartenaire = () => { setEditPartenaire({ id: null, nom: "", contact: "", domaine: "Santé", email: "", province: "", adresse: "" }); setShowPartenaireModal(true); };
     const handleEditPartenaire = (p: any) => { setEditPartenaire(p); setShowPartenaireModal(true); };
     const handleSavePartenaire = (p: any) => {
-        if (p.id) setPartenaires((prev: any[]) => prev.map(x => x.id === p.id ? p : x));
-        else setPartenaires((prev: any[]) => [...prev, { ...p, id: Date.now() }]);
+        const nextPartenaires = p.id
+            ? partenaires.map((x: any) => x.id === p.id ? p : x)
+            : [...partenaires, { ...p, id: Date.now() }];
+        persistPartenaires(nextPartenaires);
         setShowPartenaireModal(false); setEditPartenaire(null);
     };
-    const handleDeletePartenaire = (id: number) => setPartenaires((prev: any[]) => prev.filter(x => x.id !== id));
+    const handleDeletePartenaire = (id: number) => persistPartenaires(partenaires.filter((x: any) => x.id !== id));
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        try {
+            const stored = window.localStorage.getItem(PECMU_PARTENAIRES_STORAGE_KEY);
+            if (stored) setPartenaires(JSON.parse(stored));
+        } catch {
+            setPartenaires(mockPartenaires);
+        }
+    }, []);
     // States pour chaque entité
     const [programmes, setProgrammes] = useState<any[]>([]);
 
@@ -384,6 +433,155 @@ const ReglagesPanel: React.FC<ReglagesProps> = ({ mockPrejudices, mockMesures, m
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="bg-white rounded-2xl shadow p-6 border border-gray-100 md:col-span-2">
+                <div className="flex flex-col gap-3 mb-4 md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <h2 className="text-lg font-bold text-gray-900">Paramètres PECMU</h2>
+                        <p className="text-sm text-gray-500">Configuration des partenaires de prise en charge médicale urgente.</p>
+                    </div>
+                    <button
+                        className="w-10 h-10 flex items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-pink-500 text-white shadow hover:scale-110 transition-transform"
+                        title="Ajouter un partenaire PECMU"
+                        onClick={handleAddPartenaire}
+                    >
+                        <FiPlus size={22} />
+                    </button>
+                </div>
+
+                <div className="mb-4 w-full">
+                    <div className="relative w-full">
+                        <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400 pointer-events-none">
+                            <FiSearch size={18} />
+                        </span>
+                        <input
+                            type="text"
+                            placeholder="Rechercher un partenaire PECMU..."
+                            className="pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-400 focus:border-transparent w-full"
+                            value={searchPartenaire}
+                            onChange={e => setSearchPartenaire(e.target.value)}
+                        />
+                    </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                        <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+                            <tr>
+                                <th className="px-4 py-3 text-left">Partenaire</th>
+                                <th className="px-4 py-3 text-left">Domaine</th>
+                                <th className="px-4 py-3 text-left">Province</th>
+                                <th className="px-4 py-3 text-left">Contact</th>
+                                <th className="px-4 py-3 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredPartenaires.map((partenaire: any) => (
+                                <tr key={partenaire.id} className="border-b last:border-0">
+                                    <td className="px-4 py-3">
+                                        <div className="font-semibold text-gray-900">{partenaire.nom}</div>
+                                        {partenaire.adresse ? <div className="text-xs text-gray-500">{partenaire.adresse}</div> : null}
+                                    </td>
+                                    <td className="px-4 py-3 text-gray-700">{partenaire.domaine || '-'}</td>
+                                    <td className="px-4 py-3 text-gray-700">{partenaire.province || '-'}</td>
+                                    <td className="px-4 py-3 text-gray-700">
+                                        <div>{partenaire.contact || '-'}</div>
+                                        {partenaire.email ? <div className="text-xs text-gray-500">{partenaire.email}</div> : null}
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        <span className="ml-auto flex justify-end gap-2">
+                                            <button
+                                                className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-50 hover:bg-blue-100 text-blue-600 shadow-sm"
+                                                title="Éditer"
+                                                onClick={() => handleEditPartenaire(partenaire)}
+                                            >
+                                                <FiEdit size={18} />
+                                            </button>
+                                            <button
+                                                className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-red-50 hover:bg-red-100 text-red-500 shadow-sm"
+                                                title="Supprimer"
+                                                onClick={() => handleDeletePartenaire(partenaire.id)}
+                                            >
+                                                <FiTrash size={18} />
+                                            </button>
+                                        </span>
+                                    </td>
+                                </tr>
+                            ))}
+                            {filteredPartenaires.length === 0 && (
+                                <tr>
+                                    <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                                        Aucun partenaire PECMU configuré.
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+
+                <Modal show={showPartenaireModal} onClose={() => setShowPartenaireModal(false)}>
+                    {editPartenaire && (
+                        <div className="p-6 bg-white text-gray-900 rounded-xl">
+                            <div className="mb-4">
+                                <h3 className="text-lg font-bold">
+                                    {editPartenaire.id ? "Modifier le partenaire PECMU" : "Ajouter un partenaire PECMU"}
+                                </h3>
+                            </div>
+                            <form className="space-y-4" onSubmit={e => { e.preventDefault(); handleSavePartenaire(editPartenaire); }}>
+                                <input
+                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    placeholder="Nom du partenaire"
+                                    value={editPartenaire.nom}
+                                    onChange={e => setEditPartenaire({ ...editPartenaire, nom: e.target.value })}
+                                    required
+                                />
+                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                    <input
+                                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        placeholder="Domaine"
+                                        value={editPartenaire.domaine}
+                                        onChange={e => setEditPartenaire({ ...editPartenaire, domaine: e.target.value })}
+                                    />
+                                    <select
+                                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        value={editPartenaire.province || ''}
+                                        onChange={e => setEditPartenaire({ ...editPartenaire, province: e.target.value })}
+                                    >
+                                        <option value="">Province</option>
+                                        {rdcProvinces.map((province) => (
+                                            <option key={province} value={province}>{province}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                    <input
+                                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        placeholder="Téléphone"
+                                        value={editPartenaire.contact}
+                                        onChange={e => setEditPartenaire({ ...editPartenaire, contact: e.target.value })}
+                                    />
+                                    <input
+                                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        placeholder="Email"
+                                        value={editPartenaire.email}
+                                        onChange={e => setEditPartenaire({ ...editPartenaire, email: e.target.value })}
+                                    />
+                                </div>
+                                <textarea
+                                    className="min-h-24 w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    placeholder="Adresse / notes de référencement"
+                                    value={editPartenaire.adresse || ''}
+                                    onChange={e => setEditPartenaire({ ...editPartenaire, adresse: e.target.value })}
+                                />
+                                <div className="flex gap-2 justify-end mt-6">
+                                    <button type="button" className="px-4 py-2 rounded bg-gray-100 text-gray-700 hover:bg-gray-200" onClick={() => setShowPartenaireModal(false)}>Annuler</button>
+                                    <button type="submit" className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Enregistrer</button>
+                                </div>
+                            </form>
+                        </div>
+                    )}
+                </Modal>
+            </div>
+
             {/* Programmes */}
             <Programme categories={categories} onProgrammesChange={setProgrammes} />
 

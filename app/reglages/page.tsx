@@ -30,6 +30,7 @@ import {
   type VictimsCacheSyncProgress
 } from '@/app/utils/victimsCacheSync';
 import { getCacheInventory, type CacheTableInfo } from '@/app/utils/cacheInventory';
+import PecmuPartnersSettings from './PecmuPartnersSettings';
 
 const CORE_POWERVIZ_URL = process.env.NEXT_PUBLIC_CORE_POWERVIZ;
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
@@ -72,7 +73,7 @@ const ReglagesPage = () => {
   const [mounted, setMounted] = useState(false);
   const [lastUpdateTime, setLastUpdateTime] = useState<string>('');
 
-  const [activeTab, setActiveTab] = useState<'sync' | 'plans' | 'contracts' | 'cache'>('sync');
+  const [activeTab, setActiveTab] = useState<'sync' | 'plans' | 'contracts' | 'cache' | 'pecmu'>('sync');
 
   const [showVictimPending, setShowVictimPending] = useState(false);
   const [pendingVictimRows, setPendingVictimRows] = useState<PendingVictimRow[]>([]);
@@ -854,10 +855,20 @@ const ReglagesPage = () => {
           >
             Cache
           </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('pecmu')}
+            className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${activeTab === 'pecmu'
+              ? 'bg-white border-[#901c67] text-[#901c67] shadow-sm'
+              : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-white'
+              }`}
+          >
+            PECMU
+          </button>
         </div>
 
         {/* Status Card */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        {activeTab !== 'pecmu' && <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           {/* Connection Status */}
           <div className={`p-4 rounded-xl border transition-all ${online
             ? 'bg-white border-green-200 shadow-sm hover:shadow-md'
@@ -911,7 +922,9 @@ const ReglagesPage = () => {
               {mounted ? lastUpdateTime : ''}
             </p>
           </div>
-        </div>
+        </div>}
+
+        {activeTab === 'pecmu' && <PecmuPartnersSettings />}
 
         {activeTab === 'sync' && (
           <>

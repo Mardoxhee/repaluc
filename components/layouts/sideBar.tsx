@@ -1,7 +1,7 @@
 "use client"
 
 import React from 'react';
-import { FiBarChart2, FiDatabase, FiSettings, FiShield, FiUsers } from 'react-icons/fi';
+import { FiActivity, FiBarChart2, FiDatabase, FiSettings, FiShield, FiUsers } from 'react-icons/fi';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -21,6 +21,12 @@ const navItems = [
     description: 'Registre et filtres',
     icon: <FiUsers size={20} />,
     href: '/reparations/victimes',
+  },
+  {
+    label: 'PECMU',
+    description: 'Alertes et actes médicaux',
+    icon: <FiActivity size={20} />,
+    href: '/reparations/pecmu',
   },
   {
     label: 'Source de données',

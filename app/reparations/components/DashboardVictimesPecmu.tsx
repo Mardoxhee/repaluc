@@ -21,6 +21,12 @@ import {
   type CountRow,
   type GlobalProgressStats,
 } from '../utils/mentionStats';
+import {
+  getActeConsentementPecmuStatistics,
+  getActeMedicalPecmuStatistics,
+  getFichePecmuStatistics,
+  type PecmuStatistics,
+} from '../services/pecmuApi';
 
 interface DashboardVictimesPecmuProps {
   onSelectAgentReparation?: (fullName: string) => void;
@@ -39,12 +45,18 @@ const EMPTY_PROGRESS: GlobalProgressStats = {
 type PecmuServerStats = {
   province: CountRow[];
   contratsCount: number;
+  ficheStats: PecmuStatistics | null;
+  acteConsentementTotal: number;
+  fichesAvecActesMedicaux: number;
   partenairesParProvince: CountRow[];
 };
 
 const EMPTY_PECMU_SERVER_STATS: PecmuServerStats = {
   province: [],
   contratsCount: 0,
+  ficheStats: null,
+  acteConsentementTotal: 0,
+  fichesAvecActesMedicaux: 0,
   partenairesParProvince: [],
 };
 
@@ -208,6 +220,18 @@ const groupByProvince = (items: any[]): CountRow[] => {
     .sort((a, b) => b.value - a.value);
 };
 
+const countRowsFromRecord = (record: Record<string, number> | undefined): CountRow[] => (
+  Object.entries(record || {})
+    .map(([name, value]) => ({ name, fullName: name, value: toNumber(value) }))
+    .sort((a, b) => b.value - a.value)
+);
+
+const countObjectKeys = (value: unknown): number => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? Object.keys(value as Record<string, unknown>).length
+    : 0
+);
+
 const groupPartnersByProvince = (payload: any): CountRow[] => {
   const partenaires = normalizeApiList(payload);
   const seen = new Set<string>();
@@ -243,19 +267,35 @@ const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = ({ onShowS
 
       try {
         const safeFetch = (endpoint: string) => fetcher(endpoint).catch(() => null);
-        const [contratsResp, progressResp, provinceResp, partenairesResp] = await Promise.all([
+        const [
+          contratsResp,
+          progressResp,
+          provinceResp,
+          partenairesResp,
+          ficheStatsResp,
+          consentementStatsResp,
+          acteMedicalStatsResp,
+        ] = await Promise.all([
           safeFetch('/contrat/PECMU?page=1&limit=20'),
           safeFetch('/victime/stats/reparation/globalProgress/PECMU'),
           safeFetch('/victime/stats/province/PECMU'),
           safeFetch('/partenaires'),
+          getFichePecmuStatistics(fetcher).catch(() => null),
+          getActeConsentementPecmuStatistics(fetcher).catch(() => null),
+          getActeMedicalPecmuStatistics(fetcher).catch(() => null),
         ]);
 
         if (!mounted) return;
 
         setProgress(normalizeGlobalProgress(progressResp));
         setPecmuServerStats({
-          province: normalizeCountRows(provinceResp, ['province']),
+          province: countRowsFromRecord(ficheStatsResp?.byProvince).length > 0
+            ? countRowsFromRecord(ficheStatsResp?.byProvince)
+            : normalizeCountRows(provinceResp, ['province']),
           contratsCount: getPayloadTotal(contratsResp),
+          ficheStats: ficheStatsResp,
+          acteConsentementTotal: toNumber(consentementStatsResp?.total),
+          fichesAvecActesMedicaux: countObjectKeys(acteMedicalStatsResp?.byFichePecmu),
           partenairesParProvince: groupPartnersByProvince(partenairesResp),
         });
       } catch {
@@ -296,7 +336,7 @@ const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = ({ onShowS
     };
   }, []);
 
-  const totalPecmu = progress.total > 0 ? progress.total : victimsFromCache.length;
+  const totalPecmu = toNumber(pecmuServerStats.ficheStats?.total) || progress.total || victimsFromCache.length;
   const alertesCount = useMemo(
     () => victimsFromCache.filter(hasPecmuAlert).length,
     [victimsFromCache]
@@ -313,8 +353,10 @@ const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = ({ onShowS
     () => victimsFromCache.filter(isBeneficiairePriseEnCharge),
     [victimsFromCache]
   );
-  const beneficiairesPriseEnChargeCount = beneficiairesPriseEnCharge.length;
-  const consentementCount = progress.contrat.withContrat || pecmuServerStats.contratsCount || consentementsFromCache;
+  const alertesOfficialCount = toNumber(pecmuServerStats.ficheStats?.total);
+  const alertesDisplayCount = alertesOfficialCount || alertesCount;
+  const beneficiairesPriseEnChargeCount = pecmuServerStats.fichesAvecActesMedicaux || beneficiairesPriseEnCharge.length;
+  const consentementCount = pecmuServerStats.acteConsentementTotal || progress.contrat.withContrat || pecmuServerStats.contratsCount || consentementsFromCache;
   const percentConsentement = totalPecmu > 0 ? Math.round((consentementCount / totalPecmu) * 100) : 0;
   const percentAffectees = totalPecmu > 0 ? Math.round((affecteesPartenaireCount / totalPecmu) * 100) : 0;
   const percentPriseEnCharge = totalPecmu > 0 ? Math.round((beneficiairesPriseEnChargeCount / totalPecmu) * 100) : 0;
@@ -397,7 +439,7 @@ const DashboardVictimesPecmu: React.FC<DashboardVictimesPecmuProps> = ({ onShowS
         />
         <StatCard
           title="Nombre d'alertes"
-          value={alertesCount.toLocaleString()}
+          value={alertesDisplayCount.toLocaleString()}
           icon={<FiAlertCircle className="text-white text-xl" />}
           color="bg-gradient-to-br from-amber-500 to-orange-600"
           subtitle="Alertes PECMU documentées"
