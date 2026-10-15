@@ -188,32 +188,20 @@ const f2Sections: Array<{ title: string; fields: FormField[] }> = [
   {
     title: 'Situation médicale de la victime',
     fields: [
-      { key: 'typeViolation', label: 'Type de violation subie', type: 'textarea' },
+      { key: 'typeViolation', label: 'Type de violation subie', type: 'select' },
       { key: 'detailsIncident', label: 'Détails de l’incident', type: 'textarea' },
       { key: 'periodeIncident', label: 'Période / dates' },
       { key: 'partiesCorps', label: 'Parties du corps atteintes', type: 'textarea' },
       { key: 'statutMedical', label: 'Statut médical', type: 'select', options: ['Était déjà traité', 'Rien n’est fait', 'Traitement en cours'] },
-      { key: 'plaintes', label: 'Plaintes', type: 'textarea' },
       { key: 'autresPlaintes', label: 'Autres plaintes', type: 'textarea' },
       { key: 'pronosticVital', label: 'Pronostic vital', type: 'select', options: ['Bon (normal)', 'Réservé (moyen)', 'Engagé (grave)'] },
     ],
   },
   {
-    title: 'Orientations DEEE et pool médical',
+    title: 'ORIENTATION SELON LA NOTE DE CERTIFICATION DEE',
     fields: [
       { key: 'certificationIncident', label: 'Certification de l’incident', type: 'select', options: ['Oui', 'Non'] },
       { key: 'identificationVictime', label: 'Identification de la victime', type: 'select', options: ['Oui', 'Non'] },
-      { key: 'validationNom', label: 'Validation - nom' },
-      { key: 'validationFonction', label: 'Validation - fonction' },
-      { key: 'decisionPecmu', label: 'Décision de PECMU', type: 'select', options: ['Cas éligible', 'Cas non-éligible'] },
-      { key: 'decision', label: 'Décision', type: 'textarea' },
-      { key: 'partenaireDecision', label: 'Nom et adresse du partenaire', type: 'textarea' },
-      { key: 'timingReferencement', label: 'Timing nécessaire', type: 'select', options: ['Immédiatement', 'Endéans 24 à 72h', 'Plus tard'] },
-      { key: 'refererCliniqueMobile', label: 'Victime à référer à la clinique mobile', type: 'select', options: ['Immédiatement', 'Endéans 24 à 72h', 'Plus tard', 'Non'] },
-      { key: 'priseEnChargePlanifier', label: 'Prise en charge médicale à planifier', type: 'select', options: ['Oui', 'Non'] },
-      { key: 'referencementUrgent', label: 'Référer absolument pour PECMU', type: 'select', options: ['Oui', 'Non'] },
-      { key: 'commentaires', label: 'Commentaires', type: 'textarea' },
-      { key: 'responsable', label: 'Nom du responsable' },
     ],
   },
 ];
@@ -376,6 +364,24 @@ const PecmuModulePage: React.FC = () => {
   const [alertVictimId, setAlertVictimId] = useState<string>('');
   const [alertValues, setAlertValues] = useState<Record<string, string>>(() => buildF2Values(null));
   const [submittingAlert, setSubmittingAlert] = useState(false);
+  const [violationOptions, setViolationOptions] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!showAlertModal) return;
+    let active = true;
+    const loadViolations = async () => {
+      const data = await fetcher('/violations');
+      if (active) {
+        setViolationOptions(Array.from(new Set(
+          normalizeApiList(data)
+            .map((item: { violation?: string }) => item.violation)
+            .filter((value: string | undefined): value is string => Boolean(value))
+        )));
+      }
+    };
+    void loadViolations();
+    return () => { active = false; };
+  }, [fetcher, showAlertModal]);
 
   useEffect(() => {
     setAlerts(readStorage<PecmuAlert[]>(ALERTS_STORAGE_KEY, []));
@@ -584,6 +590,7 @@ const PecmuModulePage: React.FC = () => {
   };
 
   const renderF2Field = (field: FormField) => {
+    const options = field.key === 'typeViolation' ? violationOptions : field.options;
     const value = alertValues[field.key] || '';
     const update = (nextValue: string) => setAlertValues((prev) => ({ ...prev, [field.key]: nextValue }));
 
@@ -595,8 +602,8 @@ const PecmuModulePage: React.FC = () => {
         ) : field.type === 'select' ? (
           <select className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary-500" value={value} onChange={(event) => update(event.target.value)}>
             <option value="">Sélectionner</option>
-            {value && !field.options?.includes(value) ? <option value={value}>{value}</option> : null}
-            {field.options?.map((option) => <option key={option} value={option}>{option}</option>)}
+            {value && !options?.includes(value) ? <option value={value}>{value}</option> : null}
+            {options?.map((option) => <option key={option} value={option}>{option}</option>)}
           </select>
         ) : (
           <input
@@ -927,28 +934,33 @@ const PecmuModulePage: React.FC = () => {
                   <section key={section.title} className="border !border-gray-200 !bg-white p-4 md:p-5">
                     <h3 className="mb-4 text-sm font-black uppercase tracking-wide !text-gray-800">{section.title}</h3>
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                      {section.fields.map(renderF2Field)}
+                      {section.fields.map((field) => (
+                        <React.Fragment key={field.key}>
+                          {renderF2Field(field)}
+                          {field.key === 'statutMedical' ? (
+                            <section className="md:col-span-2">
+                              <h3 className="mb-4 text-sm font-black uppercase tracking-wide !text-gray-800">Plaintes détaillées</h3>
+                              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                                {complaintFields.map((field) => {
+                                  const key = `plainte_${field}`;
+                                  return (
+                                    <label key={field} className="flex items-center justify-between gap-3 border !border-gray-200 px-3 py-2 text-sm">
+                                      <span className="font-medium !text-gray-700">{field}</span>
+                                      <select className="border !border-gray-300 px-2 py-1 text-sm" value={alertValues[key] || 'Non'} onChange={(event) => setAlertValues((prev) => ({ ...prev, [key]: event.target.value }))}>
+                                        <option>Oui</option>
+                                        <option>Non</option>
+                                      </select>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            </section>
+                          ) : null}
+                        </React.Fragment>
+                      ))}
                     </div>
                   </section>
                 ))}
-
-                <section className="border !border-gray-200 !bg-white p-4 md:p-5">
-                  <h3 className="mb-4 text-sm font-black uppercase tracking-wide !text-gray-800">Plaintes détaillées</h3>
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    {complaintFields.map((field) => {
-                      const key = `plainte_${field}`;
-                      return (
-                        <label key={field} className="flex items-center justify-between gap-3 border !border-gray-200 px-3 py-2 text-sm">
-                          <span className="font-medium !text-gray-700">{field}</span>
-                          <select className="border !border-gray-300 px-2 py-1 text-sm" value={alertValues[key] || 'Non'} onChange={(event) => setAlertValues((prev) => ({ ...prev, [key]: event.target.value }))}>
-                            <option>Oui</option>
-                            <option>Non</option>
-                          </select>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </section>
               </div>
             </div>
 
