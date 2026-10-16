@@ -1,5 +1,6 @@
 "use client";
 
+import { createPortal } from 'react-dom';
 import React, { useCallback, useEffect, useState } from 'react';
 import { CalendarDays, ClipboardList, FileCheck2, FileText, Pencil, Plus, Save, Stethoscope, Trash2, X } from 'lucide-react';
 import Swal from 'sweetalert2';
@@ -21,7 +22,7 @@ const tabs: Array<{ id: Tab; label: string; icon: React.ElementType }> = [
   { id: 'suivis', label: 'Suivis', icon: CalendarDays },
 ];
 
-const fieldClass = 'mt-1 w-full border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-[#901c67] focus:ring-1 focus:ring-[#901c67]';
+const fieldClass = 'mt-1 w-full border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary';
 const readFile = (file: File): Promise<string> => new Promise((resolve, reject) => {
   const reader = new FileReader();
   reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '');
@@ -32,6 +33,15 @@ const readFile = (file: File): Promise<string> => new Promise((resolve, reject) 
 const dateLabel = (value?: string) => value ? new Date(value).toLocaleDateString('fr-FR') : '-';
 
 export default function PecmuDossierModal({ ficheId, fetcher, onClose, onChanged }: Props) {
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    setPortalTarget(document.body);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, []);
+
   const [tab, setTab] = useState<Tab>('fiche');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -115,21 +125,23 @@ export default function PecmuDossierModal({ ficheId, fetcher, onClose, onChanged
 
   const updateFiche = (key: keyof FichePecmu, value: any) => setFiche((current) => current ? { ...current, [key]: value } : current);
 
-  return (
-    <div className="fixed inset-0 z-[100] bg-gray-950/65 p-0 md:p-5" role="dialog" aria-modal="true">
-      <div className="mx-auto flex h-full max-w-7xl flex-col bg-white shadow-2xl">
-        <header className="flex items-start justify-between border-b border-gray-200 px-5 py-4 md:px-7">
-          <div><div className="text-xs font-black uppercase text-red-600">Dossier PECMU #{ficheId}</div><h2 className="mt-1 text-2xl font-black text-gray-950">{fiche?.victimName || 'Chargement du dossier...'}</h2><p className="text-sm text-gray-500">Alerte, consentements, soins et accompagnement</p></div>
+  if (!portalTarget) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] bg-slate-950/60 p-3 text-slate-900 sm:p-5" role="dialog" aria-modal="true" aria-labelledby="pecmu-dossier-title">
+      <div className="mx-auto flex h-full min-h-0 max-w-7xl flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-gray-200 px-5 py-4 md:px-7">
+          <div><div className="text-xs font-semibold uppercase tracking-wide text-primary">Dossier PECMU #{ficheId}</div><h2 id="pecmu-dossier-title" className="mt-1 text-xl font-bold text-gray-950 md:text-2xl">{fiche?.victimName || 'Chargement du dossier...'}</h2><p className="text-sm text-gray-500">Alerte, consentements, soins et accompagnement</p></div>
           <button type="button" onClick={onClose} className="p-2 text-gray-500 hover:bg-gray-100" aria-label="Fermer"><X size={24} /></button>
         </header>
-        <nav className="flex overflow-x-auto border-b border-gray-200 px-5 md:px-7">
-          {tabs.map(({ id, label, icon: Icon }) => <button key={id} type="button" onClick={() => setTab(id)} className={`flex shrink-0 items-center gap-2 border-b-2 px-4 py-3 text-sm font-bold ${tab === id ? 'border-[#901c67] text-[#901c67]' : 'border-transparent text-gray-500 hover:text-gray-900'}`}><Icon size={17} />{label}</button>)}
+        <nav className="flex shrink-0 overflow-x-auto border-b border-gray-200 px-5 md:px-7">
+          {tabs.map(({ id, label, icon: Icon }) => <button key={id} type="button" onClick={() => setTab(id)} className={`flex shrink-0 items-center gap-2 border-b-2 px-4 py-3 text-sm font-bold ${tab === id ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-900'}`}><Icon size={17} />{label}</button>)}
         </nav>
-        <main className="flex-1 overflow-y-auto bg-gray-50 p-4 md:p-7">
+        <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-gray-50 p-4 md:p-7">
           {loading ? <div className="py-20 text-center font-semibold text-gray-500">Chargement du dossier PECMU...</div> : null}
 
           {!loading && tab === 'fiche' && fiche && <div className="space-y-5">
-            <section className="border border-gray-200 bg-white p-5"><h3 className="mb-4 font-black text-gray-900">Identité et localisation</h3><div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <section className="border border-gray-200 bg-white p-5"><h3 className="mb-4 font-semibold text-gray-900">Identité et localisation</h3><div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <label className="md:col-span-2"><span className="text-sm font-semibold">Nom de la victime</span><input className={fieldClass} value={fiche.victimName || ''} onChange={(e) => updateFiche('victimName', e.target.value)} /></label>
               <label><span className="text-sm font-semibold">Âge</span><input type="number" min="0" max="150" className={fieldClass} value={fiche.age ?? ''} onChange={(e) => updateFiche('age', e.target.value ? Number(e.target.value) : undefined)} /></label>
               <label><span className="text-sm font-semibold">Sexe</span><select className={fieldClass} value={fiche.sex || ''} onChange={(e) => updateFiche('sex', e.target.value)}><option value="">Sélectionner</option><option>Féminin</option><option>Masculin</option><option>Autre</option></select></label>
@@ -138,7 +150,7 @@ export default function PecmuDossierModal({ ficheId, fetcher, onClose, onChanged
               <label className="md:col-span-2"><span className="text-sm font-semibold">Adresse</span><input className={fieldClass} value={fiche.victimAddress || ''} onChange={(e) => updateFiche('victimAddress', e.target.value)} /></label>
               <label><span className="text-sm font-semibold">Téléphone</span><input className={fieldClass} value={fiche.victimPhone || ''} onChange={(e) => updateFiche('victimPhone', e.target.value)} /></label>
             </div></section>
-            <section className="border border-gray-200 bg-white p-5"><h3 className="mb-4 font-black text-gray-900">Situation médicale et orientation</h3><div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <section className="border border-gray-200 bg-white p-5"><h3 className="mb-4 font-semibold text-gray-900">Situation médicale et orientation</h3><div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <label><span className="text-sm font-semibold">Structure de prise en charge</span><input className={fieldClass} value={fiche.careStructureName || ''} onChange={(e) => updateFiche('careStructureName', e.target.value)} /></label>
               <label><span className="text-sm font-semibold">Zone de santé</span><input className={fieldClass} value={fiche.healthZone || ''} onChange={(e) => updateFiche('healthZone', e.target.value)} /></label>
               <label><span className="text-sm font-semibold">Statut médical</span><input className={fieldClass} value={fiche.medicalStatus || ''} onChange={(e) => updateFiche('medicalStatus', e.target.value)} /></label>
@@ -147,7 +159,7 @@ export default function PecmuDossierModal({ ficheId, fetcher, onClose, onChanged
               <label className="md:col-span-2"><span className="text-sm font-semibold">Décision PECMU</span><textarea className={`${fieldClass} min-h-20`} value={fiche.pecmuDecision || ''} onChange={(e) => updateFiche('pecmuDecision', e.target.value)} /></label>
               <label className="md:col-span-2"><span className="text-sm font-semibold">Partenaire affecté</span><input className={fieldClass} value={fiche.partnerNameAndAddress || ''} onChange={(e) => updateFiche('partnerNameAndAddress', e.target.value)} /></label>
             </div></section>
-            <div className="flex justify-between"><button type="button" onClick={removeFiche} className="inline-flex items-center gap-2 border border-red-200 px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50"><Trash2 size={16} />Supprimer la fiche</button><button type="button" disabled={saving} onClick={saveFiche} className="inline-flex items-center gap-2 bg-[#901c67] px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50"><Save size={17} />Enregistrer les modifications</button></div>
+            <div className="flex justify-between"><button type="button" onClick={removeFiche} className="inline-flex items-center gap-2 border border-red-200 px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50"><Trash2 size={16} />Supprimer la fiche</button><button type="button" disabled={saving} onClick={saveFiche} className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50"><Save size={17} />Enregistrer les modifications</button></div>
           </div>}
 
           {!loading && tab === 'consentements' && <ResourceSection title="Actes de consentement F4, F5 et F6" action="Ajouter un consentement" onAdd={() => setConsentForm({ agent: '', filename: '', file: '', fichePecmuId: ficheId })}>
@@ -185,17 +197,18 @@ export default function PecmuDossierModal({ ficheId, fetcher, onClose, onChanged
         <label className="md:col-span-2"><span className="text-sm font-semibold">Avis ou commentaire *</span><textarea required className={`${fieldClass} min-h-28`} value={suiviForm.avis || ''} onChange={(e) => setSuiviForm({ ...suiviForm, avis: e.target.value })} /></label>
         <label><span className="text-sm font-semibold">Date du prochain rendez-vous</span><input type="date" className={fieldClass} value={suiviForm.dateProchainRdv?.slice(0, 10) || ''} onChange={(e) => setSuiviForm({ ...suiviForm, dateProchainRdv: e.target.value })} /></label>
       </Editor>}
-    </div>
+    </div>,
+    portalTarget
   );
 }
 
 function ResourceSection({ title, action, onAdd, children }: { title: string; action: string; onAdd: () => void; children: React.ReactNode }) {
-  return <section className="border border-gray-200 bg-white"><div className="flex items-center justify-between border-b border-gray-200 p-5"><h3 className="text-lg font-black text-gray-900">{title}</h3><button type="button" onClick={onAdd} className="inline-flex items-center gap-2 bg-[#901c67] px-4 py-2 text-sm font-bold text-white"><Plus size={16} />{action}</button></div><div className="divide-y divide-gray-200">{children}</div></section>;
+  return <section className="border border-gray-200 bg-white"><div className="flex items-center justify-between border-b border-gray-200 p-5"><h3 className="text-lg font-semibold text-gray-900">{title}</h3><button type="button" onClick={onAdd} className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 px-4 py-2 text-sm font-bold text-white"><Plus size={16} />{action}</button></div><div className="divide-y divide-gray-200">{children}</div></section>;
 }
 function ResourceRow({ title, meta, onEdit, onDelete }: { title: string; meta: string; onEdit: () => void; onDelete: () => void }) {
-  return <div className="flex items-start justify-between gap-4 p-5"><div className="flex min-w-0 gap-3"><FileText className="mt-0.5 shrink-0 text-[#901c67]" size={20} /><div><div className="font-semibold text-gray-900">{title}</div><div className="mt-1 text-xs text-gray-500">{meta}</div></div></div><div className="flex gap-2"><button type="button" onClick={onEdit} className="border border-gray-300 p-2 text-gray-600" title="Modifier"><Pencil size={15} /></button><button type="button" onClick={onDelete} className="border border-red-200 p-2 text-red-600" title="Supprimer"><Trash2 size={15} /></button></div></div>;
+  return <div className="flex items-start justify-between gap-4 p-5"><div className="flex min-w-0 gap-3"><FileText className="mt-0.5 shrink-0 text-primary" size={20} /><div><div className="font-semibold text-gray-900">{title}</div><div className="mt-1 text-xs text-gray-500">{meta}</div></div></div><div className="flex gap-2"><button type="button" onClick={onEdit} className="border border-gray-300 p-2 text-gray-600" title="Modifier"><Pencil size={15} /></button><button type="button" onClick={onDelete} className="border border-red-200 p-2 text-red-600" title="Supprimer"><Trash2 size={15} /></button></div></div>;
 }
 function Empty({ text }: { text: string }) { return <div className="p-12 text-center text-sm text-gray-500">{text}</div>; }
 function Editor({ title, onClose, onSubmit, saving, children }: { title: string; onClose: () => void; onSubmit: (e: React.FormEvent) => void; saving: boolean; children: React.ReactNode }) {
-  return <div className="fixed inset-0 z-[120] flex items-center justify-center bg-gray-950/70 p-4"><form onSubmit={onSubmit} className="w-full max-w-3xl bg-white shadow-2xl"><div className="flex items-center justify-between border-b p-5"><h3 className="text-xl font-black text-gray-900">{title}</h3><button type="button" onClick={onClose} className="p-2"><X size={20} /></button></div><div className="grid max-h-[65vh] grid-cols-1 gap-4 overflow-y-auto p-6 md:grid-cols-2">{children}</div><div className="flex justify-end gap-3 border-t p-4"><button type="button" onClick={onClose} className="border border-gray-300 px-4 py-2 font-semibold text-gray-700">Annuler</button><button disabled={saving} type="submit" className="inline-flex items-center gap-2 bg-[#901c67] px-4 py-2 font-semibold text-white disabled:opacity-50"><Save size={16} />{saving ? 'Enregistrement...' : 'Enregistrer'}</button></div></form></div>;
+  return <div className="fixed inset-0 z-[120] flex items-center justify-center bg-gray-950/70 p-4"><form onSubmit={onSubmit} className="w-full max-w-3xl bg-white shadow-2xl"><div className="flex items-center justify-between border-b p-5"><h3 className="text-xl font-semibold text-gray-900">{title}</h3><button type="button" onClick={onClose} className="p-2"><X size={20} /></button></div><div className="grid max-h-[65vh] grid-cols-1 gap-4 overflow-y-auto p-6 md:grid-cols-2">{children}</div><div className="flex justify-end gap-3 border-t p-4"><button type="button" onClick={onClose} className="border border-gray-300 px-4 py-2 font-semibold text-gray-700">Annuler</button><button disabled={saving} type="submit" className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 px-4 py-2 font-semibold text-white disabled:opacity-50"><Save size={16} />{saving ? 'Enregistrement...' : 'Enregistrer'}</button></div></form></div>;
 }

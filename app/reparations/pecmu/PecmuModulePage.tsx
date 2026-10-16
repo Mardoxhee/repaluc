@@ -647,14 +647,14 @@ const PecmuModulePage: React.FC = () => {
         <button
           type="button"
           onClick={() => setActiveView('victimes')}
-          className={`border-b-2 px-4 py-3 text-sm font-bold transition-colors ${activeView === 'victimes' ? 'border-[#901c67] text-[#901c67]' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
+          className={`border-b-2 px-4 py-3 text-sm font-bold transition-colors ${activeView === 'victimes' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
         >
           Victimes PECMU
         </button>
         <button
           type="button"
           onClick={() => setActiveView('partenaires')}
-          className={`border-b-2 px-4 py-3 text-sm font-bold transition-colors ${activeView === 'partenaires' ? 'border-[#901c67] text-[#901c67]' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
+          className={`border-b-2 px-4 py-3 text-sm font-bold transition-colors ${activeView === 'partenaires' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
         >
           Partenaires de prise en charge
         </button>
@@ -838,6 +838,7 @@ const PecmuModulePage: React.FC = () => {
             <table className="min-w-full divide-y divide-slate-200">
               <thead className="bg-slate-50">
                 <tr>
+                  <th scope="col" className="w-16 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-slate-500">N°</th>
                   <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-slate-500">Victime</th>
                   <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-slate-500">Province</th>
                   <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-slate-500">Statut</th>
@@ -845,7 +846,7 @@ const PecmuModulePage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {victims.map((victim) => {
+                {victims.map((victim, index) => {
                   const active = selectedVictim?.id === victim.id;
                   const alertCount = (victim.pecmuFicheId ? 1 : 0) + alerts.filter((alert) => alert.victimId === victim.id).length;
                   const actCount = victim.pecmuFicheId
@@ -861,6 +862,7 @@ const PecmuModulePage: React.FC = () => {
                       }}
                       className={`cursor-pointer transition-colors ${active ? 'bg-primary-50' : 'hover:bg-slate-50'}`}
                     >
+                      <td className="px-4 py-3 text-sm font-semibold tabular-nums text-slate-500">{(meta.page - 1) * meta.limit + index + 1}</td>
                       <td className="px-4 py-3">
                         <div className="font-bold text-slate-950">{getVictimName(victim)}</div>
                         <div className="text-xs text-slate-500">{victim.reference || victim.codeUnique || `ID ${victim.id}`}</div>
@@ -868,15 +870,17 @@ const PecmuModulePage: React.FC = () => {
                       <td className="px-4 py-3 text-sm text-slate-700">{victim.province || '-'}</td>
                       <td className="px-4 py-3 text-sm text-slate-700">{victim.status || '-'}</td>
                       <td className="px-4 py-3 text-right">
-                        <div className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-700">{alertCount} F2</div>
-                        <div className="ml-1 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700">{actCount} actes</div>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <span className="inline-flex items-center whitespace-nowrap border border-primary/20 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary">{alertCount} fiche{alertCount > 1 ? 's' : ''} F2</span>
+                          <span className="inline-flex items-center whitespace-nowrap border border-secondary/20 bg-secondary/5 px-2.5 py-1 text-xs font-medium text-secondary">{actCount} {actCount > 1 ? 'actes médicaux' : 'acte médical'}</span>
+                        </div>
                       </td>
                     </tr>
                   );
                 })}
                 {!loadingVictims && victims.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-sm text-slate-500">Aucune victime PECMU trouvée.</td>
+                    <td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-500">Aucune victime PECMU trouvée.</td>
                   </tr>
                 ) : null}
               </tbody>
