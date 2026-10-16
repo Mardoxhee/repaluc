@@ -1,5 +1,6 @@
 "use client";
 
+import type { PecmuWorkflow } from './pecmuWorkflow';
 import { normalizeApiList } from '../utils/mentionStats';
 
 export type PecmuFetcher = (url: string, options?: RequestInit) => Promise<any>;
@@ -20,6 +21,8 @@ export type PecmuFilterRule = {
 };
 
 export type FichePecmu = {
+  /** Prototype only; backend workflow contract still to be implemented. */
+  pecmuWorkflow?: PecmuWorkflow;
   id: number;
   victimName?: string;
   age?: number;

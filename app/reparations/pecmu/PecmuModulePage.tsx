@@ -21,6 +21,8 @@ import {
   listActesMedicauxByFiche,
   listFichesPecmu,
 } from '../services/pecmuApi';
+import { violationGroups, violationOptions } from '../constants/violations';
+import YesNoToggle from './YesNoToggle';
 import PecmuDossierModal from './PecmuDossierModal';
 import PecmuPartnersSettings from '../../reglages/PecmuPartnersSettings';
 
@@ -273,7 +275,7 @@ const buildF2Values = (victim?: Victim | null): Record<string, string> => {
   const values: Record<string, string> = {};
   f2Sections.forEach((section) => {
     section.fields.forEach((field) => {
-      values[field.key] = '';
+      values[field.key] = field.options?.length === 2 && field.options.includes('Oui') && field.options.includes('Non') ? 'Non' : '';
     });
   });
   complaintFields.forEach((field) => {
@@ -364,24 +366,7 @@ const PecmuModulePage: React.FC = () => {
   const [alertVictimId, setAlertVictimId] = useState<string>('');
   const [alertValues, setAlertValues] = useState<Record<string, string>>(() => buildF2Values(null));
   const [submittingAlert, setSubmittingAlert] = useState(false);
-  const [violationOptions, setViolationOptions] = useState<string[]>([]);
-
-  useEffect(() => {
-    if (!showAlertModal) return;
-    let active = true;
-    const loadViolations = async () => {
-      const data = await fetcher('/violations');
-      if (active) {
-        setViolationOptions(Array.from(new Set(
-          normalizeApiList(data)
-            .map((item: { violation?: string }) => item.violation)
-            .filter((value: string | undefined): value is string => Boolean(value))
-        )));
-      }
-    };
-    void loadViolations();
-    return () => { active = false; };
-  }, [fetcher, showAlertModal]);
+  const [otherViolation, setOtherViolation] = useState(false);
 
   useEffect(() => {
     setAlerts(readStorage<PecmuAlert[]>(ALERTS_STORAGE_KEY, []));
@@ -535,12 +520,19 @@ const PecmuModulePage: React.FC = () => {
   const openAlertModal = (victim?: Victim | null) => {
     const selected = victim || selectedVictim;
     setAlertVictimId(selected?.id ? String(selected.id) : '');
-    setAlertValues(buildF2Values(selected));
+    const values = buildF2Values(selected);
+    setOtherViolation(Boolean(values.typeViolation && !violationOptions.includes(values.typeViolation)));
+    setAlertValues(values);
     setShowAlertModal(true);
   };
 
   const handleAlertSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (submittingAlert) return;
+    if (otherViolation && !alertValues.typeViolation?.trim()) {
+      await Swal.fire({ icon: 'warning', title: 'Type de violation manquant', text: 'Précisez le type de violation pour l’option Autre.' });
+      return;
+    }
     const victim = victims.find((item) => String(item.id) === alertVictimId) || selectedVictim;
     const patientName = alertValues.nomVictime || getVictimName(victim);
 
@@ -567,7 +559,7 @@ const PecmuModulePage: React.FC = () => {
 
     setSubmittingAlert(true);
     try {
-      await createFichePecmu(fetcher, alertValues);
+      await createFichePecmu(fetcher, { ...alertValues, typeViolation: alertValues.typeViolation.trim() });
       setShowAlertModal(false);
       await loadVictims();
       await Swal.fire({
@@ -593,6 +585,36 @@ const PecmuModulePage: React.FC = () => {
     const options = field.key === 'typeViolation' ? violationOptions : field.options;
     const value = alertValues[field.key] || '';
     const update = (nextValue: string) => setAlertValues((prev) => ({ ...prev, [field.key]: nextValue }));
+
+    if (field.key === 'typeViolation') {
+      const inputClass = 'mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary';
+      return (
+        <div key={field.key} className="space-y-3 md:col-span-2">
+          <label className="block">
+            <span className="text-xs font-bold uppercase tracking-wide text-slate-600">{field.label}</span>
+            <select className={inputClass} value={otherViolation ? '__other__' : value} onChange={(event) => {
+              const isOther = event.target.value === '__other__';
+              setOtherViolation(isOther);
+              update(isOther ? '' : event.target.value);
+            }}>
+              <option value="">Sélectionner</option>
+              {violationGroups.map(group => <optgroup key={group.label} label={group.label}>
+                {group.violations.map(violation => <option key={violation} value={violation}>{violation}</option>)}
+              </optgroup>)}
+              <option value="__other__">Autre</option>
+            </select>
+          </label>
+          {otherViolation && <label className="block">
+            <span className="text-xs font-bold uppercase tracking-wide text-slate-600">Précisez le type de violation *</span>
+            <input required className={inputClass} value={value} onChange={(event) => update(event.target.value)} placeholder="Saisir le type de violation" />
+          </label>}
+        </div>
+      );
+    }
+
+    if (field.type === 'select' && options?.length === 2 && options.includes('Oui') && options.includes('Non')) {
+      return <YesNoToggle key={field.key} label={field.label} checked={value === 'Oui'} onChange={(checked) => update(checked ? 'Oui' : 'Non')} />;
+    }
 
     return (
       <label key={field.key} className={field.type === 'textarea' ? 'md:col-span-2' : ''}>
@@ -913,7 +935,7 @@ const PecmuModulePage: React.FC = () => {
       </section>
       )}
 
-      <Modal show={showAlertModal} onClose={() => setShowAlertModal(false)} size="7xl">
+      <Modal show={showAlertModal} onClose={() => setShowAlertModal(false)} size="7xl" className="!z-[100] !h-dvh !bg-slate-950/60" aria-label="Nouvelle alerte PECMU">
         <ModalBody className="!p-0">
           <form onSubmit={handleAlertSubmit} className="relative !bg-white !text-gray-900">
             <button
@@ -933,7 +955,7 @@ const PecmuModulePage: React.FC = () => {
             </div>
 
             <div className="max-h-[calc(100vh-230px)] overflow-y-auto px-4 py-5 md:px-7">
-              <div className="space-y-5">
+              <fieldset disabled={submittingAlert} className="space-y-5">
                 {f2Sections.map((section) => (
                   <section key={section.title} className="border !border-gray-200 !bg-white p-4 md:p-5">
                     <h3 className="mb-4 text-sm font-black uppercase tracking-wide !text-gray-800">{section.title}</h3>
@@ -947,14 +969,14 @@ const PecmuModulePage: React.FC = () => {
                               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                                 {complaintFields.map((field) => {
                                   const key = `plainte_${field}`;
+                                  const checked = alertValues[key] === 'Oui';
                                   return (
-                                    <label key={field} className="flex items-center justify-between gap-3 border !border-gray-200 px-3 py-2 text-sm">
-                                      <span className="font-medium !text-gray-700">{field}</span>
-                                      <select className="border !border-gray-300 px-2 py-1 text-sm" value={alertValues[key] || 'Non'} onChange={(event) => setAlertValues((prev) => ({ ...prev, [key]: event.target.value }))}>
-                                        <option>Oui</option>
-                                        <option>Non</option>
-                                      </select>
-                                    </label>
+                                    <YesNoToggle
+                                      key={field}
+                                      label={field}
+                                      checked={checked}
+                                      onChange={(nextChecked) => setAlertValues((prev) => ({ ...prev, [key]: nextChecked ? 'Oui' : 'Non' }))}
+                                    />
                                   );
                                 })}
                               </div>
@@ -965,7 +987,7 @@ const PecmuModulePage: React.FC = () => {
                     </div>
                   </section>
                 ))}
-              </div>
+              </fieldset>
             </div>
 
             <div className="flex justify-end gap-3 border-t !border-gray-200 bg-white px-4 py-4 md:px-7">
@@ -981,6 +1003,7 @@ const PecmuModulePage: React.FC = () => {
 
       {openDossierId ? (
         <PecmuDossierModal
+          key={openDossierId}
           ficheId={openDossierId}
           fetcher={fetcher}
           onClose={() => setOpenDossierId(null)}
