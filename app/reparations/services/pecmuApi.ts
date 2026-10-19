@@ -1,6 +1,6 @@
 "use client";
 
-import type { PecmuWorkflow } from './pecmuWorkflow';
+import { statusLabels, type WorkflowStatus } from './pecmuWorkflowApi';
 import { normalizeApiList } from '../utils/mentionStats';
 
 export type PecmuFetcher = (url: string, options?: RequestInit) => Promise<any>;
@@ -21,8 +21,7 @@ export type PecmuFilterRule = {
 };
 
 export type FichePecmu = {
-  /** Prototype only; backend workflow contract still to be implemented. */
-  pecmuWorkflow?: PecmuWorkflow;
+  workflowStatus?: WorkflowStatus;
   id: number;
   victimName?: string;
   age?: number;
@@ -165,7 +164,7 @@ const compactPayload = <T extends Record<string, any>>(payload: T): Partial<T> =
 );
 
 export const normalizePecmuMeta = (payload: any, fallback: PecmuPageMeta, rowsLength: number): PecmuPageMeta => {
-  const meta = payload?.meta ?? payload?.data?.meta ?? {};
+  const meta = payload?.meta ?? payload?.data?.meta ?? payload ?? {};
   const total = Number(meta.total ?? payload?.total ?? rowsLength);
   const limit = Number(meta.limit ?? fallback.limit);
   const page = Number(meta.page ?? fallback.page);
@@ -226,7 +225,8 @@ export const mapFichePecmuToVictimRow = (fiche: FichePecmu) => ({
   province: fiche.province,
   territoire: fiche.locality,
   adresse: fiche.victimAddress,
-  status: fiche.medicalStatus || fiche.pecmuDecision || '-',
+  status: fiche.workflowStatus ? statusLabels[fiche.workflowStatus] || fiche.workflowStatus : fiche.medicalStatus || '-',
+  workflowStatus: fiche.workflowStatus,
   mention: 'PECMU',
   reference: `PECMU-${fiche.id}`,
   structurePriseEnCharge: fiche.careStructureName,
@@ -261,11 +261,9 @@ export const mapF2ValuesToFichePecmuPayload = (values: Record<string, string>): 
     medicalStatus: values.statutMedical,
     vitalPrognosis: values.pronosticVital,
     otherComplaints: values.autresPlaintes || values.plaintes,
-    incidentCertification: toBoolean(values.certificationIncident),
     victimIdentification: toBoolean(values.identificationVictime),
     validatorName: values.validationNom,
     validatorRole: values.validationFonction,
-    pecmuDecision: values.decisionPecmu,
     referralDecision: values.decision,
     partnerNameAndAddress: values.partenaireDecision,
     requiredTiming: values.timingReferencement,
@@ -320,7 +318,7 @@ export const createFichePecmu = async (fetcher: PecmuFetcher, values: Record<str
     throw new Error("La fiche PECMU n'a pas pu être enregistrée.");
   }
 
-  return response as FichePecmu;
+  return (response.data?.id ? response.data : response) as FichePecmu;
 };
 
 const requireResponse = <T,>(response: T | null | undefined, message: string): T => {
@@ -332,15 +330,20 @@ export const getFichePecmu = async (fetcher: PecmuFetcher, id: number): Promise<
   requireResponse(await fetcher(`/fiche-pecmu/${id}`), 'Impossible de charger la fiche PECMU.')
 );
 
-export const updateFichePecmu = async (fetcher: PecmuFetcher, id: number, payload: Partial<FichePecmu>): Promise<FichePecmu> => (
+export const updateFichePecmu = async (fetcher: PecmuFetcher, id: number, payload: Partial<FichePecmu>): Promise<FichePecmu> => {
+  if (['incidentCertification', 'consentement', 'certificationNote', 'pecmuDecision'].some(key => key in payload)) {
+    throw new Error('Les champs du parcours doivent être modifiés via les actions dédiées du workflow PECMU.');
+  }
+  return (
   requireResponse(await fetcher(`/fiche-pecmu/${id}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(compactPayload(payload)),
   }), 'Impossible de modifier la fiche PECMU.')
-);
+  );
+};
 
-export const deleteFichePecmu = async (fetcher: PecmuFetcher, id: number) => (
-  requireResponse(await fetcher(`/fiche-pecmu/${id}`, { method: 'DELETE' }), 'Impossible de supprimer la fiche PECMU.')
-);
+export const deleteFichePecmu = async (fetcher: PecmuFetcher, id: number) => {
+  await fetcher(`/fiche-pecmu/${id}`, { method: 'DELETE' });
+};
 
 export const listActesMedicauxByFiche = async (fetcher: PecmuFetcher, fichePecmuId: number): Promise<ActeMedicalPecmu[]> => {
   const response = await fetcher(`/acte-medical-pecmu/by-fiche/${fichePecmuId}`);
@@ -359,9 +362,9 @@ export const updateActeMedicalPecmu = async (fetcher: PecmuFetcher, id: number, 
   }), "Impossible de modifier l'acte médical.")
 );
 
-export const deleteActeMedicalPecmu = async (fetcher: PecmuFetcher, id: number) => (
-  requireResponse(await fetcher(`/acte-medical-pecmu/${id}`, { method: 'DELETE' }), "Impossible de supprimer l'acte médical.")
-);
+export const deleteActeMedicalPecmu = async (fetcher: PecmuFetcher, id: number) => {
+  await fetcher(`/acte-medical-pecmu/${id}`, { method: 'DELETE' });
+};
 
 export const listConsentementsByFiche = async (fetcher: PecmuFetcher, fichePecmuId: number): Promise<ActeConsentementPecmu[]> => {
   const response = await fetcher(`/acte-consentement-pecmu/by-fiche/${fichePecmuId}`);
@@ -380,9 +383,9 @@ export const updateConsentementPecmu = async (fetcher: PecmuFetcher, id: number,
   }), 'Impossible de modifier le consentement.')
 );
 
-export const deleteConsentementPecmu = async (fetcher: PecmuFetcher, id: number) => (
-  requireResponse(await fetcher(`/acte-consentement-pecmu/${id}`, { method: 'DELETE' }), 'Impossible de supprimer le consentement.')
-);
+export const deleteConsentementPecmu = async (fetcher: PecmuFetcher, id: number) => {
+  await fetcher(`/acte-consentement-pecmu/${id}`, { method: 'DELETE' });
+};
 
 export const listSuivisByFiche = async (fetcher: PecmuFetcher, fichePecmuId: number): Promise<SuiviAccompagnement[]> => {
   const response = await fetcher(`/suivi-accompagnement/by-fiche/${fichePecmuId}`);
@@ -401,9 +404,9 @@ export const updateSuiviAccompagnement = async (fetcher: PecmuFetcher, id: numbe
   }), 'Impossible de modifier le suivi.')
 );
 
-export const deleteSuiviAccompagnement = async (fetcher: PecmuFetcher, id: number) => (
-  requireResponse(await fetcher(`/suivi-accompagnement/${id}`, { method: 'DELETE' }), 'Impossible de supprimer le suivi.')
-);
+export const deleteSuiviAccompagnement = async (fetcher: PecmuFetcher, id: number) => {
+  await fetcher(`/suivi-accompagnement/${id}`, { method: 'DELETE' });
+};
 
 export const getFichePecmuStatistics = async (fetcher: PecmuFetcher): Promise<PecmuStatistics | null> => (
   await fetcher('/fiche-pecmu/statistics')

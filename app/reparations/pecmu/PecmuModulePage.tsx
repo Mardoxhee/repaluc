@@ -13,9 +13,9 @@ import {
 } from 'lucide-react';
 import { Modal, ModalBody } from 'flowbite-react';
 import Swal from 'sweetalert2';
-import { useFetch } from '../../context/FetchContext';
+import { pecmuRequest, getPecmuPermissions, statusLabels } from '../services/pecmuWorkflowApi';
 import { getVictimsFromCache, isOnline } from '../../utils/victimsCache';
-import { normalizeApiList, normalizeText } from '../utils/mentionStats';
+import { normalizeText } from '../utils/mentionStats';
 import {
   createFichePecmu,
   listActesMedicauxByFiche,
@@ -202,7 +202,6 @@ const f2Sections: Array<{ title: string; fields: FormField[] }> = [
   {
     title: 'ORIENTATION SELON LA NOTE DE CERTIFICATION DEE',
     fields: [
-      { key: 'certificationIncident', label: 'Certification de l’incident', type: 'select', options: ['Oui', 'Non'] },
       { key: 'identificationVictime', label: 'Identification de la victime', type: 'select', options: ['Oui', 'Non'] },
     ],
   },
@@ -223,6 +222,7 @@ const complaintFields = [
 ];
 
 const pecmuFilterFields: FilterField[] = [
+  { key: 'workflowStatus', label: 'Étape du parcours', type: 'select', options: Object.keys(statusLabels) },
   { key: 'structurePriseEnCharge', label: 'Structure de prise en charge', type: 'text' },
   { key: 'province', label: 'Province', type: 'select', options: rdcProvinces },
   { key: 'territoire', label: 'Territoire / localité', type: 'text' },
@@ -348,7 +348,10 @@ const matchesFilterRule = (victim: Victim, rule: FilterRule, victimAlerts: Pecmu
 };
 
 const PecmuModulePage: React.FC = () => {
-  const { fetcher } = useFetch();
+  const fetcher = pecmuRequest;
+  const [permissions, setPermissions] = useState<string[] | null>(null);
+  const [listError, setListError] = useState('');
+  useEffect(() => { setPermissions(getPecmuPermissions()); }, []);
   const [victims, setVictims] = useState<Victim[]>([]);
   const [meta, setMeta] = useState<PageMeta>(emptyMeta);
   const [loadingVictims, setLoadingVictims] = useState(true);
@@ -375,6 +378,7 @@ const PecmuModulePage: React.FC = () => {
 
   const loadVictims = useCallback(async () => {
     setLoadingVictims(true);
+    setListError('');
     const cacheKey = 'all-victims-cache';
     const search = query.trim();
 
@@ -448,6 +452,9 @@ const PecmuModulePage: React.FC = () => {
         if (current && pageRows.some((victim: Victim) => victim.id === current.id)) return current;
         return pageRows[0] || null;
       });
+    } catch (error: any) {
+      setListError(error?.message || 'Impossible de charger les dossiers PECMU.');
+      setVictims([]);
     } finally {
       setLoadingVictims(false);
     }
@@ -559,8 +566,9 @@ const PecmuModulePage: React.FC = () => {
 
     setSubmittingAlert(true);
     try {
-      await createFichePecmu(fetcher, { ...alertValues, typeViolation: alertValues.typeViolation.trim() });
+      const created = await createFichePecmu(fetcher, { ...alertValues, typeViolation: alertValues.typeViolation.trim() });
       setShowAlertModal(false);
+      if (created.id) setOpenDossierId(created.id);
       await loadVictims();
       await Swal.fire({
         icon: 'success',
@@ -645,6 +653,7 @@ const PecmuModulePage: React.FC = () => {
 
   return (
     <div className="min-h-[calc(100vh-5rem)] bg-slate-50 px-4 py-6 md:px-6">
+      {listError && <div role="alert" className="mb-4 border border-red-200 bg-red-50 p-4 text-sm text-red-700">{listError}<button type="button" className="ml-3 underline" onClick={loadVictims}>Réessayer</button></div>}
       <section className="mb-6 border border-primary-100 bg-white p-5 shadow-[0_18px_50px_-38px_rgba(0,127,186,0.55)]">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -656,6 +665,7 @@ const PecmuModulePage: React.FC = () => {
           </div>
           <button
             type="button"
+            disabled={permissions !== null && !permissions.includes('fiche-pecmu:create')}
             onClick={() => openAlertModal()}
             className={`${activeView === 'victimes' ? 'inline-flex' : 'hidden'} items-center justify-center gap-2 bg-red-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-red-700`}
           >
@@ -795,7 +805,7 @@ const PecmuModulePage: React.FC = () => {
                           >
                             <option value="">Sélectionner...</option>
                             {field.options?.map((option) => (
-                              <option key={option} value={option}>{option}</option>
+                              <option key={option} value={option}>{field.key === 'workflowStatus' ? statusLabels[option as keyof typeof statusLabels] : option}</option>
                             ))}
                           </select>
                         ) : (

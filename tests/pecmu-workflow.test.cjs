@@ -2,88 +2,85 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const ts = require('typescript');
-// Run the repository's TypeScript modules without adding a test-runner dependency.
 require.extensions['.ts'] = (module, filename) => {
   module._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText, filename);
 };
-const { workflowAccess, finishEpisode, readWorkflow, saveWorkflow, readSignedFile } = require('../app/reparations/services/pecmuWorkflow.ts');
-const prototype = require('../app/reparations/services/pecmuPrototype.ts');
-const empty = () => ({ version: 1, consents: [], acts: [], episodes: [] });
-const active = () => ({ ...empty(), certification: { consentId: 1 }, pool: { eligible: true, reason: 'Motif', decidedAt: '2026-10-16' }, consents: [{ id: 2, kind: 'care', signedAt: '2026-10-16' }], episodes: [{ number: 1, structure: 'Structure A', summary: 'Suivi', openedAt: '2026-10-16' }] });
+const api = require('../app/reparations/services/pecmuWorkflowApi.ts');
+const ficheApi = require('../app/reparations/services/pecmuApi.ts');
 
-test('steps remain locked without the initial signed document', () => {
-  assert.deepEqual(workflowAccess(empty(), []), { certification: true, pool: false, consents: false, care: false });
-  assert.equal(workflowAccess({ ...active(), certification: { consentId: 99 } }, [1, 2]).pool, false);
+test('generic alert creation never sends protected workflow fields', () => {
+  const payload = ficheApi.mapF2ValuesToFichePecmuPayload({ nomVictime: 'Test', certificationIncident: 'Oui', decisionPecmu: 'Cas éligible', identificationVictime: 'Oui', typeViolation: 'Valeur personnalisée', 'plainte_Forte fièvre': 'Non' });
+  for (const key of ['incidentCertification', 'consentement', 'certificationNote', 'pecmuDecision']) assert.equal(key in payload, false);
+  assert.equal(payload.victimIdentification, true);
+  assert.equal(payload.violationType, 'Valeur personnalisée');
+  assert.equal(payload.highFever, false);
 });
-test('eligibility and the care consent gate successive steps', () => {
-  const state = active();
-  assert.deepEqual(workflowAccess(state, [1, 2]), { certification: true, pool: true, consents: true, care: true });
-  assert.equal(workflowAccess({ ...state, pool: { ...state.pool, eligible: false } }, [1, 2]).consents, false);
-  for (const kind of ['refusal', 'transfer', 'procedure']) {
-    assert.equal(workflowAccess({ ...state, consents: [{ id: 2, kind }] }, [1, 2]).care, false);
+test('general updates reject protected fields before making requests', async () => {
+  for (const field of ['incidentCertification', 'consentement', 'certificationNote', 'pecmuDecision']) {
+    await assert.rejects(ficheApi.updateFichePecmu(async () => { throw Error('Must not request'); }, 1, { [field]: 'value' }), /actions dédiées/);
   }
-  assert.equal(workflowAccess(state, [1]).care, false);
 });
-test('transfer requires a receiving structure and a transfer consent', () => {
-  assert.throws(() => finishEpisode(active(), 'Transféré à un niveau supérieur', 'Suivi', 'Structure B'), /consentement/);
-  const state = active(); state.consents.push({ id: 3, kind: 'transfer', signedAt: '2026-10-16' });
-  assert.throws(() => finishEpisode(state, 'Transféré à un niveau supérieur', 'Suivi', '', 3), /structure/);
-  const transferred = finishEpisode(state, 'Transféré à un niveau supérieur', 'Synthèse reprise', 'Structure B', 3);
-  assert.equal(transferred.closedAt, undefined);
-  assert.equal(transferred.episodes.length, 2);
-  assert.equal(transferred.episodes[0].transferConsentId, 3);
-  assert.equal(transferred.episodes[1].structure, 'Structure B');
-  assert.equal(transferred.episodes[1].summary, 'Synthèse reprise');
-  assert.equal(transferred.episodes[1].outcome, undefined);
-  assert.equal(state.episodes.length, 1, 'transition must not mutate its input');
-  assert.throws(() => finishEpisode(transferred, 'Perdu de vue', 'Suivi'), /deuxième/);
-  assert.throws(() => finishEpisode(transferred, 'Transféré à un niveau supérieur', 'Suivi', 'C', 3), /deuxième/);
-  for (const outcome of ['Stabilisé/guéri', 'Décédé']) assert.ok(finishEpisode(transferred, outcome, 'Synthèse finale').closedAt);
+test('workflow GET orders any number of transferred episodes and preserves server actions', async () => {
+  const state = await api.loadPecmuWorkflow(async path => {
+    assert.equal(path, '/fiche-pecmu/42/workflow');
+    return { fiche: { id: 42 }, currentStatus: 'TRANSFERRED', nextActions: ['UPLOAD_TRANSFER_NOTE'], medicalCare: [{ id: 3, sequenceNumber: 3 }, { id: 1, sequenceNumber: 1 }, { id: 2, sequenceNumber: 2 }] };
+  }, 42);
+  assert.deepEqual(state.medicalCare.map(c => c.id), [1, 2, 3]);
+  assert.deepEqual(state.nextActions, ['UPLOAD_TRANSFER_NOTE']);
+  assert.equal(api.canPerform(state, 'OPEN_TRANSFERRED_MEDICAL_CARE', null), false);
 });
-test('only healing and death close a first episode; lost to follow-up remains open', () => {
-  assert.equal(finishEpisode(active(), 'Perdu de vue', 'Suivi').closedAt, undefined);
-  for (const outcome of ['Stabilisé/guéri', 'Décédé']) {
-    const closed = finishEpisode(active(), outcome, 'Synthèse finale');
-    assert.ok(closed.closedAt);
-    assert.throws(() => finishEpisode(closed, outcome, 'Modification'), /déjà clôturé/);
-  }
-  assert.throws(() => finishEpisode(active(), 'Décédé', '  '), /synthèse/);
+test('actions require both server transition and explicit SSO permission when provided', () => {
+  const state = { nextActions: ['RECORD_MEDICAL_DECISION'] };
+  assert.equal(api.canPerform(state, 'RECORD_MEDICAL_DECISION', []), false);
+  assert.equal(api.canPerform(state, 'RECORD_MEDICAL_DECISION', ['fiche-pecmu:update']), false);
+  assert.equal(api.canPerform(state, 'RECORD_MEDICAL_DECISION', ['fiche-pecmu:medical-decision']), true);
+  assert.equal(api.canPerform(state, 'CLOSE_CASE', ['fiche-pecmu:update']), false);
 });
-test('prototype persistence, attachments and reopening never write to the server', async () => {
-  const noNetwork = async () => { throw new Error('Unexpected network request'); };
-  const fiche = await prototype.createFichePecmu(noNetwork, { nomVictime: 'Victime de démonstration' });
-  const consent = await prototype.createConsentementPecmu(noNetwork, { fichePecmuId: fiche.id, agent: 'Agent', filename: 'consentement.pdf', file: 'ZmljaGU=' });
-  const state = { ...empty(), certification: { consentId: consent.id, uploadedAt: new Date().toISOString() } };
-  await saveWorkflow(noNetwork, fiche.id, state);
-  assert.deepEqual(readWorkflow(await prototype.getFichePecmu(noNetwork, fiche.id)), state);
-  assert.equal((await prototype.listConsentementsByFiche(noNetwork, fiche.id))[0].file, 'ZmljaGU=');
-  const act = await prototype.createActeMedicalPecmu(noNetwork, { fichePecmuId: fiche.id, rapportMedical: 'Acte', examens: [{ filename: consent.filename, file: consent.file }] });
-  assert.equal((await prototype.listActesMedicauxByFiche(noNetwork, fiche.id))[0].id, act.id);
-  await prototype.createSuiviAccompagnement(noNetwork, { fichePecmuId: fiche.id, avis: 'Suivi' });
-  assert.equal((await prototype.listSuivisByFiche(noNetwork, fiche.id)).length, 1);
-  const snapshot = await prototype.getFichePecmu(noNetwork, fiche.id); snapshot.victimName = 'Changed';
-  assert.notEqual((await prototype.getFichePecmu(noNetwork, fiche.id)).victimName, 'Changed');
+test('stepper distinguishes pending closure, explicit lost-to-follow-up closure and closed orientations', () => {
+  assert.equal(api.activeWorkflowTab('CERTIFICATION_PENDING'), 'certification');
+  assert.equal(api.activeWorkflowTab('NOT_ELIGIBLE'), 'decision');
+  assert.equal(api.activeWorkflowTab('CONSENT_REFUSED'), 'consents');
+  assert.equal(api.activeWorkflowTab('TRANSFERRED'), 'care');
+  assert.equal(api.activeWorkflowTab('CLOSURE_PENDING'), 'closure');
+  assert.equal(api.activeWorkflowTab('LOST_TO_FOLLOW_UP'), 'closure');
+  assert.equal(api.activeWorkflowTab('CLOSED'), 'orientations');
 });
-test('existing records are read but prototype changes do not issue PUT/POST', async () => {
-  const calls = [];
-  const fetcher = async (url, options) => { calls.push({ url, options }); return { id: 987, victimName: 'Existing' }; };
-  await prototype.updateFichePecmu(fetcher, 987, { medicalStatus: 'Clôturé' });
-  assert.deepEqual(calls, [{ url: '/fiche-pecmu/987', options: undefined }]);
+test('uploads send a real multipart file without forcing Content-Type', async () => {
+  const file = new File(['%PDF-1.4 test'], 'consent.pdf', { type: 'application/pdf' });
+  await api.uploadPecmuFile(async (path, options) => {
+    assert.equal(path, '/acte-consentement-pecmu/9/file');
+    assert.equal(options.method, 'POST');
+    assert.equal(options.headers, undefined);
+    assert.equal(options.body.get('file').name, 'consent.pdf');
+    assert.equal(await options.body.get('file').text(), '%PDF-1.4 test');
+  }, '/acte-consentement-pecmu/9/file', file);
+  assert.throws(() => api.validatePecmuFile(new File([], 'empty.pdf')), /vide/);
+  assert.throws(() => api.validatePecmuFile(new File(['x'], 'file.webp')), /PDF/);
 });
-test('unsupported and oversized documents are rejected before reading', async () => {
-  await assert.rejects(readSignedFile({ name: 'file.exe', size: 20 }), /PDF/);
-  await assert.rejects(readSignedFile({ name: 'file.pdf', size: 11 * 1024 * 1024 }), /10 Mo/);
+test('private documents request a fresh signed URL for every view', async () => {
+  let count = 0;
+  const fetcher = async path => { assert.equal(path, '/acte-consentement-pecmu/9/file/download-url'); return { url: `https://storage.example/file?signature=${++count}` }; };
+  const first = await api.getPecmuDocumentUrl(fetcher, '/acte-consentement-pecmu/9/file/download-url');
+  const second = await api.getPecmuDocumentUrl(fetcher, '/acte-consentement-pecmu/9/file/download-url');
+  assert.notEqual(first, second);
+  await assert.rejects(api.getPecmuDocumentUrl(async () => ({ url: 'javascript:alert(1)' }), '/file'), /indisponible/);
 });
-test('each medical act requires its own signed procedure consent', () => {
-  const { assertMedicalActAllowed } = require('../app/reparations/services/pecmuWorkflow.ts');
-  const state = active();
-  assert.throws(() => assertMedicalActAllowed(state, [1, 2], 2), /consentement/);
-  state.consents.push({ id: 3, kind: 'procedure', signedAt: '2026-10-16' });
-  assert.throws(() => assertMedicalActAllowed(state, [1, 2], 3), /consentement/);
-  assert.doesNotThrow(() => assertMedicalActAllowed(state, [1, 2, 3], 3));
-  state.acts.push({ id: 20, consentId: 3, episode: 1 });
-  assert.throws(() => assertMedicalActAllowed(state, [1, 2, 3], 3), /déjà associé/);
-  assert.throws(() => assertMedicalActAllowed({ ...state, closedAt: '2026-10-16' }, [1, 2, 3], 3), /clôturé/);
+test('pagination uses top-level API metadata', () => {
+  const meta = ficheApi.normalizePecmuMeta({ data: [], page: 3, limit: 10, total: 37, totalPages: 4 }, { page: 1, limit: 20 }, 10);
+  assert.equal(meta.page, 3); assert.equal(meta.limit, 10); assert.equal(meta.totalPages, 4); assert.equal(meta.hasNextPage, true);
+});
+test('HTTP client preserves business errors and handles empty deletion responses', async () => {
+  const originalFetch = global.fetch;
+  try {
+    global.fetch = async () => new Response(JSON.stringify({ code: 'TRANSFER_NOTE_REQUIRED', message: 'Note obligatoire' }), { status: 400 });
+    await assert.rejects(api.pecmuRequest('/fiche-pecmu/1/close'), error => error instanceof api.PecmuApiError && error.statusCode === 400 && error.code === 'TRANSFER_NOTE_REQUIRED' && error.message === 'Note obligatoire');
+    global.fetch = async () => new Response(null, { status: 204 });
+    await assert.doesNotReject(ficheApi.deleteConsentementPecmu(api.pecmuRequest, 9));
+  } finally { global.fetch = originalFetch; }
+});
+test('malformed workflow is not accepted as successful local state', async () => {
+  await assert.rejects(api.loadPecmuWorkflow(async () => null, 1), /incomplet/);
+  await assert.rejects(api.loadPecmuWorkflow(async () => ({ fiche: { id: 1 } }), 1), /incomplet/);
 });
