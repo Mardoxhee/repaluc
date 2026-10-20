@@ -143,8 +143,8 @@ export default function PecmuDossierModal({ ficheId, fetcher, onClose, onChanged
                 ['alertSourceFullName', 'Source de l’alerte'], ['alertSourcePhone', 'Téléphone de la source'], ['alertSourceRelationship', 'Relation avec la victime'], ['alertSourceAddress', 'Adresse de la source'], ['violationType', 'Violation subie'], ['incidentDetails', 'Détails de l’incident'], ['incidentPeriod', 'Période'], ['affectedBodyParts', 'Parties du corps atteintes'], ['medicalStatus', 'Statut médical'], ['vitalPrognosis', 'Pronostic vital'], ['otherComplaints', 'Autres plaintes'],
                 ['highFever', 'Forte fièvre'], ['comaOrLossOfConsciousness', 'Coma / perte de connaissance'], ['convulsions', 'Convulsions'], ['extremeFatigue', 'Fatigue intense'], ['hypertension', 'Hypertension'], ['hyperglycemia', 'Hyperglycémie'], ['bleeding', 'Saignement'], ['wounds', 'Plaies'], ['breathingDifficulty', 'Difficulté à respirer'], ['severeDiarrhea', 'Diarrhée sévère'], ['vomiting', 'Vomissement'],
               ]} /></Panel>
-              {!closed && !negative && permitted('fiche-pecmu:update') && <Panel title="Corriger les informations générales"><WorkflowForm key={version} initial={state.fiche} busy={busy || syncFailed} submitLabel="Enregistrer les informations" onSubmit={values => json(base, values, 'PUT')} fields={[
-                { key: 'victimName', label: 'Nom de la victime', required: true }, { key: 'lucNumber', label: 'Numéro LUC' }, { key: 'victimPhone', label: 'Téléphone' }, { key: 'victimAddress', label: 'Adresse' }, { key: 'province', label: 'Province' }, { key: 'locality', label: 'Localité' }, { key: 'comments', label: 'Commentaires', type: 'textarea' },
+              {!closed && !negative && permitted('fiche-pecmu:update') && <Panel title="complément d'infos"><WorkflowForm key={version} initial={state.fiche} busy={busy || syncFailed} submitLabel="Enregistrer les informations" onSubmit={values => json(base, values, 'PUT')} fields={[
+                { key: 'lucNumber', label: 'Numéro LUC' },
               ]} /></Panel>}
             </>}
             {tab === 'certification' && <Panel title="Certification de l’alerte">
