@@ -125,7 +125,13 @@ export default function PecmuDossierModal({ ficheId, fetcher, onClose, onChanged
   const docButton = (path: string, name: string, mimeType?: string) => <button type="button" onClick={() => visualise(path, name, mimeType)} className="inline-flex shrink-0 items-center gap-2 rounded-md border border-primary/30 px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/5"><Eye size={17} />Visualiser</button>;
   const ficheDocument = (type: 'CERTIFICATION_NOTE' | 'CLOSURE_FORM', label: string) => {
     const metadata = state?.fiche.documents?.find(file => fileType(file) === type);
-    if (type === 'CERTIFICATION_NOTE' && savedCertificationFile) {
+    if (type === 'CERTIFICATION_NOTE') {
+      if (!savedCertificationFile) {
+        return <div className="border-t border-slate-200 py-3">
+          <p className="text-sm font-medium">{label}</p>
+          <p className="text-sm text-slate-500">Aperçu indisponible : la référence du fichier de certification n’a pas été renvoyée par le serveur.</p>
+        </div>;
+      }
       const name = metadata ? documentName(metadata, label) : savedCertificationFile.split('?')[0].split('/').pop() || label;
       return <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 py-3">
         <div><p className="text-sm font-medium">{label}</p><p className="break-all text-xs text-slate-500">{name}</p></div>

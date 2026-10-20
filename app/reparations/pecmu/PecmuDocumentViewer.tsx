@@ -15,35 +15,22 @@ export default function PecmuDocumentViewer({ document, fetcher, onClose }: { do
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let active = true;
-    let blobUrl = '';
-    const controller = new AbortController();
     setLoading(true); setError(''); setPreview(null); setExternalUrl('');
     void (async () => {
       const url = document.reference ? await getCertificationFileUrl(fetcher, document.reference) : await getPecmuDocumentUrl(fetcher, document.path);
       if (!active) return;
       setExternalUrl(url);
       const filename = new URL(url).pathname;
-      const imageMime = ['image/png', 'image/jpeg'].includes(document.mimeType || '')
+      const imageMime = ['image/png', 'image/jpeg', 'image/webp'].includes(document.mimeType || '')
         ? document.mimeType!
         : /\.png$/i.test(document.name) || /\.png$/i.test(filename) ? 'image/png'
-          : /\.jpe?g$/i.test(document.name) || /\.jpe?g$/i.test(filename) ? 'image/jpeg' : '';
-      // Render MinIO's display URL directly, as on the victim photo screens.
-      // Fetching an image as a blob unnecessarily requires storage CORS access.
-      if (imageMime) {
-        setPreview({ url, mime: imageMime });
-        return;
-      }
-      // A signed storage URL authenticates itself. Never forward the SSO JWT to it.
-      const response = await fetch(url, { signal: controller.signal, credentials: 'omit' });
-      if (!response.ok) throw new Error('Impossible de charger l’aperçu. Vous pouvez ouvrir le document dans un nouvel onglet.');
-      const file = await response.blob();
-      const mime = file.type && file.type !== 'application/octet-stream' ? file.type : document.mimeType || (/\.pdf$/i.test(document.name) ? 'application/pdf' : /\.png$/i.test(document.name) ? 'image/png' : /\.jpe?g$/i.test(document.name) ? 'image/jpeg' : '');
-      if (!['application/pdf', 'image/png', 'image/jpeg'].includes(mime)) throw new Error('Ce format ne permet pas un aperçu intégré. Ouvrez le document dans un nouvel onglet.');
-      if (!active) return;
-      blobUrl = URL.createObjectURL(new Blob([file], { type: mime }));
-      setPreview({ url: blobUrl, mime });
+          : /\.jpe?g$/i.test(document.name) || /\.jpe?g$/i.test(filename) ? 'image/jpeg'
+            : /\.webp$/i.test(document.name) || /\.webp$/i.test(filename) ? 'image/webp' : '';
+      // Same display flow as the victim dossier: the resolved URL goes directly
+      // into an image or iframe, without fetching the storage file as a blob.
+      setPreview({ url, mime: imageMime || 'application/pdf' });
     })().catch(e => { if (active) setError(e.message || 'Aperçu indisponible.'); }).finally(() => { if (active) setLoading(false); });
-    return () => { active = false; controller.abort(); if (blobUrl) URL.revokeObjectURL(blobUrl); };
+    return () => { active = false; };
   }, [document, fetcher, attempt]);
   return <Modal show size="7xl" onClose={onClose} className="!z-[150] !h-dvh !bg-slate-950/70" aria-label={`Visualiser ${document.name}`}><ModalBody className="!p-0">
     <div className="flex items-center justify-between gap-4 border-b bg-white p-4 text-slate-900"><h2 className="break-all font-semibold">{document.name}</h2><button onClick={onClose} aria-label="Fermer l’aperçu" className="p-2"><X /></button></div>
