@@ -10,6 +10,7 @@ import {
   medicalDocumentTypes, outcomeLabels, PecmuApiError, statusLabels, uploadPecmuFile, validatePecmuFile, workflowJson,
   type FileMetadata, type MedicalCare, type WorkflowSnapshot, type WorkflowTab,
 } from '../services/pecmuWorkflowApi';
+import YesNoToggle from './YesNoToggle';
 import PecmuDocumentViewer, { type DocumentPreview } from './PecmuDocumentViewer';
 import { buttonClass, fieldClass, WorkflowForm, type WorkflowField } from './WorkflowForm';
 
@@ -66,6 +67,7 @@ export default function PecmuDossierModal({ ficheId, fetcher, onClose, onChanged
   const [version, setVersion] = useState(0);
   const [preview, setPreview] = useState<DocumentPreview | null>(null);
   const [editCare, setEditCare] = useState(false);
+  const [certificationChoice, setCertificationChoice] = useState<boolean | null>(null);
   const [consentFile, setConsentFile] = useState<File | null>(null);
   const [editingConsent, setEditingConsent] = useState<number | null>(null);
   const [editingFollowup, setEditingFollowup] = useState<number | null>(null);
@@ -89,6 +91,7 @@ export default function PecmuDossierModal({ ficheId, fetcher, onClose, onChanged
   const permitted = (permission: string) => permissions === null || permissions.includes(permission);
   const can = (action: string) => Boolean(state && !syncFailed && canPerform(state, action, permissions));
   const closed = state?.currentStatus === 'CLOSED';
+  const certifyAlert = certificationChoice ?? state?.fiche.incidentCertification === true;
   const latest = state?.medicalCare.at(-1);
   const negative = state?.currentStatus === 'NOT_CERTIFIED' || state?.currentStatus === 'NOT_ELIGIBLE';
 
@@ -148,13 +151,18 @@ export default function PecmuDossierModal({ ficheId, fetcher, onClose, onChanged
               ]} /></Panel>}
             </>}
             {tab === 'certification' && <Panel title="Certification de l’alerte">
-              <p className="mb-4 text-sm text-slate-600">Déposez la note de certification avant l’examen du dossier par le pool médical.</p>
-              {ficheDocument('CERTIFICATION_NOTE', 'Note de certification')}
-              {can('UPLOAD_CERTIFICATION_NOTE') && upload(`${base}/documents/CERTIFICATION_NOTE`, 'Ajouter la note de certification')}
-              <Details values={state.fiche} fields={[[ 'incidentCertification', 'Alerte certifiée'], ['certifierName', 'Certificateur'], ['certifierFunction', 'Fonction'], ['certificationDate', 'Date de certification']]} />
-              {can('CERTIFY_ALERT') && <WorkflowForm key={version} busy={busy} submitLabel="Enregistrer la certification" fields={[
-                { key: 'certified', label: 'Certifier l’alerte', type: 'boolean' }, { key: 'certifierName', label: 'Nom du certificateur', required: true }, { key: 'certifierFunction', label: 'Fonction', required: true }, { key: 'certificationDate', label: 'Date de certification', type: 'date', required: true }, { key: 'comment', label: 'Commentaire', type: 'textarea' },
-              ]} onSubmit={async values => { if (!values.certified && !await confirm('Rejeter la certification de cette alerte ?')) return false; return json(`${base}/certification`, values); }} />}
+              <fieldset disabled={busy || (!can('CERTIFY_ALERT') && !can('UPLOAD_CERTIFICATION_NOTE'))}>
+                <YesNoToggle label="Certifier l’alerte" checked={certifyAlert} onChange={setCertificationChoice} />
+              </fieldset>
+              {certifyAlert && <>
+                {can('UPLOAD_CERTIFICATION_NOTE') && upload(`${base}/documents/CERTIFICATION_NOTE`, 'Ajouter la note de certification')}
+                {ficheDocument('CERTIFICATION_NOTE', 'Note de certification')}
+              </>}
+              {can('CERTIFY_ALERT') && <button type="button" disabled={busy} className={buttonClass} onClick={async () => {
+                if (!certifyAlert && !await confirm('Rejeter la certification de cette alerte ?')) return;
+                const success = await json(`${base}/certification`, { certified: certifyAlert });
+                if (success) setCertificationChoice(null);
+              }}>{busy ? 'Enregistrement…' : 'Enregistrer la certification'}</button>}
             </Panel>}
             {tab === 'decision' && <Panel title="Décision du pool médical">
               {ficheDocument('CERTIFICATION_NOTE', 'Consulter la note de certification')}
