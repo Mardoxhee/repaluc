@@ -1,5 +1,16 @@
 'use client';
 
+export const getConnectedAgentFunction = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const user = JSON.parse(localStorage.getItem('usr') || 'null');
+    const value = user?.fonction?.fonction;
+    return typeof value === 'string' && value.trim() ? value.trim() : null;
+  } catch {
+    return null;
+  }
+};
+
 export const getConnectedAgentFullName = (): string | null => {
   if (typeof window === 'undefined') return null;
 

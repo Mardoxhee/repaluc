@@ -1,5 +1,6 @@
 "use client";
 
+import { rdcProvinces } from '../constants/provinces';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ChevronLeft,
@@ -109,34 +110,7 @@ type FilterField = {
 const ALERTS_STORAGE_KEY = 'pecmu-alertes-v1';
 const ACTS_STORAGE_KEY = 'pecmu-actes-medicaux-v1';
 
-const rdcProvinces = [
-  'Bas-Uele',
-  'Equateur',
-  'Haut-Katanga',
-  'Haut-Lomami',
-  'Haut-Uele',
-  'Ituri',
-  'Kasai',
-  'Kasai-Central',
-  'Kasai-Oriental',
-  'Kinshasa',
-  'Kongo-Central',
-  'Kwango',
-  'Kwilu',
-  'Lomami',
-  'Lualaba',
-  'Mai-Ndombe',
-  'Maniema',
-  'Mongala',
-  'Nord-Kivu',
-  'Nord-Ubangi',
-  'Sankuru',
-  'Sud-Kivu',
-  'Sud-Ubangi',
-  'Tanganyika',
-  'Tshopo',
-  'Tshuapa',
-];
+
 
 const emptyMeta: PageMeta = {
   page: 1,

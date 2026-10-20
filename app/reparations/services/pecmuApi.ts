@@ -63,6 +63,7 @@ export type FichePecmu = {
   victimIdentification?: boolean;
   certificationNote?: string;
   certificationFile?: string;
+  certification?: { certified?: boolean; certificationFile?: string };
   validatorName?: string;
   validatorRole?: string;
   validatorSignature?: string;
@@ -114,6 +115,19 @@ export type SuiviAccompagnement = {
 
 export type PecmuStatistics = {
   total?: number;
+  certified?: number;
+  notCertified?: number;
+  eligible?: number;
+  notEligible?: number;
+  treated?: number;
+  hospitalized?: number;
+  nonHospitalized?: number;
+  stabilizedOrCured?: number;
+  deceased?: number;
+  transferred?: number;
+  lostToFollowUp?: number;
+  closed?: number;
+  orientedToOtherPrograms?: number;
   bySex?: Record<string, number>;
   byProvince?: Record<string, number>;
   byMedicalStatus?: Record<string, number>;
@@ -409,9 +423,10 @@ export const deleteSuiviAccompagnement = async (fetcher: PecmuFetcher, id: numbe
   await fetcher(`/suivi-accompagnement/${id}`, { method: 'DELETE' });
 };
 
-export const getFichePecmuStatistics = async (fetcher: PecmuFetcher): Promise<PecmuStatistics | null> => (
-  await fetcher('/fiche-pecmu/statistics')
-);
+export const getFichePecmuStatistics = async (fetcher: PecmuFetcher): Promise<PecmuStatistics | null> => {
+  const response = await fetcher('/fiche-pecmu/statistics');
+  return response?.data ?? response ?? null;
+};
 
 export const getActeConsentementPecmuStatistics = async (fetcher: PecmuFetcher): Promise<any | null> => (
   await fetcher('/acte-consentement-pecmu/statistics')

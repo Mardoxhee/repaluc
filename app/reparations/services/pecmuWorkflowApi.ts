@@ -26,6 +26,8 @@ export type MedicalCare = {
   documents?: FileMetadata[]; examens?: FileMetadata[]; createdAt?: string;
 };
 export type WorkflowSnapshot = {
+  medicalDecision?: { eligible?: boolean; comment?: string; decisionMakerName?: string; decisionMakerFunction?: string; decisionDate?: string };
+  certification?: { certified?: boolean; certificationFile?: string };
   fiche: FichePecmu & { documents?: FileMetadata[] };
   consents: WorkflowConsent[]; medicalCare: MedicalCare[]; followUps: SuiviAccompagnement[];
   currentStatus: WorkflowStatus; nextActions: string[];
@@ -67,7 +69,8 @@ export async function uploadPecmuFile(fetcher: PecmuFetcher, path: string, file:
 }
 export async function uploadCertificationNote(fetcher: PecmuFetcher, file: File): Promise<string> {
   const response = await uploadPecmuFile(fetcher, '/minio/files/upload', file);
-  const reference = extractUploadedFileLink(response);
+  const filename = response?.filename ?? response?.data?.filename;
+  const reference = typeof filename === 'string' && filename.trim() ? filename.trim() : extractUploadedFileLink(response);
   if (!reference) throw new Error('MinIO n’a pas retourné la référence de la note de certification.');
   return reference;
 }
@@ -84,10 +87,18 @@ export async function getPecmuDocumentUrl(fetcher: PecmuFetcher, path: string): 
   return url;
 }
 export async function getCertificationFileUrl(fetcher: PecmuFetcher, reference: string): Promise<string> {
-  if (/^https?:\/\//i.test(reference)) return reference;
+  if (/^https?:\/\//i.test(reference)) {
+    const storedUrl = new URL(reference);
+    // Older records may contain the temporary MinIO URL instead of its key.
+    // Path-style signed URLs contain /bucket/object-key.
+    if (!storedUrl.searchParams.has('X-Amz-Signature')) return reference;
+    const segments = storedUrl.pathname.split('/').filter(Boolean);
+    if (segments.length < 2) throw new Error('La référence de la note de certification est invalide.');
+    reference = segments.slice(1).map(segment => decodeURIComponent(segment)).join('/');
+  }
   const key = reference.split('/').map(segment => encodeURIComponent(segment)).join('/');
   const response = await fetcher(`/minio/files/${key}`);
-  const url = response?.data?.src;
+  const url = response?.data?.src ?? response?.url ?? response?.data?.url;
   if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) throw new Error('Le lien de la note de certification est indisponible.');
   return url;
 }

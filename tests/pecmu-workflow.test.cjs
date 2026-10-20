@@ -88,7 +88,7 @@ test('certification uploads to MinIO and submits exactly the returned reference 
   const calls = [];
   const fetcher = async (path, options) => {
     calls.push({ path, options });
-    if (path === '/minio/files/upload') return { filename: 'stored-note-certif.pdf' };
+    if (path === '/minio/files/upload') return { filename: 'stored-note-certif.pdf', url: 'https://storage.example/fonarev/stored-note-certif.pdf?X-Amz-Signature=temporary' };
     return {};
   };
   const reference = await api.uploadCertificationNote(fetcher, new File(['%PDF-1.4'], 'local-name.pdf'));
@@ -111,4 +111,33 @@ test('certification preview resolves stored MinIO keys through data.src', async 
   assert.equal(url, 'https://storage.example/note.pdf?signature=fresh');
   assert.equal(await api.getCertificationFileUrl(async () => { throw Error('Unexpected request'); }, 'https://storage.example/file.pdf'), 'https://storage.example/file.pdf');
   await assert.rejects(api.getCertificationFileUrl(async () => ({ data: { src: 'javascript:alert(1)' } }), 'note.pdf'), /indisponible/);
+});
+test('certification preview accepts the MinIO filename and url response', async () => {
+  const url = 'https://storage.example/fonarev/note.pdf?X-Amz-Signature=fresh';
+  assert.equal(await api.getCertificationFileUrl(async path => {
+    assert.equal(path, '/minio/files/note.pdf');
+    return { filename: 'note.pdf', url };
+  }, 'note.pdf'), url);
+  await assert.rejects(api.getCertificationFileUrl(async () => ({ filename: 'note.pdf' }), 'note.pdf'), /indisponible/);
+  await assert.rejects(api.getCertificationFileUrl(async () => ({ url: 'javascript:alert(1)' }), 'note.pdf'), /indisponible/);
+});
+test('certification preview renews a previously stored signed MinIO URL', async () => {
+  let calls = 0;
+  const fetcher = async path => {
+    assert.equal(path, '/minio/files/notes/note%20certif.pdf');
+    return { url: `https://storage.example/fonarev/notes/note.pdf?X-Amz-Signature=fresh${++calls}` };
+  };
+  const stored = 'https://storage.example/fonarev/notes/note%20certif.pdf?X-Amz-Signature=expired';
+  assert.match(await api.getCertificationFileUrl(fetcher, stored), /fresh1$/);
+  assert.match(await api.getCertificationFileUrl(fetcher, stored), /fresh2$/);
+});
+test('PECMU dashboard statistics use the dedicated endpoint and preserve zero counters', async () => {
+  const stats = { total: 0, certified: 0, notCertified: 0, eligible: 0, notEligible: 0, treated: 0, hospitalized: 0, nonHospitalized: 0, stabilizedOrCured: 0, deceased: 0, transferred: 0, lostToFollowUp: 0, closed: 0, orientedToOtherPrograms: 0 };
+  for (const response of [stats, { data: stats }]) {
+    assert.deepEqual(await ficheApi.getFichePecmuStatistics(async path => {
+      assert.equal(path, '/fiche-pecmu/statistics');
+      return response;
+    }), stats);
+  }
+  await assert.rejects(ficheApi.getFichePecmuStatistics(async () => { throw new Error('Unavailable'); }), /Unavailable/);
 });

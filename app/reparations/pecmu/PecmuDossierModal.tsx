@@ -1,15 +1,20 @@
 'use client';
 
+import { rdcProvinces } from '../constants/provinces';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Modal, ModalBody } from 'flowbite-react';
-import { Eye, RefreshCw, X } from 'lucide-react';
+import { Download, Eye, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-react';
 import Swal from 'sweetalert2';
+import { getConnectedAgentFullName, getConnectedAgentFunction } from '../../utils/currentUser';
 import type { PecmuFetcher } from '../services/pecmuApi';
 import {
-  certifyPecmuAlert, uploadCertificationNote, activeWorkflowTab, canPerform, consentTypes, getPecmuPermissions, loadPecmuWorkflow,
+  certifyPecmuAlert, uploadCertificationNote, activeWorkflowTab, canPerform, consentTypes, getPecmuDocumentUrl, getPecmuPermissions, loadPecmuWorkflow,
   medicalDocumentTypes, outcomeLabels, PecmuApiError, statusLabels, uploadPecmuFile, validatePecmuFile, workflowJson,
   type FileMetadata, type MedicalCare, type WorkflowSnapshot, type WorkflowTab,
 } from '../services/pecmuWorkflowApi';
+import PecmuFollowUps from './PecmuFollowUps';
+import PecmuCareCard from './PecmuCareCard';
+import PecmuEvolutionForm from './PecmuEvolutionForm';
 import YesNoToggle from './YesNoToggle';
 import PecmuDocumentViewer, { type DocumentPreview } from './PecmuDocumentViewer';
 import { buttonClass, fieldClass, WorkflowForm, type WorkflowField } from './WorkflowForm';
@@ -19,27 +24,36 @@ const tabs: Array<{ id: WorkflowTab; label: string }> = [
   { id: 'identity', label: 'Identification et alerte' }, { id: 'certification', label: 'Certification' },
   { id: 'decision', label: 'Pool médical' }, { id: 'consents', label: 'Consentements' },
   { id: 'care', label: 'Prises en charge' }, { id: 'followups', label: 'Suivis et rendez-vous' },
-  { id: 'closure', label: 'Clôture' }, { id: 'orientations', label: 'Orientations' }, { id: 'history', label: 'Historique' },
+  { id: 'orientations', label: 'Orientations' }, { id: 'history', label: 'Historique' },
 ];
+const provinceOptions = Object.fromEntries(rdcProvinces.map(province => [province, province]));
 const careFields: WorkflowField[] = [
   { key: 'supervisorName', label: 'Superviseur médical', required: true },
   { key: 'careMode', label: 'Mode de prise en charge', type: 'select', required: true, options: { OUTPATIENT: 'Ambulatoire', HOSPITALIZATION: 'Hospitalisation' } },
   { key: 'careDate', label: 'Date des soins', type: 'date', required: true, when: values => values.careMode === 'OUTPATIENT' },
   { key: 'hospitalizationStartDate', label: 'Début d’hospitalisation', type: 'date', required: true, when: values => values.careMode === 'HOSPITALIZATION' },
   { key: 'hospitalizationEndDate', label: 'Fin d’hospitalisation', type: 'date', when: values => values.careMode === 'HOSPITALIZATION' },
-  { key: 'careStructureName', label: 'Structure de prise en charge', required: true }, { key: 'careProvince', label: 'Province', required: true },
+  { key: 'careStructureName', label: 'Structure de prise en charge', required: true }, { key: 'careProvince', label: 'Province', type: 'select', options: provinceOptions, required: true },
   { key: 'treatingDoctorName', label: 'Médecin traitant' }, { key: 'treatingDoctorPhone', label: 'Téléphone du médecin' },
-  { key: 'complaints', label: 'Plaintes', type: 'textarea' }, { key: 'diagnosis', label: 'Diagnostic', type: 'textarea' },
-  { key: 'treatmentReceived', label: 'Traitement reçu', type: 'textarea' },
+  { key: 'complaints', label: 'Plaintes', type: 'list', itemLabel: 'Plainte', addLabel: 'Ajouter une plainte' }, { key: 'diagnosis', label: 'Diagnostics', type: 'list', itemLabel: 'Diagnostic', addLabel: 'Ajouter un diagnostic' },
+  { key: 'treatmentReceived', label: 'Traitements reçus', type: 'list', itemLabel: 'Traitement', addLabel: 'Ajouter un traitement' },
   { key: 'appointmentDate1', label: 'Premier rendez-vous', type: 'date' }, { key: 'appointmentDate2', label: 'Deuxième rendez-vous', type: 'date' }, { key: 'appointmentDate3', label: 'Troisième rendez-vous', type: 'date' },
   { key: 'cout', label: 'Coût (USD)', type: 'number' }, { key: 'partenaireNom', label: 'Partenaire médical' }, { key: 'partenaireTitre', label: 'Titre / convention' }, { key: 'observation', label: 'Observation', type: 'textarea' },
 ];
 const consentFields: WorkflowField[] = [
-  { key: 'agent', label: 'Agent responsable', required: true },
   { key: 'consentType', label: 'Type de consentement', type: 'select', options: consentTypes, required: true },
-  { key: 'consentStatus', label: 'Signature', type: 'select', options: { SIGNED: 'Signé', REFUSED: 'Refusé' }, required: true },
-  { key: 'consentDate', label: 'Date du consentement', type: 'date', required: true }, { key: 'notes', label: 'Notes', type: 'textarea' },
 ];
+const consentPayload = (values: Record<string, any>, consentDate?: string) => {
+  const agent = getConnectedAgentFullName();
+  if (!agent) throw new Error('Impossible de retrouver votre identité dans la session. Reconnectez-vous.');
+  const today = new Date();
+  return {
+    consentType: values.consentType,
+    consentStatus: values.consentType === 'REFUSAL' ? 'REFUSED' : 'SIGNED',
+    agent,
+    consentDate: consentDate || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`,
+  };
+};
 const dateLabel = (value?: string) => value ? new Date(value).toLocaleDateString('fr-FR') : '—';
 const documentName = (file: FileMetadata, fallback: string) => file.originalName || file.filename || fallback;
 const fileType = (file: FileMetadata) => file.type || file.documentType;
@@ -66,13 +80,16 @@ export default function PecmuDossierModal({ ficheId, fetcher, onClose, onChanged
   const [error, setError] = useState('');
   const [version, setVersion] = useState(0);
   const [preview, setPreview] = useState<DocumentPreview | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  const [showNewCare, setShowNewCare] = useState(false);
   const [editCare, setEditCare] = useState(false);
   const [certificationChoice, setCertificationChoice] = useState<boolean | null>(null);
   const [certificationFile, setCertificationFile] = useState<File | null>(null);
   const uploadedCertification = useRef<string | null>(null);
+  const [recordedCertification, setRecordedCertification] = useState<{ ficheId: number; reference: string } | null>(null);
+  const [recordedDecision, setRecordedDecision] = useState<{ ficheId: number; values: Record<string, any> } | null>(null);
   const [consentFile, setConsentFile] = useState<File | null>(null);
   const [editingConsent, setEditingConsent] = useState<number | null>(null);
-  const [editingFollowup, setEditingFollowup] = useState<number | null>(null);
   const [selectedOrientations, setSelectedOrientations] = useState<string[]>([]);
   const [orientationNotes, setOrientationNotes] = useState('');
   const mutationLock = useRef(false);
@@ -83,7 +100,7 @@ export default function PecmuDossierModal({ ficheId, fetcher, onClose, onChanged
     setState(fresh); setSyncFailed(false);
     setSelectedOrientations(Array.isArray(fresh.fiche.orientations) ? fresh.fiche.orientations.filter((value: unknown): value is string => typeof value === 'string' && value in orientationLabels) : []);
     setOrientationNotes(typeof fresh.fiche.orientationNotes === 'string' ? fresh.fiche.orientationNotes : '');
-    if (statusRef.current !== fresh.currentStatus) { setTab(activeWorkflowTab(fresh.currentStatus)); statusRef.current = fresh.currentStatus; }
+    if (statusRef.current !== fresh.currentStatus) { setTab(activeWorkflowTab(fresh.currentStatus) === 'closure' ? 'care' : activeWorkflowTab(fresh.currentStatus)); statusRef.current = fresh.currentStatus; }
     return fresh;
   }, [fetcher, ficheId]);
   useEffect(() => {
@@ -93,10 +110,22 @@ export default function PecmuDossierModal({ ficheId, fetcher, onClose, onChanged
   const permitted = (permission: string) => permissions === null || permissions.includes(permission);
   const can = (action: string) => Boolean(state && !syncFailed && canPerform(state, action, permissions));
   const closed = state?.currentStatus === 'CLOSED';
-  const savedCertificationFile = state?.fiche.certificationFile?.trim();
-  const hasRecordedCertification = Boolean(savedCertificationFile || state?.fiche.incidentCertification === true || state?.fiche.documents?.some(file => fileType(file) === 'CERTIFICATION_NOTE'));
+  const medicalDecision = state?.medicalDecision ?? state?.fiche.medicalDecision;
+  const decisionValues = {
+    ...(recordedDecision?.ficheId === ficheId ? recordedDecision.values : {}),
+    ...Object.fromEntries(Object.entries(state?.fiche || {}).filter(([, value]) => value != null && value !== '')),
+    ...Object.fromEntries(Object.entries(medicalDecision || {}).filter(([, value]) => value != null && value !== '')),
+  };
+  const hasMedicalDecision = Boolean(decisionValues.pecmuDecision) || typeof decisionValues.eligible === 'boolean';
+  if (typeof decisionValues.eligible === 'boolean') decisionValues.pecmuDecision = decisionValues.eligible ? 'Éligible' : 'Non éligible';
+  if (decisionValues.comment) decisionValues.medicalDecisionComment = decisionValues.comment;
+  if (decisionValues.decisionDate) decisionValues.decisionDate = dateLabel(decisionValues.decisionDate);
+  const certification = state?.certification ?? state?.fiche.certification;
+  const savedCertificationFile = certification?.certificationFile?.trim() || (recordedCertification?.ficheId === ficheId ? recordedCertification.reference : undefined);
+  const hasRecordedCertification = Boolean(savedCertificationFile || certification?.certified === true || state?.fiche.documents?.some(file => fileType(file) === 'CERTIFICATION_NOTE'));
   const certifyAlert = hasRecordedCertification || (certificationChoice ?? false);
   const latest = state?.medicalCare.at(-1);
+  const canAddCare = !closed && !syncFailed && (can('OPEN_MEDICAL_CARE') || can('OPEN_TRANSFERRED_MEDICAL_CARE') || (Boolean(latest) && permitted('acte-medical-pecmu:create')));
   const negative = state?.currentStatus === 'NOT_CERTIFIED' || state?.currentStatus === 'NOT_ELIGIBLE';
 
   const mutate = async (operation: () => Promise<unknown>): Promise<boolean> => {
@@ -123,26 +152,48 @@ export default function PecmuDossierModal({ ficheId, fetcher, onClose, onChanged
   const remove = async (path: string) => { if (await confirm('Supprimer cet élément ?')) await mutate(() => fetcher(path, { method: 'DELETE' })); };
   const visualise = (path: string, name: string, mimeType?: string) => setPreview({ path, name, mimeType });
   const docButton = (path: string, name: string, mimeType?: string) => <button type="button" onClick={() => visualise(path, name, mimeType)} className="inline-flex shrink-0 items-center gap-2 rounded-md border border-primary/30 px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/5"><Eye size={17} />Visualiser</button>;
+  const downloadButton = (path: string, name: string) => <button type="button" disabled={downloading} className="inline-flex items-center gap-2 rounded-md border border-primary/30 px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/5 disabled:opacity-40" onClick={async () => {
+    setDownloading(true); setError('');
+    try {
+      const url = await getPecmuDocumentUrl(fetcher, path);
+      const response = await fetch(url, { credentials: 'omit' });
+      if (!response.ok) throw new Error('Téléchargement impossible. Vous pouvez utiliser « Visualiser » pour ouvrir le document.');
+      const objectUrl = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = objectUrl; link.download = name; document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch (e: any) { setError(e.message || 'Téléchargement impossible. Utilisez « Visualiser » pour ouvrir le document.'); }
+    finally { setDownloading(false); }
+  }}><Download size={17} />Télécharger</button>;
   const ficheDocument = (type: 'CERTIFICATION_NOTE' | 'CLOSURE_FORM', label: string) => {
     const metadata = state?.fiche.documents?.find(file => fileType(file) === type);
     if (type === 'CERTIFICATION_NOTE') {
-      if (!savedCertificationFile) {
-        return <div className="border-t border-slate-200 py-3">
-          <p className="text-sm font-medium">{label}</p>
-          <p className="text-sm text-slate-500">Aperçu indisponible : la référence du fichier de certification n’a pas été renvoyée par le serveur.</p>
-        </div>;
-      }
-      const name = metadata ? documentName(metadata, label) : savedCertificationFile.split('?')[0].split('/').pop() || label;
+      const name = metadata ? documentName(metadata, label) : savedCertificationFile?.split('?')[0].split('/').pop() || label;
       return <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 py-3">
         <div><p className="text-sm font-medium">{label}</p><p className="break-all text-xs text-slate-500">{name}</p></div>
-        {permitted('fiche-pecmu:read') && <button type="button" onClick={() => setPreview({ path: '', reference: savedCertificationFile, name, mimeType: metadata?.mimeType })} className="inline-flex shrink-0 items-center gap-2 rounded-md border border-primary/30 px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/5"><Eye size={17} />Visualiser</button>}
+        {permitted('fiche-pecmu:read') && <button type="button" onClick={async () => {
+          try {
+            setError('');
+            let reference = savedCertificationFile;
+            if (!reference) {
+              const response = await fetcher(base);
+              const fiche = response?.data ?? response;
+              reference = typeof fiche?.certification?.certificationFile === 'string' ? fiche.certification.certificationFile.trim() : undefined;
+            }
+            if (!reference) throw new Error('Le serveur ne renvoie pas la référence certification.certificationFile nécessaire pour afficher la note.');
+            setRecordedCertification({ ficheId, reference });
+            setPreview({ path: '', reference, name: metadata ? documentName(metadata, label) : reference.split('?')[0].split('/').pop() || label, mimeType: metadata?.mimeType });
+          } catch (e: any) {
+            setError(e.message || 'Impossible de récupérer le fichier de certification.');
+          }
+        }} className="inline-flex shrink-0 items-center gap-2 rounded-md border border-primary/30 px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/5"><Eye size={17} />Visualiser</button>}
       </div>;
     }
     return <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 py-3"><span className="text-sm font-medium">{metadata ? documentName(metadata, label) : label}</span>{permitted('fiche-pecmu:read') && docButton(`${base}/documents/${type}/download-url`, metadata ? documentName(metadata, label) : `${label}.pdf`, metadata?.mimeType)}</div>;
   };
   const upload = (path: string, label: string) => <Upload key={`${path}-${version}`} label={label} busy={busy || syncFailed} onUpload={file => mutate(() => uploadPecmuFile(fetcher, path, file))} />;
   const docRows = (care: MedicalCare) => <>
-    {(care.documents || []).map((file, index) => <div key={file.id ?? index} className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 py-3"><span className="text-sm">{documentName(file, medicalDocumentTypes[fileType(file) as keyof typeof medicalDocumentTypes] || 'Document médical')}</span>{file.id != null && permitted('acte-medical-pecmu:read') && docButton(`/acte-medical-pecmu/${care.id}/documents/${file.id}/download-url`, documentName(file, 'Document médical.pdf'), file.mimeType)}</div>)}
+    {(care.documents || []).filter(file => (fileType(file) !== 'TRANSFER_NOTE' || care.outcome === 'TRANSFERRED') && (fileType(file) !== 'DEATH_CERTIFICATE' || care.outcome === 'DECEASED')).map((file, index) => <div key={file.id ?? index} className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 py-3"><span className="text-sm">{documentName(file, medicalDocumentTypes[fileType(file) as keyof typeof medicalDocumentTypes] || 'Document médical')}</span>{file.id != null && permitted('acte-medical-pecmu:read') && docButton(`/acte-medical-pecmu/${care.id}/documents/${file.id}/download-url`, documentName(file, 'Document médical.pdf'), file.mimeType)}</div>)}
     {(care.examens || []).map((file, index) => <div key={file.id ?? index} className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 py-3"><span className="text-sm">{documentName(file, 'Examen')}</span>{file.id != null && permitted('acte-medical-pecmu:read') && docButton(`/acte-medical-pecmu/${care.id}/exams/${file.id}/download-url`, documentName(file, 'Examen.pdf'), file.mimeType)}</div>)}
   </>;
 
@@ -184,72 +235,132 @@ export default function PecmuDossierModal({ ficheId, fetcher, onClose, onChanged
               {!hasRecordedCertification && can('CERTIFY_ALERT') && <button type="button" disabled={busy} className={buttonClass} onClick={async () => {
                 if (!certifyAlert && !await confirm('Rejeter la certification de cette alerte ?')) return;
                 const success = await mutate(async () => {
-                  let reference = uploadedCertification.current || state.fiche.certificationFile;
+                  let reference = uploadedCertification.current || savedCertificationFile;
                   if (certifyAlert && certificationFile && !uploadedCertification.current) {
                     reference = await uploadCertificationNote(fetcher, certificationFile);
                     uploadedCertification.current = reference;
                   }
                   await certifyPecmuAlert(fetcher, ficheId, certifyAlert, reference);
+                  if (certifyAlert && reference) setRecordedCertification({ ficheId, reference });
                 });
                 if (success) { setCertificationChoice(null); setCertificationFile(null); uploadedCertification.current = null; }
               }}>{busy ? 'Enregistrement…' : 'Enregistrer la certification'}</button>}
             </Panel>}
             {tab === 'decision' && <Panel title="Décision du pool médical">
               {ficheDocument('CERTIFICATION_NOTE', 'Consulter la note de certification')}
-              <Details values={state.fiche} fields={[[ 'pecmuDecision', 'Décision enregistrée'], ['medicalDecisionComment', 'Motivation'], ['decisionMakerName', 'Médecin du pool'], ['decisionDate', 'Date de décision']]} />
+              {hasMedicalDecision && <Details values={decisionValues} fields={[[ 'pecmuDecision', 'Décision enregistrée'], ['medicalDecisionComment', 'Motivation'], ['decisionMakerName', 'Médecin du pool'], ['decisionDate', 'Date de décision']]} />}
               {can('RECORD_MEDICAL_DECISION') ? <WorkflowForm key={version} busy={busy} submitLabel="Enregistrer la décision" fields={[
-                { key: 'eligible', label: 'Dossier éligible', type: 'boolean' }, { key: 'decisionMakerName', label: 'Nom du décideur', required: true }, { key: 'decisionMakerFunction', label: 'Fonction', required: true }, { key: 'decisionDate', label: 'Date de décision', type: 'date', required: true }, { key: 'comment', label: 'Motivation de la décision', type: 'textarea', required: true },
-              ]} onSubmit={async values => { if (!values.eligible && !await confirm('Déclarer ce dossier non éligible ?')) return false; return json(`${base}/medical-decision`, values); }} /> : <ReadOnly />}
+                { key: 'eligible', label: 'Dossier éligible', type: 'boolean' }, { key: 'comment', label: 'Motivation de la décision', type: 'textarea', required: true },
+              ]} onSubmit={async values => {
+                if (!values.eligible && !await confirm('Déclarer ce dossier non éligible ?')) return false;
+                const decisionMakerName = getConnectedAgentFullName();
+                const decisionMakerFunction = getConnectedAgentFunction();
+                if (!decisionMakerName) {
+                  setError('Impossible de retrouver votre identité dans la session. Reconnectez-vous pour enregistrer votre avis.');
+                  return false;
+                }
+                const today = new Date();
+                const decisionDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                const payload = {
+                  ...values, decisionMakerName, ...(decisionMakerFunction ? { decisionMakerFunction } : {}), decisionDate,
+                };
+                return mutate(async () => {
+                  await workflowJson(fetcher, `${base}/medical-decision`, payload);
+                  setRecordedDecision({ ficheId, values: payload });
+                });
+              }} /> : <ReadOnly />}
             </Panel>}
             {tab === 'consents' && !negative && <>
               {can('RECORD_CONSENT') && <Panel title="Enregistrer un consentement"><p className="mb-4 text-sm text-slate-600">Un consentement général signé et son fichier sont nécessaires pour ouvrir les soins.</p><WorkflowForm key={`new-${version}`} fields={consentFields} initial={{ consentType: 'MEDICAL_CARE', consentStatus: 'SIGNED' }} busy={busy} submitLabel="Enregistrer le consentement et son document" onSubmit={values => mutate(async () => {
                 if (!consentFile) throw new Error('Sélectionnez le document signé ou le formulaire de refus.');
                 validatePecmuFile(consentFile);
-                const response = await workflowJson(fetcher, '/acte-consentement-pecmu', { ...values, fichePecmuId: ficheId });
+                const response = await workflowJson(fetcher, '/acte-consentement-pecmu', { ...consentPayload(values), fichePecmuId: ficheId });
                 const id = response?.id ?? response?.data?.id;
                 await load();
                 if (!id) throw new Error('Le serveur n’a pas retourné l’identifiant du consentement. Actualisez le dossier.');
                 try { await uploadPecmuFile(fetcher, `/acte-consentement-pecmu/${id}/file`, consentFile); } catch (e: any) { throw new Error(`Consentement créé. Le fichier n’a pas été déposé : ${e.message} Utilisez « Déposer le fichier » sur ce consentement pour réessayer sans le recréer.`); }
                 setConsentFile(null);
-              })}><label className="text-sm font-medium md:col-span-2">Document signé / refus *<input required type="file" accept=".pdf,.png,.jpg,.jpeg" className={fieldClass} onChange={event => setConsentFile(event.target.files?.[0] || null)} /></label></WorkflowForm></Panel>}
+              })}>{values => <label className="text-sm font-medium md:col-span-2">{values.consentType === 'REFUSAL' ? 'Document de refus' : 'Document signé'} *<input required type="file" accept=".pdf,.png,.jpg,.jpeg" className={fieldClass} onChange={event => setConsentFile(event.target.files?.[0] || null)} /></label>}</WorkflowForm></Panel>}
               <Panel title="Consentements du dossier">{state.consents.length === 0 && <Empty text="Aucun consentement enregistré." />}{state.consents.filter(c => c.isActive !== false).map(consent => <article key={consent.id} className="space-y-3 border-b border-slate-200 py-4">
                 <div className="flex flex-wrap items-center justify-between gap-3"><div><h4 className="font-semibold">{consentTypes[consent.consentType] || 'Consentement'}</h4><p className="text-sm text-slate-500">{consent.agent} · {dateLabel(consent.consentDate)} · {consent.consentStatus === 'SIGNED' ? 'Signé' : 'Refusé'}</p><p className="text-sm">{consent.notes}</p></div>{permitted('acte-consentement-pecmu:read') && docButton(`/acte-consentement-pecmu/${consent.id}/file/download-url`, documentName(consent, 'Consentement.pdf'), consent.mimeType)}</div>
-                {can('RECORD_CONSENT') && upload(`/acte-consentement-pecmu/${consent.id}/file`, 'Déposer le fichier signé / réessayer le dépôt')}
-                {!closed && state.medicalCare.length === 0 && !syncFailed && <div className="flex gap-4 text-sm">{permitted('acte-consentement-pecmu:update') && <button disabled={busy} className="text-primary" onClick={() => setEditingConsent(editingConsent === consent.id ? null : consent.id)}>Corriger</button>}{permitted('acte-consentement-pecmu:delete') && <button disabled={busy} className="text-red-600" onClick={() => remove(`/acte-consentement-pecmu/${consent.id}`)}>Supprimer</button>}</div>}
-                {editingConsent === consent.id && !closed && state.medicalCare.length === 0 && <WorkflowForm key={`${consent.id}-${version}`} fields={consentFields} initial={consent} busy={busy || syncFailed} submitLabel="Enregistrer la correction" onSubmit={async values => { const success = await json(`/acte-consentement-pecmu/${consent.id}`, values, 'PUT'); if (success) setEditingConsent(null); return success; }} />}
+                {can('RECORD_CONSENT') && upload(`/acte-consentement-pecmu/${consent.id}/file`, consent.consentType === 'REFUSAL' ? 'Déposer le document de refus' : 'Déposer le document signé')}
+                {!closed && state.medicalCare.length === 0 && !syncFailed && <div className="flex items-center gap-1 text-sm">{permitted('acte-consentement-pecmu:update') && <button disabled={busy} type="button" title="Modifier" aria-label="Modifier" className="rounded-md p-2 text-primary hover:bg-primary/10 disabled:opacity-40" onClick={() => setEditingConsent(editingConsent === consent.id ? null : consent.id)}><Pencil size={18} aria-hidden="true" /></button>}{permitted('acte-consentement-pecmu:delete') && <button disabled={busy} type="button" title="Supprimer" aria-label="Supprimer" className="rounded-md p-2 text-red-600 hover:bg-red-50 disabled:opacity-40" onClick={() => remove(`/acte-consentement-pecmu/${consent.id}`)}><Trash2 size={18} aria-hidden="true" /></button>}</div>}
+                {editingConsent === consent.id && !closed && state.medicalCare.length === 0 && <WorkflowForm key={`${consent.id}-${version}`} fields={consentFields} initial={consent} busy={busy || syncFailed} submitLabel="Enregistrer la correction" onSubmit={async values => { const success = await mutate(() => workflowJson(fetcher, `/acte-consentement-pecmu/${consent.id}`, consentPayload(values, consent.consentDate), 'PUT')); if (success) setEditingConsent(null); return success; }} />}
               </article>)}</Panel>
             </>}
             {tab === 'care' && !negative && <>
-              <Panel title="Parcours des prises en charge">{state.medicalCare.length === 0 && <Empty text="La prise en charge sera disponible après le consentement signé et le dépôt de son fichier." />}<ol className="space-y-5 border-l-2 border-primary/20 pl-5">{state.medicalCare.map(care => <li key={care.id} className="space-y-3"><h3 className="font-semibold text-primary">Prise en charge {care.sequenceNumber} · {care.careStructureName || 'Structure non renseignée'}</h3><p className="text-sm text-slate-500">{care.careMode === 'HOSPITALIZATION' ? 'Hospitalisation' : 'Ambulatoire'} · {care.careProvince} · {care.outcome ? outcomeLabels[care.outcome] : 'En cours'}</p><Details values={care} fields={careFields.map(field => [field.key, field.label] as [string, string]).concat([['outcomeDate', 'Date de l’issue'], ['transferStructureName', 'Structure receveuse'], ['transferProvince', 'Province de transfert'], ['transferNotes', 'Note de suivi du transfert']])} />{docRows(care)}</li>)}</ol></Panel>
-              {can('UPLOAD_TRANSFER_NOTE') && latest && <Panel title="Note de transfert obligatoire">{upload(`/acte-medical-pecmu/${latest.id}/documents/TRANSFER_NOTE`, 'Ajouter la note de transfert')}</Panel>}
-              {(can('OPEN_MEDICAL_CARE') || can('OPEN_TRANSFERRED_MEDICAL_CARE')) && <Panel title={latest ? 'Ouvrir la prise en charge suivante' : 'Ouvrir la première prise en charge'}><p className="mb-4 text-sm text-slate-600">{latest ? 'La nouvelle fiche reste liée à la précédente. Vérifiez les informations de suivi reprises et déposez la note de transfert avant de continuer.' : 'Renseignez le mode de soins et la structure médicale.'}</p><WorkflowForm key={`open-${version}`} fields={careFields} initial={latest ? { careMode: latest.careMode, careStructureName: latest.transferStructureName, careProvince: latest.transferProvince, complaints: latest.complaints, diagnosis: latest.diagnosis, treatmentReceived: latest.treatmentReceived } : { careStructureName: state.fiche.careStructureName, careProvince: state.fiche.province }} busy={busy} submitLabel="Ouvrir la prise en charge" onSubmit={values => json('/acte-medical-pecmu', { ...values, fichePecmuId: ficheId, ...(can('OPEN_TRANSFERRED_MEDICAL_CARE') && latest ? { previousCareId: latest.id } : {}) })} /></Panel>}
+              <section aria-label="Prises en charge" className="w-full space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h2 className="text-lg font-semibold text-slate-900">Prises en charge <span className="ml-2 text-sm font-normal text-slate-500">({state.medicalCare.length})</span></h2>
+                  <button type="button" disabled={busy || !canAddCare} className={`${buttonClass} inline-flex items-center gap-2`} onClick={() => setShowNewCare(value => !value)}><Plus size={18} aria-hidden="true" />{showNewCare ? 'Annuler l’ajout' : 'Ajouter une prise en charge'}</button>
+                </div>
+                {!canAddCare && <p className="text-sm text-slate-500">{closed ? 'Le dossier est clôturé.' : syncFailed ? 'Actualisez le dossier pour rétablir les actions disponibles.' : !permitted('acte-medical-pecmu:create') ? 'Votre profil ne permet pas de créer une prise en charge.' : 'La création sera disponible après validation du consentement et de son document.'}</p>}
+                {state.medicalCare.length === 0 && <Empty text="La prise en charge sera disponible après le consentement signé et le dépôt de son fichier." />}
+                {state.medicalCare.map(care => <PecmuCareCard key={care.id} care={care}>
+                  {Boolean(care.documents?.length || care.examens?.length) && <section className="space-y-3 border-t border-slate-100 pt-4"><h4 className="text-sm font-semibold text-primary">Documents et examens</h4>{docRows(care)}</section>}
+                </PecmuCareCard>)}
+              </section>
+
+              {canAddCare && (showNewCare || !latest) && <Panel title={`Nouvelle prise en charge · ${(latest?.sequenceNumber || 0) + 1}`}><p className="mb-4 text-sm text-slate-600">{can('OPEN_TRANSFERRED_MEDICAL_CARE') && latest ? 'La nouvelle fiche reste liée à la précédente. Vérifiez les informations de suivi reprises et déposez la note de transfert avant de continuer.' : 'Renseignez le mode de soins et la structure médicale.'}</p><PecmuEvolutionForm key={`open-${version}`} care={{ id: 0, fichePecmuId: ficheId, sequenceNumber: (latest?.sequenceNumber || 0) + 1 }} hasClosureForm={false} careFields={careFields} initial={can('OPEN_TRANSFERRED_MEDICAL_CARE') && latest ? { careMode: latest.careMode, careStructureName: latest.transferStructureName, careProvince: latest.transferProvince, complaints: latest.complaints, diagnosis: latest.diagnosis, treatmentReceived: latest.treatmentReceived } : { careStructureName: state.fiche.careStructureName, careProvince: state.fiche.province }} busy={busy} submitLabel="Ouvrir la prise en charge" onSave={(values, files, closeCase) => mutate(async () => {
+                for (const file of Object.values(files)) validatePecmuFile(file);
+                const evolutionKeys = ['outcome', 'outcomeDate', 'transferStructureName', 'transferProvince', 'transferNotes'];
+                const careValues = Object.fromEntries(Object.entries(values).filter(([key]) => !evolutionKeys.includes(key)));
+                const evolutionValues = Object.fromEntries(Object.entries(values).filter(([key]) => evolutionKeys.includes(key)));
+                const response = await workflowJson(fetcher, '/acte-medical-pecmu', { ...careValues, fichePecmuId: ficheId, ...(can('OPEN_TRANSFERRED_MEDICAL_CARE') && latest ? { previousCareId: latest.id } : {}) });
+                const careId = response?.id ?? response?.data?.id;
+                setShowNewCare(false);
+                if (!values.outcome) return;
+                if (!careId) throw new Error('Prise en charge créée, mais son identifiant est absent de la réponse. Actualisez le dossier pour compléter l’évolution.');
+                await workflowJson(fetcher, `/acte-medical-pecmu/${careId}`, evolutionValues, 'PUT');
+                for (const [type, file] of Object.entries(files)) await uploadPecmuFile(fetcher, type === 'CLOSURE_FORM' ? `${base}/documents/CLOSURE_FORM` : `/acte-medical-pecmu/${careId}/documents/${type}`, file);
+                if (closeCase) {
+                  const today = new Date();
+                  const closureDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                  await workflowJson(fetcher, `${base}/close`, { reason: outcomeLabels[values.outcome as keyof typeof outcomeLabels], closureDate });
+                }
+              })} /></Panel>}
               {can('UPDATE_MEDICAL_CARE') && latest && <Panel title="Soins en cours"><button type="button" className={buttonClass} onClick={() => setEditCare(value => !value)}>{editCare ? 'Masquer le formulaire' : 'Mettre à jour les soins'}</button>{editCare && <div className="mt-4"><WorkflowForm key={`edit-${latest.id}-${version}`} fields={careFields} initial={latest} busy={busy} submitLabel="Enregistrer les soins" onSubmit={values => { const changed = Object.fromEntries(Object.entries(values).filter(([key, value]) => value !== latest[key as keyof MedicalCare])); return json(`/acte-medical-pecmu/${latest.id}`, changed, 'PUT'); }} /></div>}</Panel>}
               {can('UPLOAD_MEDICAL_DOCUMENT') && latest && <Panel title="Examens et documents médicaux"><MedicalUpload busy={busy} onUpload={(type, file) => mutate(() => uploadPecmuFile(fetcher, type === 'EXAM' ? `/acte-medical-pecmu/${latest.id}/exams` : `/acte-medical-pecmu/${latest.id}/documents/${type}`, file))} /></Panel>}
-              {can('UPDATE_MEDICAL_CARE') && latest && <Panel title="Issue de la dernière prise en charge"><WorkflowForm key={`outcome-${version}`} busy={busy} submitLabel="Enregistrer l’issue médicale" fields={[
-                { key: 'outcome', label: 'Issue', type: 'select', options: outcomeLabels, required: true }, { key: 'outcomeDate', label: 'Date de l’issue', type: 'date', required: true },
-                { key: 'transferStructureName', label: 'Structure receveuse', required: true, when: values => values.outcome === 'TRANSFERRED' }, { key: 'transferProvince', label: 'Province de transfert', required: true, when: values => values.outcome === 'TRANSFERRED' }, { key: 'transferNotes', label: 'Informations de suivi pour la structure receveuse', type: 'textarea', when: values => values.outcome === 'TRANSFERRED' },
-              ]} onSubmit={values => json(`/acte-medical-pecmu/${latest.id}`, values, 'PUT')} /><p className="mt-4 text-sm text-slate-500">Une guérison ou un décès prépare la clôture ; le dossier n’est clôturé qu’après dépôt des pièces finales et validation explicite.</p></Panel>}
+              {latest && <Panel title="Évolution">
+                {!closed && (can('UPDATE_MEDICAL_CARE') || can('UPLOAD_MEDICAL_REPORT') || can('UPLOAD_TRANSFER_NOTE') || can('UPLOAD_CLOSURE_FORM') || can('CLOSE_CASE')) ? <PecmuEvolutionForm key={`${latest.id}-${version}`} care={latest} hasClosureForm={Boolean(state.fiche.documents?.some(file => fileType(file) === 'CLOSURE_FORM'))} busy={busy || syncFailed} onSave={(values, files, closeCase) => mutate(async () => {
+                  for (const file of Object.values(files)) validatePecmuFile(file);
+                  if (Object.entries(values).some(([key, value]) => value !== (key === 'outcomeDate' ? latest.outcomeDate?.slice(0, 10) : latest[key as keyof MedicalCare]))) await workflowJson(fetcher, `/acte-medical-pecmu/${latest.id}`, values, 'PUT');
+                  for (const [type, file] of Object.entries(files)) await uploadPecmuFile(fetcher, type === 'CLOSURE_FORM' ? `${base}/documents/CLOSURE_FORM` : `/acte-medical-pecmu/${latest.id}/documents/${type}`, file);
+                  if (closeCase) {
+                    const today = new Date();
+                    const closureDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                    await workflowJson(fetcher, `${base}/close`, { reason: outcomeLabels[values.outcome as keyof typeof outcomeLabels], closureDate });
+                  }
+                })} /> : <p className="text-sm">{latest.outcome ? outcomeLabels[latest.outcome] : 'Évolution non renseignée'}</p>}
+                {closed && <><p className="mt-4 text-sm font-semibold text-primary">Dossier clôturé</p>{ficheDocument('CLOSURE_FORM', 'Formulaire de clôture')}{permitted('fiche-pecmu:read') && downloadButton(`${base}/documents/CLOSURE_FORM/download-url`, 'Formulaire de clôture.pdf')}</>}
+              </Panel>}
               {!closed && !syncFailed && latest && !latest.outcome && permitted('acte-medical-pecmu:delete') && <button disabled={busy} className="text-sm text-red-600" onClick={() => remove(`/acte-medical-pecmu/${latest.id}`)}>Supprimer la dernière prise en charge sans issue</button>}
             </>}
-            {tab === 'followups' && <>
-              {can('CONTINUE_FOLLOW_UP') && <Panel title="Ajouter un suivi ou un rendez-vous"><WorkflowForm key={version} fields={followupFields} busy={busy} submitLabel="Enregistrer le suivi" onSubmit={values => json('/suivi-accompagnement', { ...values, fichePecmuId: ficheId })} /></Panel>}
-              <Panel title="Suivis et rendez-vous">{state.followUps.length === 0 && <Empty text="Aucun suivi enregistré." />}{state.followUps.map(followup => <article key={followup.id} className="space-y-3 border-b border-slate-200 py-4"><p className="whitespace-pre-wrap text-sm">{followup.avis}</p><p className="text-xs text-slate-500">Prochain rendez-vous : {dateLabel(followup.dateProchainRdv)}</p>{!closed && !syncFailed && <div className="flex gap-4 text-sm">{permitted('suivi-accompagnement:update') && <button disabled={busy} className="text-primary" onClick={() => setEditingFollowup(editingFollowup === followup.id ? null : followup.id)}>Corriger</button>}{permitted('suivi-accompagnement:delete') && <button disabled={busy} className="text-red-600" onClick={() => remove(`/suivi-accompagnement/${followup.id}`)}>Supprimer</button>}</div>}{editingFollowup === followup.id && !closed && <WorkflowForm key={`${followup.id}-${version}`} fields={followupFields} initial={followup} busy={busy || syncFailed} submitLabel="Enregistrer la correction" onSubmit={async values => { const success = await json(`/suivi-accompagnement/${followup.id}`, values, 'PUT'); if (success) setEditingFollowup(null); return success; }} />}</article>)}</Panel>
-            </>}
-            {tab === 'closure' && !negative && <Panel title={closed ? 'Dossier clôturé' : 'Clôture du dossier'}>
-              {state.currentStatus === 'LOST_TO_FOLLOW_UP' && <p className="mb-4 text-sm text-secondary">Le patient est perdu de vue. Le suivi reste accessible ; la clôture nécessite une décision explicite.</p>}
-              <p className="mb-4 text-sm text-slate-600">Pièces requises : issue médicale datée, rapport médical final, formulaire de clôture et certificat de décès si le patient est décédé.</p>
-              {latest && <><p className="mb-4 text-sm font-medium">Issue : {latest.outcome ? outcomeLabels[latest.outcome] : 'Non renseignée'} · {dateLabel(latest.outcomeDate)}</p>{docRows(latest)}{can('UPLOAD_MEDICAL_REPORT') && upload(`/acte-medical-pecmu/${latest.id}/documents/MEDICAL_REPORT`, 'Ajouter le rapport médical final')}{!closed && latest.outcome === 'DECEASED' && (can('UPLOAD_MEDICAL_DOCUMENT') || can('UPLOAD_MEDICAL_REPORT')) && upload(`/acte-medical-pecmu/${latest.id}/documents/DEATH_CERTIFICATE`, 'Ajouter le certificat de décès')}</>}
-              {ficheDocument('CLOSURE_FORM', 'Formulaire de clôture')}
-              {can('UPLOAD_CLOSURE_FORM') && upload(`${base}/documents/CLOSURE_FORM`, 'Ajouter le formulaire de clôture')}
-              {can('CLOSE_CASE') && <WorkflowForm key={version} busy={busy} submitLabel="Clôturer le dossier" fields={[{ key: 'reason', label: 'Motif de clôture', required: true }, { key: 'closureDate', label: 'Date de clôture', type: 'date', required: true }, { key: 'notes', label: 'Notes de clôture', type: 'textarea' }]} onSubmit={async values => { if (!await confirm('Clôturer ce dossier PECMU ? Les soins ne pourront plus être modifiés.')) return false; return json(`${base}/close`, values); }} />}
-              {closed && <Details values={state.fiche} fields={[[ 'closureDate', 'Date de clôture'], ['closureReason', 'Motif de clôture'], ['closureNotes', 'Notes']]} />}
-            </Panel>}
-            {tab === 'orientations' && !negative && <Panel title="Orientations après PECMU">
-              {!closed ? <Empty text="Les orientations sont disponibles après la clôture du dossier." /> : <>
-                <Details values={state.fiche} fields={[[ 'orientations', 'Orientations enregistrées'], ['orientationNotes', 'Notes']]} />
-                {can('RECORD_POST_PECMU_ORIENTATIONS') && <form onSubmit={async event => { event.preventDefault(); await json(`${base}/orientations`, { orientations: [...new Set(selectedOrientations)], notes: orientationNotes }); }}><fieldset disabled={busy} className="space-y-4">{Object.entries(orientationLabels).map(([value, label]) => <label key={value} className="flex items-center gap-3 text-sm"><input type="checkbox" checked={selectedOrientations.includes(value)} onChange={event => setSelectedOrientations(previous => event.target.checked ? [...previous, value] : previous.filter(item => item !== value))} />{label}</label>)}<label className="block text-sm">Notes<textarea className={fieldClass} value={orientationNotes} onChange={event => setOrientationNotes(event.target.value)} /></label><button className={buttonClass}>Enregistrer les orientations</button></fieldset></form>}
+            {tab === 'followups' && <PecmuFollowUps ficheId={ficheId} fetcher={fetcher} version={version} busy={busy || syncFailed}
+              canRead={permitted('suivi-accompagnement:read')}
+              canCreate={!closed && !syncFailed && ['IN_CARE', 'LOST_TO_FOLLOW_UP'].includes(state.currentStatus) && permitted('suivi-accompagnement:create')}
+              canUpdate={!closed && !syncFailed && permitted('suivi-accompagnement:update')}
+              canDelete={!closed && !syncFailed && permitted('suivi-accompagnement:delete')}
+              save={json} remove={remove} />}
+            {tab === 'orientations' && !negative && <div className="space-y-6">
+              {!closed ? <Panel title="Orientations après PECMU"><Empty text="Les orientations sont disponibles après la clôture du dossier." /></Panel> : <>
+                <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                  <header className="border-b border-slate-100 bg-slate-50 px-5 py-4"><h3 className="text-lg font-semibold">Orientations enregistrées</h3><p className="mt-1 text-sm text-slate-500">Situation actuelle du dossier après la PECMU.</p></header>
+                  <div className="space-y-5 p-5">
+                    {Array.isArray(state.fiche.orientations) && state.fiche.orientations.length > 0 ? <ul className="flex flex-wrap gap-2">{state.fiche.orientations.map((value: any, index: number) => <li key={index} className="rounded-md border border-primary/15 bg-primary/5 px-3 py-2 text-sm font-medium text-primary">{typeof value === 'string' ? orientationLabels[value] || value : value.label || orientationLabels[value.type] || value.type}</li>)}</ul> : <p className="text-sm text-slate-500">Aucune orientation enregistrée.</p>}
+                    {state.fiche.orientationNotes && <div className="border-t border-slate-100 pt-4"><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Notes enregistrées</p><p className="whitespace-pre-wrap text-sm text-slate-700">{state.fiche.orientationNotes}</p></div>}
+                  </div>
+                </section>
+                {can('RECORD_POST_PECMU_ORIENTATIONS') && <section className="rounded-lg border border-primary/20 bg-white p-5">
+                  <h3 className="text-lg font-semibold">Modifier les orientations</h3><p className="mb-5 mt-1 text-sm text-slate-500">Sélectionnez les accompagnements à prévoir, puis enregistrez vos modifications.</p>
+                  <form onSubmit={async event => { event.preventDefault(); await json(`${base}/orientations`, { orientations: [...new Set(selectedOrientations)], notes: orientationNotes }); }}><fieldset disabled={busy} className="space-y-5">
+                    <div className="grid gap-3 md:grid-cols-3">{Object.entries(orientationLabels).map(([value, label]) => <label key={value} className={`flex cursor-pointer items-start gap-3 rounded-md border p-4 text-sm transition-colors ${selectedOrientations.includes(value) ? 'border-primary bg-primary/5 text-primary' : 'border-slate-200 text-slate-700 hover:bg-slate-50'}`}><input type="checkbox" className="mt-0.5 accent-primary" checked={selectedOrientations.includes(value)} onChange={event => setSelectedOrientations(previous => event.target.checked ? [...previous, value] : previous.filter(item => item !== value))} /><span className="font-medium">{label}</span></label>)}</div>
+                    <label className="block text-sm font-medium">Notes<textarea className={`${fieldClass} min-h-24`} value={orientationNotes} onChange={event => setOrientationNotes(event.target.value)} /></label>
+                    <div className="flex justify-end border-t border-slate-100 pt-4"><button className={buttonClass}>{busy ? 'Enregistrement…' : 'Enregistrer les modifications'}</button></div>
+                  </fieldset></form>
+                </section>}
               </>}
-            </Panel>}
+            </div>}
             {tab === 'history' && <Panel title="Historique du dossier">{state.history?.length ? <ol className="space-y-3">{state.history.map((entry, index) => <li key={entry.id ?? index} className="border-l-2 border-primary/30 pl-4 text-sm"><p className="font-medium">{entry.action || entry.status}</p><p className="text-slate-500">{dateLabel(entry.createdAt)}</p><p>{entry.comment}</p></li>)}</ol> : <><p className="mb-4 text-sm text-slate-500">L’API ne fournit pas d’historique détaillé pour ce dossier. Les prises en charge sont consultables dans leur onglet.</p><Details values={state.fiche} fields={[[ 'createdAt', 'Création du dossier'], ['updatedAt', 'Dernière mise à jour']]} /></>}</Panel>}
           </>}
         </main>
@@ -258,7 +369,7 @@ export default function PecmuDossierModal({ ficheId, fetcher, onClose, onChanged
     {preview && <PecmuDocumentViewer document={preview} fetcher={fetcher} onClose={() => setPreview(null)} />}
   </>;
 }
-const followupFields: WorkflowField[] = [{ key: 'avis', label: 'Avis / commentaire', type: 'textarea', required: true }, { key: 'dateProchainRdv', label: 'Prochain rendez-vous', type: 'date' }];
+
 const orientationLabels: Record<string, string> = { PSYCHOLOGICAL_SUPPORT: 'Accompagnement psychologique', ECONOMIC_POOL: 'Pool économique', COMPENSATION: 'Indemnisation' };
 function Panel({ title, children }: { title: string; children: React.ReactNode }) { return <section className="space-y-4 border border-slate-200 bg-white p-5"><h3 className="text-lg font-semibold">{title}</h3>{children}</section>; }
 function Empty({ text }: { text: string }) { return <p className="py-4 text-sm text-slate-500">{text}</p>; }
