@@ -126,6 +126,21 @@ export function getPecmuPermissions(): string[] | null {
   return null;
 }
 export type WorkflowTab = 'identity' | 'certification' | 'decision' | 'consents' | 'care' | 'followups' | 'closure' | 'orientations' | 'history';
+export function isWorkflowTabAvailable(status: WorkflowStatus, tab: WorkflowTab): boolean {
+  if (['identity', 'certification', 'history'].includes(tab)) return true;
+  const stages: Record<WorkflowStatus, number> = {
+    CERTIFICATION_PENDING: 0, NOT_CERTIFIED: 0,
+    MEDICAL_DECISION_PENDING: 1, NOT_ELIGIBLE: 1,
+    CONSENT_PENDING: 2, CONSENT_REFUSED: 2,
+    READY_FOR_CARE: 3,
+    IN_CARE: 4, TRANSFERRED: 4, CLOSURE_PENDING: 4, LOST_TO_FOLLOW_UP: 4,
+    CLOSED: 5,
+  };
+  const required: Partial<Record<WorkflowTab, number>> = {
+    decision: 1, consents: 2, care: 3, followups: 4, closure: 4, orientations: 5,
+  };
+  return (stages[status] ?? -1) >= (required[tab] ?? Infinity);
+}
 export function activeWorkflowTab(status: WorkflowStatus): WorkflowTab {
   if (['CERTIFICATION_PENDING', 'NOT_CERTIFIED'].includes(status)) return 'certification';
   if (['MEDICAL_DECISION_PENDING', 'NOT_ELIGIBLE'].includes(status)) return 'decision';

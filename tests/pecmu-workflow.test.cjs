@@ -141,3 +141,21 @@ test('PECMU dashboard statistics use the dedicated endpoint and preserve zero co
   }
   await assert.rejects(ficheApi.getFichePecmuStatistics(async () => { throw new Error('Unavailable'); }), /Unavailable/);
 });
+test('workflow tabs unlock progressively and refusal never unlocks medical care', () => {
+  const allowed = api.isWorkflowTabAvailable;
+  assert.equal(allowed('CERTIFICATION_PENDING', 'decision'), false);
+  assert.equal(allowed('NOT_CERTIFIED', 'decision'), false);
+  assert.equal(allowed('MEDICAL_DECISION_PENDING', 'decision'), true);
+  assert.equal(allowed('NOT_ELIGIBLE', 'consents'), false);
+  assert.equal(allowed('CONSENT_PENDING', 'consents'), true);
+  assert.equal(allowed('CONSENT_REFUSED', 'care'), false);
+  assert.equal(allowed('READY_FOR_CARE', 'care'), true);
+  assert.equal(allowed('READY_FOR_CARE', 'followups'), false);
+  for (const status of ['IN_CARE', 'TRANSFERRED', 'CLOSURE_PENDING', 'LOST_TO_FOLLOW_UP']) {
+    assert.equal(allowed(status, 'followups'), true);
+    assert.equal(allowed(status, 'orientations'), false);
+  }
+  assert.equal(allowed('CLOSED', 'orientations'), true);
+  assert.equal(allowed('CLOSED', 'care'), true);
+  assert.equal(allowed('CERTIFICATION_PENDING', 'history'), true);
+});
