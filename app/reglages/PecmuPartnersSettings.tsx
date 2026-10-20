@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Building2, Edit3, Mail, MapPin, Phone, Plus, Search, Trash2, X } from 'lucide-react';
 import Swal from 'sweetalert2';
 
-const STORAGE_KEY = 'pecmu-partenaires-prise-en-charge-v1';
+import { pecmuRequest } from '../reparations/services/pecmuWorkflowApi';
+import { normalizeApiList } from '../reparations/utils/mentionStats';
 
 const provinces = [
   'Bas-Uele', 'Equateur', 'Haut-Katanga', 'Haut-Lomami', 'Haut-Uele', 'Ituri',
@@ -39,14 +40,36 @@ export default function PecmuPartnersSettings() {
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Partner | null>(null);
 
-  useEffect(() => {
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [formError, setFormError] = useState('');
+  const [domainInput, setDomainInput] = useState('');
+  const [domain, setDomain] = useState('');
+  const requestId = useRef(0);
+  const mutationLock = useRef(false);
+  const load = useCallback(async () => {
+    const id = ++requestId.current;
+    setLoading(true); setError('');
     try {
-      const stored = window.localStorage.getItem(STORAGE_KEY);
-      setPartners(stored ? JSON.parse(stored) : []);
-    } catch {
-      setPartners([]);
-    }
-  }, []);
+      const result = await pecmuRequest(domain ? `/partenaires/search?${new URLSearchParams({ domaine: domain })}` : '/partenaires');
+      if (id === requestId.current) setPartners(normalizeApiList(result));
+    } catch (e: any) {
+      if (id === requestId.current) { setPartners([]); setError(e.message || 'Impossible de charger les partenaires.'); }
+    } finally { if (id === requestId.current) setLoading(false); }
+  }, [domain]);
+  useEffect(() => { void load(); return () => { requestId.current++; }; }, [load]);
+  const editPartner = async (partner: Partner) => {
+    if (mutationLock.current) return;
+    mutationLock.current = true; setBusy(true); setError(''); setFormError('');
+    try {
+      const result = await pecmuRequest(`/partenaires/${partner.id}`);
+      const item = result?.data ?? result;
+      if (!item?.id) throw new Error('Partenaire introuvable.');
+      setEditing({ ...emptyPartner(), ...item });
+    } catch (e: any) { setError(e.message || 'Impossible de charger le partenaire.'); }
+    finally { mutationLock.current = false; setBusy(false); }
+  };
 
   useEffect(() => {
     if (!editing) return;
@@ -62,34 +85,39 @@ export default function PecmuPartnersSettings() {
     if (!term) return partners;
     return partners.filter((partner) =>
       [partner.nom, partner.domaine, partner.province, partner.contact, partner.email, partner.adresse]
-        .some((value) => value.toLocaleLowerCase('fr').includes(term))
+        .some((value) => String(value ?? '').toLocaleLowerCase('fr').includes(term))
     );
   }, [partners, search]);
 
-  const persist = (next: Partner[]) => {
-    setPartners(next);
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  };
-
-  const savePartner = (event: React.FormEvent) => {
+  const savePartner = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!editing?.nom.trim() || !editing.province) return;
-    const partner = { ...editing, nom: editing.nom.trim(), id: editing.id || Date.now() };
-    persist(editing.id ? partners.map((item) => item.id === editing.id ? partner : item) : [...partners, partner]);
-    setEditing(null);
+    if (mutationLock.current || !editing?.nom.trim() || !editing.province) return;
+    mutationLock.current = true; setBusy(true); setFormError('');
+    try {
+      const payload = Object.fromEntries(['nom', 'domaine', 'province', 'contact', 'email', 'adresse'].map(key => [key, String(editing[key as keyof Partner] ?? '').trim()]));
+      await pecmuRequest(editing.id ? `/partenaires/${editing.id}` : '/partenaires', { method: editing.id ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      setEditing(null);
+      await load();
+    } catch (e: any) { setFormError(e.message || 'Impossible d’enregistrer le partenaire.'); }
+    finally { mutationLock.current = false; setBusy(false); }
   };
 
   const deletePartner = async (partner: Partner) => {
+    if (mutationLock.current) return;
     const result = await Swal.fire({
       icon: 'warning',
       title: 'Supprimer ce partenaire ?',
-      text: partner.nom,
+      text: `${partner.nom} sera supprimé définitivement.`,
       showCancelButton: true,
       confirmButtonText: 'Supprimer',
       cancelButtonText: 'Annuler',
       confirmButtonColor: '#dc2626',
     });
-    if (result.isConfirmed) persist(partners.filter((item) => item.id !== partner.id));
+    if (!result.isConfirmed || mutationLock.current) return;
+    mutationLock.current = true; setBusy(true); setError('');
+    try { await pecmuRequest(`/partenaires/${partner.id}`, { method: 'DELETE' }); await load(); }
+    catch (e: any) { setError(e.message || 'Impossible de supprimer le partenaire.'); }
+    finally { mutationLock.current = false; setBusy(false); }
   };
 
   const updateEditing = (field: keyof Partner, value: string) => {
@@ -106,18 +134,25 @@ export default function PecmuPartnersSettings() {
           </div>
           <p className="mt-1 text-sm text-gray-600">Configurez les structures médicales auxquelles les victimes peuvent être affectées.</p>
         </div>
-        <button type="button" onClick={() => setEditing(emptyPartner())} className="inline-flex items-center justify-center gap-2 bg-[#901c67] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#771654]">
+        <button type="button" disabled={busy} onClick={() => { setFormError(''); setEditing(emptyPartner()); }} className="inline-flex items-center justify-center gap-2 bg-[#901c67] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#771654]">
           <Plus size={17} /> Ajouter un partenaire
         </button>
       </div>
 
       <div className="p-5">
+        <form className="mb-4 flex flex-wrap items-end gap-2" onSubmit={event => { event.preventDefault(); setDomain(domainInput.trim()); }}>
+          <label className="text-sm text-gray-700">Domaine exact<input className="mt-1 block rounded-md border border-gray-300 px-3 py-2" value={domainInput} onChange={event => setDomainInput(event.target.value)} placeholder="Ex. médical" /></label>
+          <button type="submit" className="rounded-md border border-gray-300 px-3 py-2 text-sm">Filtrer</button>
+          {domain && <button type="button" className="px-3 py-2 text-sm text-primary" onClick={() => { setDomainInput(''); setDomain(''); }}>Tous les domaines</button>}
+        </form>
         <label className="relative block max-w-xl">
           <Search size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Rechercher par nom, province, domaine..." className="w-full border border-gray-300 py-2.5 pl-10 pr-3 text-sm outline-none focus:border-[#901c67] focus:ring-1 focus:ring-[#901c67]" />
         </label>
       </div>
 
+      {error && <div role="alert" className="px-5 pb-4 text-sm text-red-600">{error}<button type="button" onClick={() => void load()} className="ml-3 underline">Réessayer</button></div>}
+      {loading && <p role="status" className="px-5 pb-4 text-sm text-gray-500">Chargement des partenaires…</p>}
       <div className="overflow-x-auto border-t border-gray-200">
         <table className="min-w-full text-sm">
           <thead className="bg-gray-50 text-left text-xs font-semibold uppercase text-gray-600">
@@ -126,22 +161,22 @@ export default function PecmuPartnersSettings() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {visiblePartners.map((partner) => (
+            {!loading && !error && visiblePartners.map((partner) => (
               <tr key={partner.id} className="hover:bg-gray-50">
                 <td className="px-5 py-4"><div className="font-semibold text-gray-900">{partner.nom}</div><div className="mt-1 text-xs text-gray-500">{partner.adresse || 'Adresse non renseignée'}</div></td>
                 <td className="px-5 py-4 text-gray-700">{partner.domaine || '-'}</td>
                 <td className="px-5 py-4"><span className="inline-flex items-center gap-1 text-gray-700"><MapPin size={14} />{partner.province}</span></td>
                 <td className="px-5 py-4 text-gray-700"><div>{partner.contact || '-'}</div><div className="text-xs text-gray-500">{partner.email}</div></td>
-                <td className="px-5 py-4"><div className="flex justify-end gap-2"><button type="button" onClick={() => setEditing({ ...partner })} className="border border-gray-300 p-2 text-gray-700 hover:bg-gray-100" title="Modifier"><Edit3 size={16} /></button><button type="button" onClick={() => deletePartner(partner)} className="border border-red-200 p-2 text-red-600 hover:bg-red-50" title="Supprimer"><Trash2 size={16} /></button></div></td>
+                <td className="px-5 py-4"><div className="flex justify-end gap-2"><button type="button" disabled={busy} onClick={() => editPartner(partner)} className="border border-gray-300 p-2 text-gray-700 hover:bg-gray-100" title="Modifier"><Edit3 size={16} /></button><button type="button" disabled={busy} onClick={() => deletePartner(partner)} className="border border-red-200 p-2 text-red-600 hover:bg-red-50" title="Supprimer"><Trash2 size={16} /></button></div></td>
               </tr>
             ))}
-            {visiblePartners.length === 0 && <tr><td colSpan={5} className="px-5 py-12 text-center text-gray-500">Aucun partenaire PECMU configuré. Utilisez « Ajouter un partenaire » pour commencer.</td></tr>}
+            {!loading && !error && visiblePartners.length === 0 && <tr><td colSpan={5} className="px-5 py-12 text-center text-gray-500">Aucun partenaire ne correspond à cette liste.</td></tr>}
           </tbody>
         </table>
       </div>
 
       {editing && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm md:p-8" role="dialog" aria-modal="true" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditing(null); }}>
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm md:p-8" role="dialog" aria-modal="true" onMouseDown={(event) => { if (!busy && event.target === event.currentTarget) setEditing(null); }}>
           <form onSubmit={savePartner} className="flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-lg border border-white/60 bg-white shadow-[0_28px_90px_-24px_rgba(15,23,42,0.55)] md:max-h-[calc(100vh-4rem)]">
             <div className="relative border-b border-gray-200 px-5 py-5 md:px-7">
               <div className="absolute inset-y-0 left-0 w-1.5 bg-[#901c67]" />
@@ -155,10 +190,11 @@ export default function PecmuPartnersSettings() {
                   <p className="mt-1 text-sm text-gray-500">Enregistrez une structure disponible pour la prise en charge.</p>
                 </div>
               </div>
-              <button type="button" onClick={() => setEditing(null)} className="absolute right-4 top-4 p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-900" aria-label="Fermer"><X size={20} /></button>
+              <button type="button" disabled={busy} onClick={() => setEditing(null)} className="absolute right-4 top-4 p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-900" aria-label="Fermer"><X size={20} /></button>
             </div>
 
-            <div className="overflow-y-auto px-5 py-5 md:px-7">
+            <fieldset disabled={busy} className="overflow-y-auto px-5 py-5 md:px-7">
+              {formError && <p role="alert" className="mb-4 text-sm text-red-600">{formError}</p>}
               <div className="space-y-6">
                 <section>
                   <h4 className="mb-3 text-xs font-black uppercase tracking-wide text-gray-500">Identification de la structure</h4>
@@ -187,11 +223,11 @@ export default function PecmuPartnersSettings() {
                   </div>
                 </section>
               </div>
-            </div>
+            </fieldset>
 
             <div className="flex items-center justify-end gap-3 border-t border-gray-200 bg-gray-50 px-5 py-4 md:px-7">
-              <button type="button" onClick={() => setEditing(null)} className="rounded-md border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-100">Annuler</button>
-              <button type="submit" className="inline-flex items-center gap-2 rounded-md bg-[#901c67] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#771654]"><Plus size={17} />{editing.id ? 'Enregistrer les modifications' : 'Ajouter le partenaire'}</button>
+              <button type="button" disabled={busy} onClick={() => setEditing(null)} className="rounded-md border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-100">Annuler</button>
+              <button type="submit" disabled={busy} className="inline-flex items-center gap-2 rounded-md bg-[#901c67] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#771654]"><Plus size={17} />{busy ? 'Enregistrement…' : editing.id ? 'Enregistrer les modifications' : 'Ajouter le partenaire'}</button>
             </div>
           </form>
         </div>,
