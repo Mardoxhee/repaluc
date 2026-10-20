@@ -22,6 +22,17 @@ export default function PecmuDocumentViewer({ document, fetcher, onClose }: { do
       const url = document.reference ? await getCertificationFileUrl(fetcher, document.reference) : await getPecmuDocumentUrl(fetcher, document.path);
       if (!active) return;
       setExternalUrl(url);
+      const filename = new URL(url).pathname;
+      const imageMime = ['image/png', 'image/jpeg'].includes(document.mimeType || '')
+        ? document.mimeType!
+        : /\.png$/i.test(document.name) || /\.png$/i.test(filename) ? 'image/png'
+          : /\.jpe?g$/i.test(document.name) || /\.jpe?g$/i.test(filename) ? 'image/jpeg' : '';
+      // Render MinIO's display URL directly, as on the victim photo screens.
+      // Fetching an image as a blob unnecessarily requires storage CORS access.
+      if (imageMime) {
+        setPreview({ url, mime: imageMime });
+        return;
+      }
       // A signed storage URL authenticates itself. Never forward the SSO JWT to it.
       const response = await fetch(url, { signal: controller.signal, credentials: 'omit' });
       if (!response.ok) throw new Error('Impossible de charger l’aperçu. Vous pouvez ouvrir le document dans un nouvel onglet.');
@@ -39,7 +50,7 @@ export default function PecmuDocumentViewer({ document, fetcher, onClose }: { do
     <div className="flex h-[75vh] flex-col items-center justify-center bg-slate-100 p-4 text-slate-700">
       {loading && <p role="status">Chargement de l’aperçu…</p>}
       {error && <div role="alert" className="space-y-4 text-center"><p>{error}</p><button onClick={() => setAttempt(value => value + 1)} className="border border-primary px-4 py-2 text-primary">Réessayer</button></div>}
-      {preview && (preview.mime === 'application/pdf' ? <iframe title={document.name} src={preview.url} className="h-full w-full border-0 bg-white" /> : <img src={preview.url} alt={document.name} className="max-h-full max-w-full object-contain" />)}
+      {preview && !error && (preview.mime === 'application/pdf' ? <iframe title={document.name} src={preview.url} className="h-full w-full border-0 bg-white" /> : <img src={preview.url} alt={document.name} onError={() => setError('Impossible de charger l’image. Réessayez ou ouvrez le document dans un nouvel onglet.')} className="max-h-full max-w-full object-contain" />)}
     </div>
     {externalUrl && <div className="border-t bg-white p-3 text-right"><a href={externalUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-sm font-semibold text-primary"><ExternalLink size={16} />Ouvrir dans un nouvel onglet</a></div>}
   </ModalBody></Modal>;

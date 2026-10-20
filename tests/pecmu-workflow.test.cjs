@@ -106,7 +106,7 @@ test('certification rejects missing MinIO references and does not send a success
 test('certification preview resolves stored MinIO keys through data.src', async () => {
   const url = await api.getCertificationFileUrl(async path => {
     assert.equal(path, '/minio/files/notes/note%20certif.pdf');
-    return { data: { src: 'https://storage.example/note.pdf?signature=fresh' } };
+    return { url: 'https://storage.example/upload-only', data: { src: 'https://storage.example/note.pdf?signature=fresh' } };
   }, 'notes/note certif.pdf');
   assert.equal(url, 'https://storage.example/note.pdf?signature=fresh');
   assert.equal(await api.getCertificationFileUrl(async () => { throw Error('Unexpected request'); }, 'https://storage.example/file.pdf'), 'https://storage.example/file.pdf');

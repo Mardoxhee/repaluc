@@ -87,8 +87,8 @@ export async function getCertificationFileUrl(fetcher: PecmuFetcher, reference: 
   if (/^https?:\/\//i.test(reference)) return reference;
   const key = reference.split('/').map(segment => encodeURIComponent(segment)).join('/');
   const response = await fetcher(`/minio/files/${key}`);
-  const url = extractUploadedFileLink(response);
-  if (!/^https?:\/\//i.test(url)) throw new Error('Le lien de la note de certification est indisponible.');
+  const url = response?.data?.src;
+  if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) throw new Error('Le lien de la note de certification est indisponible.');
   return url;
 }
 export const actionPermissions: Record<string, string> = {
