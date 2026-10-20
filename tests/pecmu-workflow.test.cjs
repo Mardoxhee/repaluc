@@ -84,3 +84,22 @@ test('malformed workflow is not accepted as successful local state', async () =>
   await assert.rejects(api.loadPecmuWorkflow(async () => null, 1), /incomplet/);
   await assert.rejects(api.loadPecmuWorkflow(async () => ({ fiche: { id: 1 } }), 1), /incomplet/);
 });
+test('certification uploads to MinIO and submits exactly the returned reference and certified', async () => {
+  const calls = [];
+  const fetcher = async (path, options) => {
+    calls.push({ path, options });
+    if (path === '/minio/files/upload') return { filename: 'stored-note-certif.pdf' };
+    return {};
+  };
+  const reference = await api.uploadCertificationNote(fetcher, new File(['%PDF-1.4'], 'local-name.pdf'));
+  await api.certifyPecmuAlert(fetcher, 42, true, reference);
+  assert.equal(calls[0].options.body.get('file').name, 'local-name.pdf');
+  assert.equal(calls[1].path, '/fiche-pecmu/42/certification');
+  assert.deepEqual(JSON.parse(calls[1].options.body), { certified: true, certificationFile: 'stored-note-certif.pdf' });
+});
+test('certification rejects missing MinIO references and does not send a successful certification without a file', async () => {
+  await assert.rejects(api.uploadCertificationNote(async () => ({}), new File(['%PDF'], 'note.pdf')), /référence/);
+  let requests = 0;
+  await assert.rejects(api.certifyPecmuAlert(async () => { requests++; }, 42, true), /note de certification/);
+  assert.equal(requests, 0);
+});

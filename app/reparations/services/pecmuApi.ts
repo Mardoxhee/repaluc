@@ -62,6 +62,7 @@ export type FichePecmu = {
   incidentCertification?: boolean;
   victimIdentification?: boolean;
   certificationNote?: string;
+  certificationFile?: string;
   validatorName?: string;
   validatorRole?: string;
   validatorSignature?: string;

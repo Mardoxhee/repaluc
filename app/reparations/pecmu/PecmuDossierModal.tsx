@@ -6,7 +6,7 @@ import { Eye, RefreshCw, X } from 'lucide-react';
 import Swal from 'sweetalert2';
 import type { PecmuFetcher } from '../services/pecmuApi';
 import {
-  activeWorkflowTab, canPerform, consentTypes, getPecmuPermissions, loadPecmuWorkflow,
+  certifyPecmuAlert, uploadCertificationNote, activeWorkflowTab, canPerform, consentTypes, getPecmuPermissions, loadPecmuWorkflow,
   medicalDocumentTypes, outcomeLabels, PecmuApiError, statusLabels, uploadPecmuFile, validatePecmuFile, workflowJson,
   type FileMetadata, type MedicalCare, type WorkflowSnapshot, type WorkflowTab,
 } from '../services/pecmuWorkflowApi';
@@ -68,6 +68,8 @@ export default function PecmuDossierModal({ ficheId, fetcher, onClose, onChanged
   const [preview, setPreview] = useState<DocumentPreview | null>(null);
   const [editCare, setEditCare] = useState(false);
   const [certificationChoice, setCertificationChoice] = useState<boolean | null>(null);
+  const [certificationFile, setCertificationFile] = useState<File | null>(null);
+  const uploadedCertification = useRef<string | null>(null);
   const [consentFile, setConsentFile] = useState<File | null>(null);
   const [editingConsent, setEditingConsent] = useState<number | null>(null);
   const [editingFollowup, setEditingFollowup] = useState<number | null>(null);
@@ -155,13 +157,26 @@ export default function PecmuDossierModal({ ficheId, fetcher, onClose, onChanged
                 <YesNoToggle label="Certifier l’alerte" checked={certifyAlert} onChange={setCertificationChoice} />
               </fieldset>
               {certifyAlert && <>
-                {can('UPLOAD_CERTIFICATION_NOTE') && upload(`${base}/documents/CERTIFICATION_NOTE`, 'Ajouter la note de certification')}
+                {(can('CERTIFY_ALERT') || can('UPLOAD_CERTIFICATION_NOTE')) && <label className="block text-sm font-medium">Ajouter la note de certification
+                  <input disabled={busy} type="file" accept=".pdf,.png,.jpg,.jpeg" className={fieldClass} onChange={event => {
+                    setCertificationFile(event.target.files?.[0] || null);
+                    uploadedCertification.current = null;
+                  }} />
+                  {certificationFile && <span className="mt-2 block text-xs text-slate-500">{certificationFile.name} sera envoyé sur MinIO à l’enregistrement.</span>}
+                </label>}
                 {ficheDocument('CERTIFICATION_NOTE', 'Note de certification')}
               </>}
               {can('CERTIFY_ALERT') && <button type="button" disabled={busy} className={buttonClass} onClick={async () => {
                 if (!certifyAlert && !await confirm('Rejeter la certification de cette alerte ?')) return;
-                const success = await json(`${base}/certification`, { certified: certifyAlert });
-                if (success) setCertificationChoice(null);
+                const success = await mutate(async () => {
+                  let reference = uploadedCertification.current || state.fiche.certificationFile;
+                  if (certifyAlert && certificationFile && !uploadedCertification.current) {
+                    reference = await uploadCertificationNote(fetcher, certificationFile);
+                    uploadedCertification.current = reference;
+                  }
+                  await certifyPecmuAlert(fetcher, ficheId, certifyAlert, reference);
+                });
+                if (success) { setCertificationChoice(null); setCertificationFile(null); uploadedCertification.current = null; }
               }}>{busy ? 'Enregistrement…' : 'Enregistrer la certification'}</button>}
             </Panel>}
             {tab === 'decision' && <Panel title="Décision du pool médical">

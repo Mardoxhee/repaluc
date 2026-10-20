@@ -1,5 +1,6 @@
 'use client';
 
+import { extractUploadedFileLink } from '../../utils/uploadResponse';
 import { authenticatedFetch } from '../../utils/authFetch';
 import type { FichePecmu, PecmuFetcher, SuiviAccompagnement } from './pecmuApi';
 
@@ -63,6 +64,18 @@ export async function uploadPecmuFile(fetcher: PecmuFetcher, path: string, file:
   validatePecmuFile(file);
   const form = new FormData(); form.append('file', file);
   return fetcher(path, { method: 'POST', body: form });
+}
+export async function uploadCertificationNote(fetcher: PecmuFetcher, file: File): Promise<string> {
+  const response = await uploadPecmuFile(fetcher, '/minio/files/upload', file);
+  const reference = extractUploadedFileLink(response);
+  if (!reference) throw new Error('MinIO n’a pas retourné la référence de la note de certification.');
+  return reference;
+}
+export async function certifyPecmuAlert(fetcher: PecmuFetcher, id: number, certified: boolean, certificationFile?: string) {
+  if (certified && !certificationFile?.trim()) throw new Error('Ajoutez la note de certification avant de certifier l’alerte.');
+  return workflowJson(fetcher, `/fiche-pecmu/${id}/certification`, certified
+    ? { certified: true, certificationFile }
+    : { certified: false });
 }
 export async function getPecmuDocumentUrl(fetcher: PecmuFetcher, path: string): Promise<string> {
   const response = await fetcher(path);
