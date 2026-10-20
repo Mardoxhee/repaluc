@@ -103,3 +103,12 @@ test('certification rejects missing MinIO references and does not send a success
   await assert.rejects(api.certifyPecmuAlert(async () => { requests++; }, 42, true), /note de certification/);
   assert.equal(requests, 0);
 });
+test('certification preview resolves stored MinIO keys through data.src', async () => {
+  const url = await api.getCertificationFileUrl(async path => {
+    assert.equal(path, '/minio/files/notes/note%20certif.pdf');
+    return { data: { src: 'https://storage.example/note.pdf?signature=fresh' } };
+  }, 'notes/note certif.pdf');
+  assert.equal(url, 'https://storage.example/note.pdf?signature=fresh');
+  assert.equal(await api.getCertificationFileUrl(async () => { throw Error('Unexpected request'); }, 'https://storage.example/file.pdf'), 'https://storage.example/file.pdf');
+  await assert.rejects(api.getCertificationFileUrl(async () => ({ data: { src: 'javascript:alert(1)' } }), 'note.pdf'), /indisponible/);
+});

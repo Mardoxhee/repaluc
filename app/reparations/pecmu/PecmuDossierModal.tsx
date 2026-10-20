@@ -93,7 +93,9 @@ export default function PecmuDossierModal({ ficheId, fetcher, onClose, onChanged
   const permitted = (permission: string) => permissions === null || permissions.includes(permission);
   const can = (action: string) => Boolean(state && !syncFailed && canPerform(state, action, permissions));
   const closed = state?.currentStatus === 'CLOSED';
-  const certifyAlert = certificationChoice ?? state?.fiche.incidentCertification === true;
+  const savedCertificationFile = state?.fiche.certificationFile?.trim();
+  const hasRecordedCertification = Boolean(savedCertificationFile || state?.fiche.incidentCertification === true || state?.fiche.documents?.some(file => fileType(file) === 'CERTIFICATION_NOTE'));
+  const certifyAlert = hasRecordedCertification || (certificationChoice ?? false);
   const latest = state?.medicalCare.at(-1);
   const negative = state?.currentStatus === 'NOT_CERTIFIED' || state?.currentStatus === 'NOT_ELIGIBLE';
 
@@ -123,6 +125,13 @@ export default function PecmuDossierModal({ ficheId, fetcher, onClose, onChanged
   const docButton = (path: string, name: string, mimeType?: string) => <button type="button" onClick={() => visualise(path, name, mimeType)} className="inline-flex shrink-0 items-center gap-2 rounded-md border border-primary/30 px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/5"><Eye size={17} />Visualiser</button>;
   const ficheDocument = (type: 'CERTIFICATION_NOTE' | 'CLOSURE_FORM', label: string) => {
     const metadata = state?.fiche.documents?.find(file => fileType(file) === type);
+    if (type === 'CERTIFICATION_NOTE' && savedCertificationFile) {
+      const name = metadata ? documentName(metadata, label) : savedCertificationFile.split('?')[0].split('/').pop() || label;
+      return <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 py-3">
+        <div><p className="text-sm font-medium">{label}</p><p className="break-all text-xs text-slate-500">{name}</p></div>
+        {permitted('fiche-pecmu:read') && <button type="button" onClick={() => setPreview({ path: '', reference: savedCertificationFile, name, mimeType: metadata?.mimeType })} className="inline-flex shrink-0 items-center gap-2 rounded-md border border-primary/30 px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/5"><Eye size={17} />Visualiser</button>}
+      </div>;
+    }
     return <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 py-3"><span className="text-sm font-medium">{metadata ? documentName(metadata, label) : label}</span>{permitted('fiche-pecmu:read') && docButton(`${base}/documents/${type}/download-url`, metadata ? documentName(metadata, label) : `${label}.pdf`, metadata?.mimeType)}</div>;
   };
   const upload = (path: string, label: string) => <Upload key={`${path}-${version}`} label={label} busy={busy || syncFailed} onUpload={file => mutate(() => uploadPecmuFile(fetcher, path, file))} />;
@@ -153,20 +162,20 @@ export default function PecmuDossierModal({ ficheId, fetcher, onClose, onChanged
               ]} /></Panel>}
             </>}
             {tab === 'certification' && <Panel title="Certification de l’alerte">
-              <fieldset disabled={busy || (!can('CERTIFY_ALERT') && !can('UPLOAD_CERTIFICATION_NOTE'))}>
+              <fieldset disabled={busy || hasRecordedCertification || (!can('CERTIFY_ALERT') && !can('UPLOAD_CERTIFICATION_NOTE'))}>
                 <YesNoToggle label="Certifier l’alerte" checked={certifyAlert} onChange={setCertificationChoice} />
               </fieldset>
               {certifyAlert && <>
-                {(can('CERTIFY_ALERT') || can('UPLOAD_CERTIFICATION_NOTE')) && <label className="block text-sm font-medium">Ajouter la note de certification
+                {!hasRecordedCertification && (can('CERTIFY_ALERT') || can('UPLOAD_CERTIFICATION_NOTE')) && <label className="block text-sm font-medium">Ajouter la note de certification
                   <input disabled={busy} type="file" accept=".pdf,.png,.jpg,.jpeg" className={fieldClass} onChange={event => {
                     setCertificationFile(event.target.files?.[0] || null);
                     uploadedCertification.current = null;
                   }} />
                   {certificationFile && <span className="mt-2 block text-xs text-slate-500">{certificationFile.name} sera envoyé sur MinIO à l’enregistrement.</span>}
                 </label>}
-                {ficheDocument('CERTIFICATION_NOTE', 'Note de certification')}
+                {hasRecordedCertification && <><p className="text-sm text-primary">Note de certification enregistrée.</p>{ficheDocument('CERTIFICATION_NOTE', 'Note de certification')}</>}
               </>}
-              {can('CERTIFY_ALERT') && <button type="button" disabled={busy} className={buttonClass} onClick={async () => {
+              {!hasRecordedCertification && can('CERTIFY_ALERT') && <button type="button" disabled={busy} className={buttonClass} onClick={async () => {
                 if (!certifyAlert && !await confirm('Rejeter la certification de cette alerte ?')) return;
                 const success = await mutate(async () => {
                   let reference = uploadedCertification.current || state.fiche.certificationFile;

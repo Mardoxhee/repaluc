@@ -3,10 +3,10 @@
 import React, { useEffect, useState } from 'react';
 import { Modal, ModalBody } from 'flowbite-react';
 import { ExternalLink, X } from 'lucide-react';
-import { getPecmuDocumentUrl } from '../services/pecmuWorkflowApi';
+import { getCertificationFileUrl, getPecmuDocumentUrl } from '../services/pecmuWorkflowApi';
 import type { PecmuFetcher } from '../services/pecmuApi';
 
-export type DocumentPreview = { path: string; name: string; mimeType?: string };
+export type DocumentPreview = { path: string; reference?: string; name: string; mimeType?: string };
 export default function PecmuDocumentViewer({ document, fetcher, onClose }: { document: DocumentPreview; fetcher: PecmuFetcher; onClose: () => void }) {
   const [preview, setPreview] = useState<{ url: string; mime: string } | null>(null);
   const [externalUrl, setExternalUrl] = useState('');
@@ -19,7 +19,7 @@ export default function PecmuDocumentViewer({ document, fetcher, onClose }: { do
     const controller = new AbortController();
     setLoading(true); setError(''); setPreview(null); setExternalUrl('');
     void (async () => {
-      const url = await getPecmuDocumentUrl(fetcher, document.path);
+      const url = document.reference ? await getCertificationFileUrl(fetcher, document.reference) : await getPecmuDocumentUrl(fetcher, document.path);
       if (!active) return;
       setExternalUrl(url);
       // A signed storage URL authenticates itself. Never forward the SSO JWT to it.

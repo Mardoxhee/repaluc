@@ -83,6 +83,14 @@ export async function getPecmuDocumentUrl(fetcher: PecmuFetcher, path: string): 
   if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) throw new Error('L’URL du document est indisponible.');
   return url;
 }
+export async function getCertificationFileUrl(fetcher: PecmuFetcher, reference: string): Promise<string> {
+  if (/^https?:\/\//i.test(reference)) return reference;
+  const key = reference.split('/').map(segment => encodeURIComponent(segment)).join('/');
+  const response = await fetcher(`/minio/files/${key}`);
+  const url = extractUploadedFileLink(response);
+  if (!/^https?:\/\//i.test(url)) throw new Error('Le lien de la note de certification est indisponible.');
+  return url;
+}
 export const actionPermissions: Record<string, string> = {
   UPLOAD_CERTIFICATION_NOTE: 'fiche-pecmu:update', CERTIFY_ALERT: 'fiche-pecmu:update', RECORD_MEDICAL_DECISION: 'fiche-pecmu:medical-decision',
   RECORD_CONSENT: 'acte-consentement-pecmu:create', OPEN_MEDICAL_CARE: 'acte-medical-pecmu:create', UPDATE_MEDICAL_CARE: 'acte-medical-pecmu:update',
