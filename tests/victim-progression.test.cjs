@@ -64,3 +64,42 @@ test('client retains server-calculated amounts, sends authenticated partial JSON
     await assert.rejects(api.progressionRequest('/victime/42/progression-mpu'), /incomplète/);
   } finally { global.fetch = originalFetch; global.window = originalWindow; global.localStorage = originalStorage; }
 });
+
+const { victimProgressionSummary } = require('../app/reparations/utils/victimProgressionSummary.ts');
+test('LUC average includes documents, every rehabilitation and exact payment percentage equally', () => {
+  const data = snapshot();
+  data.documents = { photoDisponible: true, pieceIdentiteDisponible: true, contratDisponible: true };
+  const result = victimProgressionSummary(data);
+  // (100 + 100 + 100 + 25 + 50 + 0 + 62.5) / 7 = 62.5
+  assert.equal(result.items.length, 7);
+  assert.equal(result.percent, 63);
+  assert.equal(result.items.find(i => i.label === 'Indemnisation').score, 62.5);
+  assert.match(result.description, /poids égal/);
+});
+test('MPU average includes consent, medical clinics, membership and payments, excluding LUC compensation', () => {
+  const data = snapshot('MPU');
+  data.documents = { photoDisponible: true, pieceIdentiteDisponible: true, consentementEnregistre: true, acteConsentementDisponible: true };
+  data.progression.medicale.statut = 'COMPLETED';
+  data.progression.psychologique.statut = 'COMPLETED';
+  data.progression.economique.statut = 'COMPLETED';
+  data.progression.musoAvec = { statutAdhesion: 'COMPLETED', pourcentagePaiement: 100 };
+  const result = victimProgressionSummary(data);
+  assert.equal(result.items.length, 9);
+  assert.equal(result.percent, 100);
+  assert.equal(result.items.some(i => i.label === 'Indemnisation'), false);
+  data.progression.musoAvec = null;
+  assert.equal(victimProgressionSummary(data).percent, 78);
+});
+test('optional notes and training do not affect completion; incomplete payments never round up to 100%', () => {
+  const data = snapshot();
+  data.documents = { photoDisponible: true, pieceIdentiteDisponible: true, contratDisponible: true };
+  for (const name of ['medicale', 'psychologique', 'economique']) data.progression[name].statut = 'COMPLETED';
+  data.progression.economique.formation = { type: null, precision: null };
+  data.progression.economique.activitesGeneratricesRevenus = [];
+  data.progression.indemnisation.pourcentage = 99.99;
+  assert.equal(victimProgressionSummary(data).percent, 99);
+  data.progression.indemnisation.pourcentage = 100;
+  assert.equal(victimProgressionSummary(data).percent, 100);
+  data.progression.indemnisation.pourcentage = NaN;
+  assert.equal(victimProgressionSummary(data).percent, 86);
+});

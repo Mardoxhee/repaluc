@@ -31,10 +31,10 @@ export type VictimProgression = {
 export class ProgressionError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
-export async function progressionRequest(path: string, method = 'GET', payload?: unknown): Promise<VictimProgression> {
+export async function progressionRequest(path: string, method = 'GET', payload?: unknown, signal?: AbortSignal): Promise<VictimProgression> {
   const base = (process.env.NEXT_PUBLIC_API_BASE_URL || '').replace(/\/$/, '');
   const response = await authenticatedFetch(`${base}${path}`, {
-    method, cache: 'no-store',
+    method, cache: 'no-store', signal,
     ...(payload === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
   });
   const body = await response.json().catch(() => null);

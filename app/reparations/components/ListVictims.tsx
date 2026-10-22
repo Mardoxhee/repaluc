@@ -1,4 +1,5 @@
 "use client"
+import ProgressionPreview, { useVisibleProgressions } from './ProgressionPreview';
 import React, { useState, useEffect, useContext, useCallback, useMemo } from "react";
 import { FetchContext } from "../../context/FetchContext";
 import Swal from 'sweetalert2';
@@ -391,6 +392,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
         });
     }, [searchTerm, filterRules, victimTypeFilter, effectiveMention]);
     const [victims, setVictims] = useState<any[]>([]);
+    const visibleProgressions = useVisibleProgressions(victims, effectiveMention || '');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string>("");
     const [isOffline, setIsOffline] = useState(false);
@@ -1931,23 +1933,15 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                                             </td>
                                             <td className="px-6 py-4">
                                                 {['LUC', 'MPU'].includes(String(victim.mention || effectiveMention).toUpperCase()) ? (
-                                                    <button type="button" className="text-left text-xs text-blue-700 hover:underline" onClick={() => {
-                                                        setSelectedVictim(victim);
-                                                        setVictimInitialTab('progression');
-                                                        setShowVictimModal(true);
-                                                    }}>
-                                                        {victim.progressionDetail ? (
-                                                            <span className="flex gap-1" aria-label="Consulter les détails de progression">
-                                                                {[
-                                                                    ['Médicale', victim.progressionDetail.progression.medicale.statut === 'COMPLETED'],
-                                                                    ['Psychologique', victim.progressionDetail.progression.psychologique.statut === 'COMPLETED'],
-                                                                    ['Économique', victim.progressionDetail.progression.economique.statut === 'COMPLETED'],
-                                                                    ['Paiements', (victim.progressionDetail.progression.indemnisation?.statut || victim.progressionDetail.progression.musoAvec?.statutPaiement) === 'COMPLETED'],
-                                                                ].map(([label, done]) => <span key={String(label)} title={`${label} : ${done ? 'terminé' : 'à compléter'}`} className={`h-3 w-3 rounded-full ${done ? 'bg-green-600' : 'bg-gray-300'}`} />)}
-                                                                <span className="ml-1">Détails</span>
-                                                            </span>
-                                                        ) : 'Consulter la progression'}
-                                                    </button>
+                                                    <ProgressionPreview
+                                                        data={victim.progressionDetail || visibleProgressions[`${String(victim.mention || effectiveMention).trim().toUpperCase()}:${victim.id}`]?.data}
+                                                        failed={visibleProgressions[`${String(victim.mention || effectiveMention).trim().toUpperCase()}:${victim.id}`]?.failed}
+                                                        onClick={() => {
+                                                            setSelectedVictim(victim);
+                                                            setVictimInitialTab('progression');
+                                                            setShowVictimModal(true);
+                                                        }}
+                                                    />
                                                 ) : <ProgressionCells
                                                     done={getProgressionDone(victim, signedContractVictimIds)}
                                                     total={getProgressionTotal(victim, signedContractVictimIds)}
