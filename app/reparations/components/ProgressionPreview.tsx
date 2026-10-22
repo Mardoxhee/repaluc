@@ -36,10 +36,11 @@ export function useVisibleProgressions(victims: Array<{ id: number | string; men
   }, [key]);
   return entries;
 }
-export default function ProgressionPreview({ data, failed, onClick }: { data?: VictimProgression; failed?: boolean; onClick: () => void }) {
+export default function ProgressionPreview({ data, failed, unavailable, onClick }: { data?: VictimProgression; failed?: boolean; unavailable?: boolean; onClick: () => void }) {
   const summary = data ? victimProgressionSummary(data) : null;
-  return <button type="button" className={styles.preview} onClick={onClick} aria-label={summary ? `Progression globale : ${summary.percent} %. Ouvrir le détail.` : failed ? 'Progression indisponible. Ouvrir le dossier pour réessayer.' : 'Chargement de la progression. Ouvrir le dossier.'} title={summary?.description || (failed ? 'Progression indisponible : ouvrir le dossier pour réessayer.' : 'Chargement de la progression…')}>
-    <span className={styles.track} aria-hidden="true"><span className={!summary && !failed ? styles.loading : styles.fill} style={summary ? { width: `${summary.percent}%` } : undefined} data-complete={summary?.percent === 100} /></span>
-    <span className={styles.value}>{summary ? `${summary.percent} %` : failed ? '—' : '…'}</span>
+  const description = summary?.description || (unavailable ? 'Progression globale non disponible pour cette mention. Ouvrir la fiche.' : failed ? 'Progression indisponible : ouvrir le dossier pour réessayer.' : 'Chargement de la progression…');
+  return <button type="button" className={styles.preview} onClick={onClick} aria-label={summary ? `Progression globale : ${summary.percent} %. Ouvrir le détail.` : description} title={description}>
+    <span className={styles.track} aria-hidden="true"><span className={!summary && !failed && !unavailable ? styles.loading : styles.fill} style={summary ? { width: `${summary.percent}%` } : { width: 0 }} data-complete={summary?.percent === 100} /></span>
+    <span className={styles.value}>{summary ? `${summary.percent} %` : failed || unavailable ? '—' : '…'}</span>
   </button>;
 }

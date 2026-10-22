@@ -35,26 +35,6 @@ const provincesRDC = [
     "Haut-Lomami", "Lualaba", "Haut-Katanga",
 ];
 
-const ProgressionCells: React.FC<{ done?: number; total?: number }> = ({ done, total }) => {
-    const safeTotal = Number.isFinite(total) && (total as number) > 0 ? (total as number) : 5;
-    const safeDoneRaw = Number.isFinite(done) && (done as number) > 0 ? (done as number) : 0;
-    const safeDone = Math.min(safeDoneRaw, safeTotal);
-
-    return (
-        <div className="flex items-center gap-1">
-            {Array.from({ length: safeTotal }).map((_, i) => {
-                const filled = i < safeDone;
-                return (
-                    <span
-                        key={i}
-                        className={`h-2.5 w-2.5 border border-gray-300 ${filled ? 'bg-blue-600 border-blue-600' : 'bg-gray-200'} `}
-                    />
-                );
-            })}
-        </div>
-    );
-};
-
 const getVictimIdKey = (victim: any): string => {
     const id = victim?.id ?? victim?.victimeId ?? victim?.victimId;
     if (typeof id === 'number' && Number.isFinite(id)) return String(id);
@@ -104,28 +84,6 @@ const hasSignedContract = (victim: any, signedContractVictimIds?: Set<string>): 
         contract?.accepteReparation === true ||
         contract?.metadataContrat
     ));
-};
-
-const getProgressionDone = (victim: any, signedContractVictimIds?: Set<string>): number => {
-    const hasPhoto = typeof victim?.photo === 'string' && victim.photo.trim().length > 0;
-    const hasPieceIdentiteFromProgress = victim?.progression?.hasPieceIdentite === true;
-    const hasPieceIdentiteFromDocs = Array.isArray(victim?.documentVictime)
-        ? victim.documentVictime.some((d: any) => {
-            const label = typeof d?.label === 'string' ? d.label.trim().toLowerCase() : '';
-            return label === "pièce d'identité" || label === "piece d'identite";
-        })
-        : false;
-    const hasPieceIdentite = hasPieceIdentiteFromProgress || hasPieceIdentiteFromDocs;
-    const hasContract = hasSignedContract(victim, signedContractVictimIds);
-    const computed = (hasPhoto ? 1 : 0) + (hasPieceIdentite ? 1 : 0) + (hasContract ? 1 : 0);
-    const existing = typeof victim?.progression?.done === 'number' ? victim.progression.done : 0;
-    return Math.max(existing + (hasContract ? 1 : 0), computed);
-};
-
-const getProgressionTotal = (victim: any, signedContractVictimIds?: Set<string>): number => {
-    const rawTotal = victim?.progression?.total;
-    const baseTotal = Number.isFinite(rawTotal) && rawTotal > 0 ? rawTotal : 5;
-    return hasSignedContract(victim, signedContractVictimIds) ? Math.max(baseTotal, 6) : baseTotal;
 };
 
 const normalizeApiList = (payload: any): any[] => {
@@ -1932,7 +1890,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4">
-                                                {['LUC', 'MPU'].includes(String(victim.mention || effectiveMention).toUpperCase()) ? (
+                                                {['LUC', 'MPU'].includes(String(victim.mention || effectiveMention).trim().toUpperCase()) ? (
                                                     <ProgressionPreview
                                                         data={victim.progressionDetail || visibleProgressions[`${String(victim.mention || effectiveMention).trim().toUpperCase()}:${victim.id}`]?.data}
                                                         failed={visibleProgressions[`${String(victim.mention || effectiveMention).trim().toUpperCase()}:${victim.id}`]?.failed}
@@ -1942,9 +1900,13 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                                                             setShowVictimModal(true);
                                                         }}
                                                     />
-                                                ) : <ProgressionCells
-                                                    done={getProgressionDone(victim, signedContractVictimIds)}
-                                                    total={getProgressionTotal(victim, signedContractVictimIds)}
+                                                ) : <ProgressionPreview
+                                                    unavailable
+                                                    onClick={() => {
+                                                        setSelectedVictim(victim);
+                                                        setVictimInitialTab('info');
+                                                        setShowVictimModal(true);
+                                                    }}
                                                 />}
                                             </td>
                                             <td className="px-6 py-4 text-left">
