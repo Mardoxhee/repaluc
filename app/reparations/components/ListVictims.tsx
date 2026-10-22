@@ -410,6 +410,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
         hasPreviousPage: false,
     });
     const [showVictimModal, setShowVictimModal] = useState(false);
+    const [victimInitialTab, setVictimInitialTab] = useState<'info' | 'progression'>('info');
     const [selectedVictim, setSelectedVictim] = useState<any>(null);
 
     const handleDeletePhoto = useCallback(async (victimToUpdate: any) => {
@@ -524,6 +525,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
     // Fonction pour afficher les détails d'une victime
     const handleViewVictim = useCallback((victim: any) => {
         setSelectedVictim(victim);
+        setVictimInitialTab('info');
         setShowVictimModal(true);
     }, []);
     const [showEvaluationModal, setShowEvaluationModal] = useState(false);
@@ -1928,15 +1930,34 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <ProgressionCells
+                                                {['LUC', 'MPU'].includes(String(victim.mention || effectiveMention).toUpperCase()) ? (
+                                                    <button type="button" className="text-left text-xs text-blue-700 hover:underline" onClick={() => {
+                                                        setSelectedVictim(victim);
+                                                        setVictimInitialTab('progression');
+                                                        setShowVictimModal(true);
+                                                    }}>
+                                                        {victim.progressionDetail ? (
+                                                            <span className="flex gap-1" aria-label="Consulter les détails de progression">
+                                                                {[
+                                                                    ['Médicale', victim.progressionDetail.progression.medicale.statut === 'COMPLETED'],
+                                                                    ['Psychologique', victim.progressionDetail.progression.psychologique.statut === 'COMPLETED'],
+                                                                    ['Économique', victim.progressionDetail.progression.economique.statut === 'COMPLETED'],
+                                                                    ['Paiements', (victim.progressionDetail.progression.indemnisation?.statut || victim.progressionDetail.progression.musoAvec?.statutPaiement) === 'COMPLETED'],
+                                                                ].map(([label, done]) => <span key={String(label)} title={`${label} : ${done ? 'terminé' : 'à compléter'}`} className={`h-3 w-3 rounded-full ${done ? 'bg-green-600' : 'bg-gray-300'}`} />)}
+                                                                <span className="ml-1">Détails</span>
+                                                            </span>
+                                                        ) : 'Consulter la progression'}
+                                                    </button>
+                                                ) : <ProgressionCells
                                                     done={getProgressionDone(victim, signedContractVictimIds)}
                                                     total={getProgressionTotal(victim, signedContractVictimIds)}
-                                                />
+                                                />}
                                             </td>
                                             <td className="px-6 py-4 text-left">
                                                 <div className="flex items-center gap-2 justify-start">
                                                     <button
                                                         onClick={() => {
+                                                            setVictimInitialTab('info');
                                                             setSelectedVictim(victim);
                                                             setShowVictimModal(true);
                                                         }}
@@ -2008,6 +2029,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
             {showVictimModal && selectedVictim && (
                 <VictimDetailModal
                     victim={selectedVictim}
+                    initialTab={victimInitialTab}
                     mention={effectiveMention}
                     onClose={() => setShowVictimModal(false)}
                     onVictimUpdate={(updatedVictim) => {

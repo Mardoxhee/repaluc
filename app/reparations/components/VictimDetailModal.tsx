@@ -1,3 +1,4 @@
+import VictimProgression from './VictimProgression';
 import React, { useState, useContext, useEffect, useRef } from 'react';
 import {
   Info,
@@ -131,6 +132,7 @@ interface Victim {
 }
 
 interface VictimDetailModalProps {
+  initialTab?: 'info' | 'progression';
   victim: Victim;
   mention?: string;
   onClose: () => void;
@@ -139,11 +141,11 @@ interface VictimDetailModalProps {
   onViewEvaluation?: (victim: Victim) => void;
 }
 
-const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, onClose, onVictimUpdate, onDeletePhoto, onViewEvaluation }) => {
+const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, initialTab = 'info', onClose, onVictimUpdate, onDeletePhoto, onViewEvaluation }) => {
   const fetchCtx = useContext(FetchContext);
   const isMpuVictim = [mention, victim?.mention].some((value) => value?.trim().toLowerCase() === 'mpu');
   const useMpuPlanVie = isMpuVictim;
-  const [tab, setTab] = useState<'info' | 'dossier' | 'progression' | 'reglages' | 'formulaires' | 'plan-de-vie' | 'contrat' | 'paiement' | 'camp-details'>('info');
+  const [tab, setTab] = useState<'info' | 'dossier' | 'progression' | 'reglages' | 'formulaires' | 'plan-de-vie' | 'contrat' | 'paiement' | 'camp-details'>(initialTab);
   const [hasContrat, setHasContrat] = useState(false);
   const [currentVictim, setCurrentVictim] = useState<Victim>(victim);
   const [campDetailsForm, setCampDetailsForm] = useState({
@@ -1505,7 +1507,24 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
             </div>
           )}
 
-          {tab === 'progression' && (
+          {tab === 'progression' && (isMpuVictim || [mention, currentVictim.mention].some(v => v?.trim().toUpperCase() === 'LUC')) && (
+            <VictimProgression
+              key={`${currentVictim.id}-${isMpuVictim ? 'MPU' : 'LUC'}`}
+              victimId={currentVictim.id}
+              programme={isMpuVictim ? 'MPU' : 'LUC'}
+              onNavigate={(destination) => {
+                if (destination === 'paiement') setHasContrat(true);
+                setTab(destination);
+              }}
+              onUpdate={(progressionDetail) => {
+                const updated = { ...currentVictim, progressionDetail };
+                setCurrentVictim(updated);
+                if (!isMpuVictim) setHasContrat(!!progressionDetail.documents.contratDisponible);
+                onVictimUpdate?.(updated);
+              }}
+            />
+          )}
+          {tab === 'progression' && !isMpuVictim && ![mention, currentVictim.mention].some(v => v?.trim().toUpperCase() === 'LUC') && (
             <div className="!bg-white !text-gray-900">
               <div className="flex items-start justify-between gap-4 mb-5">
                 <div>
