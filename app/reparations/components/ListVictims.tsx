@@ -1,4 +1,5 @@
 "use client"
+import { progressionProgramme } from '../utils/progressionProgramme';
 import ProgressionPreview, { useVisibleProgressions } from './ProgressionPreview';
 import React, { useState, useEffect, useContext, useCallback, useMemo } from "react";
 import { FetchContext } from "../../context/FetchContext";
@@ -1890,10 +1891,11 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4">
-                                                {['LUC', 'MPU'].includes(String(victim.mention || effectiveMention).trim().toUpperCase()) ? (
+                                                {progressionProgramme(victim, effectiveMention) ? (
                                                     <ProgressionPreview
-                                                        data={victim.progressionDetail || visibleProgressions[`${String(victim.mention || effectiveMention).trim().toUpperCase()}:${victim.id}`]?.data}
-                                                        failed={visibleProgressions[`${String(victim.mention || effectiveMention).trim().toUpperCase()}:${victim.id}`]?.failed}
+                                                        data={victim.progressionDetail || visibleProgressions[`${progressionProgramme(victim, effectiveMention)}:${victim.id}`]?.data}
+                                                        failed={visibleProgressions[`${progressionProgramme(victim, effectiveMention)}:${victim.id}`]?.failed}
+                                                        reason={visibleProgressions[`${progressionProgramme(victim, effectiveMention)}:${victim.id}`]?.reason}
                                                         onClick={() => {
                                                             setSelectedVictim(victim);
                                                             setVictimInitialTab('progression');
@@ -1986,7 +1988,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                 <VictimDetailModal
                     victim={selectedVictim}
                     initialTab={victimInitialTab}
-                    mention={effectiveMention}
+                    mention={progressionProgramme(selectedVictim, effectiveMention) || effectiveMention}
                     onClose={() => setShowVictimModal(false)}
                     onVictimUpdate={(updatedVictim) => {
                         setVictims((prevVictims) => prevVictims.map(v => v.id === updatedVictim.id ? updatedVictim : v));

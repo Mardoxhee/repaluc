@@ -103,3 +103,14 @@ test('optional notes and training do not affect completion; incomplete payments 
   data.progression.indemnisation.pourcentage = NaN;
   assert.equal(victimProgressionSummary(data).percent, 86);
 });
+
+const { progressionProgramme } = require('../app/reparations/utils/progressionProgramme.ts');
+test('missing mention uses admission as a read routing hint without overriding an explicit programme', () => {
+  assert.equal(progressionProgramme({ status: 'Admis à la LUC' }), 'LUC');
+  assert.equal(progressionProgramme({ mention: ' ', status: 'Admise à la LUC' }), 'LUC');
+  assert.equal(progressionProgramme({ mention: 'Non défini', status: 'Admis au MPU' }), 'MPU');
+  assert.equal(progressionProgramme({ mention: 'mpu', status: 'Admis à la LUC' }), 'MPU');
+  assert.equal(progressionProgramme({ mention: 'PECMU', status: 'Admis à la LUC' }), null);
+  assert.equal(progressionProgramme({ status: 'A Evaluer' }), null);
+  assert.equal(progressionProgramme({ status: 'A Evaluer' }, 'luc'), 'LUC');
+});

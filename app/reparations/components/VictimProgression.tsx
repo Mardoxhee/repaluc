@@ -3,7 +3,7 @@ import { authenticatedFetch } from '../../utils/authFetch';
 import { useFetch } from '../../context/FetchContext';
 import { normalizeApiList } from '../utils/mentionStats';
 import styles from './VictimProgression.module.css';
-import { Activity, HeartPulse, Brain, BriefcaseBusiness, Wallet, FolderCheck, ShieldCheck, FileSignature, RefreshCw, CheckCircle2, Clock3, Circle, ArrowUpRight, Save, Plus, Pencil, Trash2, CalendarDays, MapPin, Upload, Landmark, ChevronRight, AlertCircle, LockKeyhole, type LucideIcon } from 'lucide-react';
+import { Activity, HeartPulse, Brain, BriefcaseBusiness, Wallet, FolderCheck, FileSignature, RefreshCw, CheckCircle2, Clock3, Circle, ArrowUpRight, Save, Plus, Pencil, Trash2, CalendarDays, MapPin, Upload, Landmark, ChevronRight, AlertCircle, LockKeyhole, type LucideIcon } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { getPecmuPermissions } from '../services/pecmuWorkflowApi';
 import { progressionRequest, progressionPath, progressionFields, progressionChanges, ProgressionError, type Programme, type ProgressionPatch, type VictimProgression as Snapshot } from '../services/victimProgressionApi';
@@ -25,7 +25,6 @@ const cardDesign = (title: string): { icon: LucideIcon; tone: string; subtitle?:
   if (title.includes('économique')) return { icon: BriefcaseBusiness, tone: 'teal', subtitle: 'Formation, autonomie et activités de revenus' };
   if (title.includes('Indemnisation')) return { icon: Wallet, tone: 'blue', subtitle: 'Versements et échéancier de réparation' };
   if (title.includes('MUSO')) return { icon: Landmark, tone: 'teal', subtitle: 'Adhésion et historique des contributions' };
-  if (title.includes('préjudices')) return { icon: ShieldCheck, tone: 'plum' };
   if (title.includes('Documents')) return { icon: FolderCheck, tone: 'blue' };
   return { icon: FileSignature, tone: 'plum' };
 };
@@ -35,6 +34,23 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
     <header className={styles.cardHeading}><span className={styles.iconTile}><Icon size={19} strokeWidth={1.8} /></span><div><h4>{title}</h4>{subtitle && <p>{subtitle}</p>}</div></header>
     <div className={styles.cardBody}>{children}</div>
   </section>;
+}
+function ProgressionSkeleton() {
+  const block = (className = '') => <span className={`${styles.skeletonBlock} ${className}`} />;
+  const card = () => <div className={styles.skeletonCard}>{block(styles.skeletonTitle)}{block()}{block(styles.skeletonShort)}{block(styles.skeletonNote)}</div>;
+  return <div role="status" aria-label="Chargement de la progression" aria-busy="true">
+    <div aria-hidden="true">
+      <div className={styles.overview}>{[0, 1, 2, 3].map(i => <div key={i} className={styles.skeletonCard}>{block(styles.skeletonTitle)}{block(styles.skeletonShort)}{block()}</div>)}</div>
+      <div className={styles.layout}>
+        <div className={styles.sidebar}>{card()}{card()}</div>
+        <div className={styles.workspace}>
+          {block(styles.skeletonTitle)}
+          <div className={styles.careGrid}>{card()}{card()}</div>
+          {card()}
+        </div>
+      </div>
+    </div>
+  </div>;
 }
 function Status({ value }: { value: string }) {
   const complete = value === 'COMPLETED';
@@ -74,7 +90,7 @@ export default function VictimProgression({ victimId, programme, onNavigate, onU
   const [data, setData] = useState<Snapshot | null>(null);
   const [draft, setDraft] = useState<ProgressionPatch>({});
   const [activities, setActivities] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [forbidden, setForbidden] = useState(false);
@@ -101,7 +117,7 @@ export default function VictimProgression({ victimId, programme, onNavigate, onU
   };
   useEffect(() => {
     const claims = getPecmuPermissions(); setPermissions(claims); setData(null); setEditor(null); setForbidden(false);
-    if (claims !== null && !['victime:read', required].every(p => claims.includes(p))) { setError('Habilitations de lecture insuffisantes.'); return; }
+    if (claims !== null && !['victime:read', required].every(p => claims.includes(p))) { setBusy(false); setError('Habilitations de lecture insuffisantes.'); return; }
     void load(); return () => { generation.current++; };
     // The component is remounted when returning from documents, contracts or payments.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -172,7 +188,8 @@ export default function VictimProgression({ victimId, programme, onNavigate, onU
     </header>
     {error && <p role="alert" className={styles.error}><AlertCircle size={17} />{error}</p>}
     {success && <p role="status" className={styles.success}><CheckCircle2 size={17} />{success}</p>}
-    {busy && <p role="status" className={styles.loading}><RefreshCw size={15} className={styles.spinning} />{data ? 'Enregistrement en cours…' : 'Chargement du parcours…'}</p>}
+    {busy && !data && <ProgressionSkeleton />}
+    {busy && data && <p role="status" className={styles.loading}><RefreshCw size={15} className={styles.spinning} />Mise à jour du parcours…</p>}
     {data && p && <>
       {!canEdit && <p className={styles.notice}><LockKeyhole size={15} />Lecture seule : habilitations de modification insuffisantes.</p>}
       <div className={styles.overview} aria-label="Synthèse du parcours">
@@ -187,7 +204,6 @@ export default function VictimProgression({ victimId, programme, onNavigate, onU
         ['Photo', data.documents.photoDisponible], ['Pièce d’identité', data.documents.pieceIdentiteDisponible],
         ...(programme === 'LUC' ? [['Contrat', data.documents.contratDisponible]] : [['Consentement', data.documents.consentementEnregistre], ['Acte signé', data.documents.acteConsentementDisponible]]),
       ].map(([name, ok]) => <div key={String(name)}><span>{String(name)}</span><span data-ready={!!ok}>{ok ? <CheckCircle2 size={15} /> : <Clock3 size={15} />}{ok ? 'Disponible' : 'À compléter'}</span></div>)}</div><p className={styles.caption}>{data.documents.nombreDocuments} document(s) au dossier{programme === 'MPU' && <> · {data.victime.camps?.join(', ') || 'Camp non renseigné'}</>}</p><div className={styles.sideActions}><button className={button} onClick={() => onNavigate('dossier')}><FolderCheck size={14} />Documents<ArrowUpRight size={13} /></button><button className={button} onClick={() => onNavigate('contrat')}><FileSignature size={14} />{programme === 'MPU' ? 'Consentement' : 'Contrat'}<ArrowUpRight size={13} /></button></div></Card>
-      {data.prejudices && <Card title="Violations et préjudices"><dl className={styles.facts}>{Object.entries({ Violation: data.prejudices.typeViolation, 'Préjudices subis': data.prejudices.prejudicesSubis, 'Préjudice final': data.prejudices.prejudiceFinal, Réparations: data.prejudices.reparations }).map(([k, v]) => <div key={k}><dt className="font-medium">{k}</dt><dd>{text(v)}</dd></div>)}</dl></Card>}
       {programme === 'LUC' && <Card title="Contrat">{data.contrat ? <div className={styles.contractSummary}><span className={styles.contractAmount}>{money(data.contrat.montantTotalUSD)} <small>USD</small></span><p>{data.contrat.typeContrat}</p><p className={styles.historyMeta}><CalendarDays size={13} />Signé le {dateLabel(data.contrat.dateSignature)}</p><dl className={styles.facts}><div><dt>Mesures acceptées</dt><dd>{data.contrat.mesuresReparationAcceptees.join(', ') || 'Aucune'}</dd></div><div><dt>Mesures renoncées</dt><dd>{data.contrat.mesuresReparationRenoncees.join(', ') || 'Aucune'}</dd></div></dl></div> : <p>Aucun contrat enregistré.</p>}</Card>}
       {programme === 'MPU' && <Card title="Consentement">{!editingConsent ? <button type="button" className={button} disabled={readonly || !!editor} onClick={() => setEditingConsent(true)}><Upload size={15} />Déposer un acte</button> : <label className={styles.upload}><Upload size={17} />Déposer l’acte de consentement<input type="file" className={input} disabled={readonly || !!editor} onChange={e => { const file = e.target.files?.[0]; if (file && window.confirm('Déposer cet acte ? Les modifications de réadaptation non enregistrées seront abandonnées.')) void uploadConsent(file); e.target.value = ''; }} /><button type="button" className={button} disabled={busy} onClick={() => setEditingConsent(false)}>Annuler</button></label>}{data.consentement ? <div className="text-sm space-y-1"><p>{data.consentement.accepte ? 'Accepté' : data.consentement.decision} · {dateLabel(data.consentement.date)} · {text(data.consentement.lieu)} · {data.consentement.signe ? 'Signé' : 'Non signé'}</p><p>Mesures : {data.consentement.mesuresProposees.join(', ') || 'Non renseigné'}</p><p>Autres mesures : {text(data.consentement.autresMesures)}</p><p>Vulnérabilités : {data.consentement.vulnerabilites.join(', ') || 'Non renseigné'}</p></div> : <p>Aucun consentement enregistré.</p>}</Card>}
       </aside>

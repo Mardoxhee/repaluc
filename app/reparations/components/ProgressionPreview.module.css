@@ -3,8 +3,11 @@
 .fill { display: block; height: 100%; background: #007fba; border-radius: inherit; transition: width .2s; }
 .fill[data-complete='true'] { background: #16846b; }
 .value { color: #37546a; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.loading { display: block; height: 100%; width: 40%; background: #c3dce9; border-radius: inherit; animation: loading 1.2s ease-in-out infinite alternate; }
 .preview:hover .track { box-shadow: 0 0 0 3px #007fba0d; }
 .preview:focus-visible { outline: 2px solid #007fba; outline-offset: 4px; border-radius: 4px; }
-@keyframes loading { to { transform: translateX(150%); } }
-@media (prefers-reduced-motion: reduce) { .fill { transition: none; } .loading { animation: none; } }
+
+.skeletonTrack, .skeletonValue { display: inline-block; background: #e3e9ef; border-radius: 5px; animation: skeletonPulse 1.4s ease-in-out infinite; }
+.skeletonTrack { width: 88px; height: 7px; }
+.skeletonValue { width: 32px; height: 12px; }
+@keyframes skeletonPulse { 50% { opacity: .4; } }
+@media (prefers-reduced-motion: reduce) { .fill { transition: none; } .skeletonTrack, .skeletonValue { animation: none; } }
