@@ -74,7 +74,9 @@ const downloadBlob = async (blob: Blob, filename: string) => {
 };
 
 const downloadFromUrl = async (url: string, filename: string) => {
-  const resp = await authenticatedFetch(url);
+  // getFileLink returns a signed MinIO URL. It is already authorized, and the
+  // application auth headers can invalidate its signature when sent to storage.
+  const resp = await fetch(url);
   if (!resp.ok) {
     throw new Error(`Téléchargement échoué (${resp.status})`);
   }
