@@ -153,7 +153,11 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
   const [campDetailsForm, setCampDetailsForm] = useState({
     nomAbris: victim?.variablesSpecifiques?.nomAbris || '',
     numeroAbris: victim?.variablesSpecifiques?.numeroAbris || '',
+    nomConjoint: victim?.variablesSpecifiques?.nomConjoint || '',
+    nombreEnfants: victim?.variablesSpecifiques?.nombreEnfants || '',
+    nomsEnfants: victim?.variablesSpecifiques?.nomsEnfants || '',
   });
+  const [showChildrenNames, setShowChildrenNames] = useState(false);
   const [savingCampDetails, setSavingCampDetails] = useState(false);
   const [selectedForm, setSelectedForm] = useState<string | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
@@ -192,6 +196,9 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
     setCampDetailsForm({
       nomAbris: victim?.variablesSpecifiques?.nomAbris || '',
       numeroAbris: victim?.variablesSpecifiques?.numeroAbris || '',
+      nomConjoint: victim?.variablesSpecifiques?.nomConjoint || '',
+      nombreEnfants: victim?.variablesSpecifiques?.nombreEnfants || '',
+      nomsEnfants: victim?.variablesSpecifiques?.nomsEnfants || '',
     });
   }, [victim]);
 
@@ -211,6 +218,9 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
     const nextVariables = {
       nomAbris: campDetailsForm.nomAbris.trim(),
       numeroAbris: campDetailsForm.numeroAbris.trim(),
+      nomConjoint: campDetailsForm.nomConjoint.trim(),
+      nombreEnfants: campDetailsForm.nombreEnfants.trim(),
+      nomsEnfants: campDetailsForm.nomsEnfants.trim(),
     };
 
     const currentVariables = currentVictim.variablesSpecifiques || {};
@@ -1769,6 +1779,26 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
                       onChange={(event) => setCampDetailsForm((prev) => ({ ...prev, nomAbris: event.target.value }))}
                       className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-pink-500 focus:outline-none focus:ring-2 focus:ring-pink-500/20"
                     />
+                  </div>
+
+                  <div>
+                    <label htmlFor="nomConjoint" className="block text-sm font-medium text-gray-700 mb-1">Nom du conjoint ou de la conjointe</label>
+                    <input id="nomConjoint" type="text" value={campDetailsForm.nomConjoint} onChange={(event) => setCampDetailsForm((prev) => ({ ...prev, nomConjoint: event.target.value }))} className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-pink-500 focus:outline-none focus:ring-2 focus:ring-pink-500/20" />
+                  </div>
+
+                  <div>
+                    <label htmlFor="nombreEnfants" className="block text-sm font-medium text-gray-700 mb-1">Nombre d’enfants</label>
+                    <input id="nombreEnfants" type="number" min="0" step="1" value={campDetailsForm.nombreEnfants} onChange={(event) => setCampDetailsForm((prev) => ({ ...prev, nombreEnfants: event.target.value }))} className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-pink-500 focus:outline-none focus:ring-2 focus:ring-pink-500/20" />
+                  </div>
+
+                  <div>
+                    <button type="button" aria-expanded={showChildrenNames} onClick={() => setShowChildrenNames((shown) => !shown)} className="text-sm font-medium text-pink-700 hover:text-pink-900">
+                      {showChildrenNames ? 'Masquer les noms des enfants' : 'Afficher / renseigner les noms des enfants'}
+                    </button>
+                    {showChildrenNames && <div className="mt-2">
+                      <label htmlFor="nomsEnfants" className="block text-sm font-medium text-gray-700 mb-1">Noms des enfants (un nom par ligne)</label>
+                      <textarea id="nomsEnfants" rows={4} value={campDetailsForm.nomsEnfants} onChange={(event) => setCampDetailsForm((prev) => ({ ...prev, nomsEnfants: event.target.value }))} className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-pink-500 focus:outline-none focus:ring-2 focus:ring-pink-500/20" />
+                    </div>}
                   </div>
 
                   <div>
