@@ -3,12 +3,6 @@
 const AUTH_STORAGE_KEYS = ['token', 'usr', 'auth', 'apps', 'repaluc_auth'];
 const SESSION_LOCK_KEY = 'repaluc_session_locked';
 
-let unauthorizedLogoutInProgress = false;
-let unauthorizedResponses = 0;
-let unauthorizedWindowStartedAt = 0;
-const UNAUTHORIZED_CONFIRMATION_COUNT = 3;
-const UNAUTHORIZED_CONFIRMATION_WINDOW_MS = 15_000;
-
 export const getAuthToken = (): string | null => {
   if (typeof window === 'undefined') return null;
 
@@ -69,33 +63,6 @@ const clearAuthSession = () => {
     .catch(() => undefined);
 };
 
-const redirectToOnlineLogin = async () => {
-  if (typeof window === 'undefined') return;
-  if (window.location.pathname.startsWith('/login')) return;
-  if (unauthorizedLogoutInProgress) return;
-
-  unauthorizedLogoutInProgress = true;
-  clearAuthSession();
-
-  try {
-    const Swal = (await import('sweetalert2')).default;
-    await Swal.fire({
-      icon: 'warning',
-      title: 'Session expirée',
-      text: 'Votre session a expiré. Reconnectez-vous en ligne pour obtenir un nouveau token.',
-      confirmButtonText: 'Se reconnecter',
-      confirmButtonColor: '#901c67',
-      timer: 2500,
-      timerProgressBar: true,
-      allowOutsideClick: false,
-    });
-  } catch {
-    window.alert('Votre session a expiré. Reconnectez-vous en ligne pour obtenir un nouveau token.');
-  } finally {
-    window.location.assign('/login?reason=session-expired');
-  }
-};
-
 export const authenticatedFetch = async (
   input: RequestInfo | URL,
   init: RequestInit = {}
@@ -111,21 +78,9 @@ export const authenticatedFetch = async (
     headers: withAuthHeaders(baseHeaders),
   });
 
-  if (response.status === 401 && !isAuthRequest(input)) {
-    const now = Date.now();
-    if (now - unauthorizedWindowStartedAt > UNAUTHORIZED_CONFIRMATION_WINDOW_MS) {
-      unauthorizedWindowStartedAt = now;
-      unauthorizedResponses = 0;
-    }
-
-    unauthorizedResponses += 1;
-    if (unauthorizedResponses >= UNAUTHORIZED_CONFIRMATION_COUNT) {
-      void redirectToOnlineLogin();
-    }
-  } else if (response.ok) {
-    // A successful authenticated request shows the session is still usable.
-    unauthorizedResponses = 0;
-    unauthorizedWindowStartedAt = 0;
+  if (response.status === 401 && isAuthRequest(input) && getRequestUrl(input).includes('/auth/verify-token')) {
+    // A rejected explicit token verification invalidates the local session.
+    clearAuthSession();
   }
 
   return response;
