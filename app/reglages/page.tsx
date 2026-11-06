@@ -170,20 +170,11 @@ const ReglagesPage = () => {
     }
   };
 
-  const deleteDatabase = async (dbName: string): Promise<void> => {
-    await new Promise<void>((resolve, reject) => {
-      const req = indexedDB.deleteDatabase(dbName);
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
-      req.onblocked = () => resolve();
-    });
-  };
-
   const clearAllCachesAndReload = async () => {
     const result = await Swal.fire({
       icon: 'warning',
       title: 'Vider les caches',
-      text: 'Cette action supprime toutes les bases IndexedDB (toutes les tables) de l\'application. Voulez-vous continuer ?',
+      text: 'Cette action supprime les caches, les données locales, les bases IndexedDB, les cookies et les service workers de cette application. Voulez-vous continuer ?',
       showCancelButton: true,
       confirmButtonText: 'Oui, vider',
       cancelButtonText: 'Annuler',
@@ -193,35 +184,45 @@ const ReglagesPage = () => {
     if (!result.isConfirmed) return;
 
     try {
-      const knownDbNames = [
-        'VictimsCache',
-        'PlanVieCache',
-        'ContractsDB',
-        'VictimPhotosDB',
-        'VictimDocsDB',
-        'DashboardCache',
-        'plan-vie-questions-db',
-      ];
+      // Match DevTools' Clear site data selection: Cache Storage, IndexedDB,
+      // local/session storage, cookies, and service worker registrations.
+      const cacheNames = await caches.keys();
+      await Promise.all(cacheNames.map((name) => caches.delete(name)));
 
-      const dbNamesToDelete = new Set<string>();
-      const dbApi = indexedDB as any;
+      localStorage.clear();
+      sessionStorage.clear();
+
+      const dbApi = indexedDB as IDBFactory & {
+        databases?: () => Promise<Array<{ name?: string | null }>>;
+      };
       if (typeof dbApi.databases === 'function') {
-        const dbs: Array<{ name?: string | null }> = await dbApi.databases();
-        for (const db of dbs) {
-          if (db?.name) dbNamesToDelete.add(db.name);
-        }
-      } else {
-        for (const name of knownDbNames) dbNamesToDelete.add(name);
+        const dbs = await dbApi.databases();
+        await Promise.all(dbs.flatMap(({ name }) => name ? [new Promise<void>((resolve, reject) => {
+          const request = indexedDB.deleteDatabase(name);
+          request.onsuccess = () => resolve();
+          request.onerror = () => reject(request.error);
+          request.onblocked = () => reject(new Error(`Suppression bloquée pour la base ${name}`));
+        })] : []));
       }
 
-      for (const name of dbNamesToDelete) {
-        await deleteDatabase(name);
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map((registration) => registration.unregister()));
       }
+
+      // document.cookie only exposes cookies available to this origin; HttpOnly
+      // cookies are cleared by the browser when site data is cleared in DevTools.
+      document.cookie.split(';').forEach((cookie) => {
+        const name = cookie.split('=')[0]?.trim();
+        if (name) {
+          document.cookie = `${name}=;expires=${new Date(0).toUTCString()};path=/`;
+        }
+      });
 
       await Swal.fire({
         icon: 'success',
         title: 'Caches vidés',
-        text: 'Toutes les bases IndexedDB ont été supprimées. Rechargement...',
+        text: 'Les données locales accessibles ont été supprimées. Rechargement...',
         timer: 1200,
         showConfirmButton: false
       });
@@ -1381,7 +1382,7 @@ const ReglagesPage = () => {
                 <button
                   onClick={clearAllCachesAndReload}
                   className="flex items-center gap-2 px-4 py-2 bg-white border border-red-300 text-red-700 rounded-lg hover:bg-red-50 hover:border-red-400 transition-all font-medium shadow-sm"
-                  title="Supprimer toutes les bases IndexedDB et recharger"
+                  title="Supprimer les données locales et recharger"
                 >
                   <Trash2 size={16} />
                   Vider les caches
