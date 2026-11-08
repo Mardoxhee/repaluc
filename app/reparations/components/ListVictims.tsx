@@ -183,13 +183,14 @@ interface FilterType {
     endDate: string;
 }
 
-type VictimTypeFilter = 'all' | 'luc' | 'mpu' | 'pecmu';
+type VictimTypeFilter = 'all' | 'luc' | 'mpu' | 'pecmu' | 'vdj';
 
 const victimTypeExportLabels: Record<VictimTypeFilter, string> = {
     all: 'toutes',
     luc: 'luc',
     mpu: 'mpu',
     pecmu: 'pecmu',
+    vdj: 'vdj',
 };
 
 const victimTypeDisplayLabels: Record<VictimTypeFilter, string> = {
@@ -197,6 +198,7 @@ const victimTypeDisplayLabels: Record<VictimTypeFilter, string> = {
     luc: 'Victimes LUC',
     mpu: 'Victimes MPU',
     pecmu: 'PECMU',
+    vdj: 'Victimes détenant des décisions de justice définitives',
 };
 
 const prejudiceFinalOptions = [
@@ -270,7 +272,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
     });
     const [filterRules, setFilterRules] = useState<FilterRule[]>([]);
     const [showFilterBuilder, setShowFilterBuilder] = useState(false);
-    const effectiveMention = victimTypeFilter === 'luc' || victimTypeFilter === 'mpu' || victimTypeFilter === 'pecmu'
+    const effectiveMention = victimTypeFilter === 'luc' || victimTypeFilter === 'mpu' || victimTypeFilter === 'pecmu' || victimTypeFilter === 'vdj'
         ? victimTypeFilter
         : mention?.trim() || '';
 
@@ -318,6 +320,23 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                         categorieValue.includes('mesure provisoire') ||
                         programmeValue.includes('mpu')
                     );
+                }
+
+                if (victimTypeFilter === 'vdj') {
+                    if (mentionValue === 'vdj') return true;
+                    const decisionJusticeTerms = [
+                        victim?.typeContrat,
+                        victim?.reparationJudiciaire,
+                        victim?.contrat?.typeContrat,
+                        victim?.contrat?.reparationJudiciaire,
+                        victim?.contract?.typeContrat,
+                        victim?.contract?.reparationJudiciaire,
+                        ...(Array.isArray(victim?.contrats) ? victim.contrats.flatMap((contract: any) => [contract?.typeContrat, contract?.reparationJudiciaire]) : []),
+                        ...(Array.isArray(victim?.contracts) ? victim.contracts.flatMap((contract: any) => [contract?.typeContrat, contract?.reparationJudiciaire]) : []),
+                    ].filter(Boolean).join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+                    return decisionJusticeTerms.includes('decision de justice') ||
+                        decisionJusticeTerms.includes('decision judiciaire');
                 }
 
                 return true;
@@ -1339,7 +1358,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
             setError('Impossible de charger les données. Vérifiez votre connexion Internet.');
             setLoading(false);
         }
-    }, [buildQueryParams, fetchCtx?.fetcher, meta.page, meta.limit, filters, searchTerm, applyLocalFilters, signedContractsOnly, effectiveMention]);
+    }, [buildQueryParams, fetchCtx?.fetcher, meta.page, meta.limit, filters, searchTerm, applyLocalFilters, signedContractsOnly, effectiveMention, victimTypeFilter]);
 
     useEffect(() => {
         const debounceTimeout = setTimeout(() => {
@@ -1646,6 +1665,17 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                                     >
                                         <Stethoscope size={16} className="inline-block mr-2" />
                                         PECMU
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setVictimTypeFilter('vdj')}
+                                        className={`px-3 py-2 border text-sm font-medium transition-colors ${victimTypeFilter === 'vdj'
+                                            ? 'bg-blue-50 border-blue-300 text-blue-700'
+                                            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                                            }`}
+                                        title="Victimes détenant des décisions de justice définitives"
+                                    >
+                                        VDJ
                                     </button>
                                 </div>
 
