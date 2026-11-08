@@ -273,9 +273,11 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
     });
     const [filterRules, setFilterRules] = useState<FilterRule[]>([]);
     const [showFilterBuilder, setShowFilterBuilder] = useState(false);
-    const effectiveMention = victimTypeFilter === 'luc' || victimTypeFilter === 'mpu' || victimTypeFilter === 'pecmu' || victimTypeFilter === 'vdj'
-        ? victimTypeFilter === 'vdj' ? VDJ_MENTION_VALUE : victimTypeFilter
-        : mention?.trim() || '';
+    const effectiveMention = victimTypeFilter === 'vdj'
+        ? ''
+        : victimTypeFilter === 'luc' || victimTypeFilter === 'mpu' || victimTypeFilter === 'pecmu'
+            ? victimTypeFilter
+            : mention?.trim() || '';
 
     // Fonction pour appliquer les filtres localement sur les données en cache
     const applyLocalFilters = useCallback((data: any[]) => {
@@ -324,20 +326,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                 }
 
                 if (victimTypeFilter === 'vdj') {
-                    if (mentionValue === 'vdj') return true;
-                    const decisionJusticeTerms = [
-                        victim?.typeContrat,
-                        victim?.reparationJudiciaire,
-                        victim?.contrat?.typeContrat,
-                        victim?.contrat?.reparationJudiciaire,
-                        victim?.contract?.typeContrat,
-                        victim?.contract?.reparationJudiciaire,
-                        ...(Array.isArray(victim?.contrats) ? victim.contrats.flatMap((contract: any) => [contract?.typeContrat, contract?.reparationJudiciaire]) : []),
-                        ...(Array.isArray(victim?.contracts) ? victim.contracts.flatMap((contract: any) => [contract?.typeContrat, contract?.reparationJudiciaire]) : []),
-                    ].filter(Boolean).join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-
-                    return decisionJusticeTerms.includes('decision de justice') ||
-                        decisionJusticeTerms.includes('decision judiciaire');
+                    return categorieValue === VDJ_MENTION_VALUE.toLowerCase();
                 }
 
                 return true;
@@ -858,9 +847,10 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
         filterRules.forEach((rule) => {
             if (rule.value) params[rule.field] = rule.value;
         });
+        if (victimTypeFilter === 'vdj') params.categorie = VDJ_MENTION_VALUE;
 
         return new URLSearchParams(params).toString();
-    }, [meta.page, meta.limit, searchTerm, filterRules, agentReparation, photoNotNull, effectiveMention]);
+    }, [meta.page, meta.limit, searchTerm, filterRules, agentReparation, photoNotNull, effectiveMention, victimTypeFilter]);
 
     const buildExportQueryParams = useCallback(() => {
         const params: Record<string, string> = {
@@ -875,9 +865,10 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
         filterRules.forEach((rule) => {
             if (rule.value) params[rule.field] = rule.value;
         });
+        if (victimTypeFilter === 'vdj') params.categorie = VDJ_MENTION_VALUE;
 
         return new URLSearchParams(params).toString();
-    }, [searchTerm, filterRules, agentReparation, photoNotNull, effectiveMention]);
+    }, [searchTerm, filterRules, agentReparation, photoNotNull, effectiveMention, victimTypeFilter]);
 
     useEffect(() => {
         setMeta(prev => ({ ...prev, page: 1 }));
