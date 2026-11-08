@@ -184,6 +184,7 @@ interface FilterType {
 }
 
 type VictimTypeFilter = 'all' | 'luc' | 'mpu' | 'pecmu' | 'vdj';
+const VDJ_MENTION_VALUE = 'Victimes détenant des décisions de justice définitives';
 
 const victimTypeExportLabels: Record<VictimTypeFilter, string> = {
     all: 'toutes',
@@ -273,7 +274,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
     const [filterRules, setFilterRules] = useState<FilterRule[]>([]);
     const [showFilterBuilder, setShowFilterBuilder] = useState(false);
     const effectiveMention = victimTypeFilter === 'luc' || victimTypeFilter === 'mpu' || victimTypeFilter === 'pecmu' || victimTypeFilter === 'vdj'
-        ? victimTypeFilter
+        ? victimTypeFilter === 'vdj' ? VDJ_MENTION_VALUE : victimTypeFilter
         : mention?.trim() || '';
 
     // Fonction pour appliquer les filtres localement sur les données en cache
