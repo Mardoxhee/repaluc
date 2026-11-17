@@ -1,6 +1,5 @@
 "use client"
 import { progressionProgramme } from '../utils/progressionProgramme';
-import ProgressionPreview, { useVisibleProgressions } from './ProgressionPreview';
 import React, { useState, useEffect, useContext, useCallback, useMemo } from "react";
 import { FetchContext } from "../../context/FetchContext";
 import Swal from 'sweetalert2';
@@ -360,7 +359,6 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
         });
     }, [searchTerm, filterRules, victimTypeFilter, effectiveMention]);
     const [victims, setVictims] = useState<any[]>([]);
-    const visibleProgressions = useVisibleProgressions(victims, effectiveMention || '');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string>("");
     const [isOffline, setIsOffline] = useState(false);
@@ -1912,26 +1910,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                                                     {victim.status || "Non vérifié"}
                                                 </span>
                                             </td>
-                                            <td className="px-6 py-4">
-                                                {progressionProgramme(victim, effectiveMention) ? (
-                                                    <ProgressionPreview
-                                                        data={victim.progressionDetail || visibleProgressions[`${progressionProgramme(victim, effectiveMention)}:${victim.id}`]?.data}
-                                                        failed={visibleProgressions[`${progressionProgramme(victim, effectiveMention)}:${victim.id}`]?.failed}
-                                                        reason={visibleProgressions[`${progressionProgramme(victim, effectiveMention)}:${victim.id}`]?.reason}
-                                                        onClick={() => {
-                                                            setSelectedVictim(victim);
-                                                            setVictimInitialTab('progression');
-                                                            setShowVictimModal(true);
-                                                        }}
-                                                    />
-                                                ) : <ProgressionPreview
-                                                    unavailable
-                                                    onClick={() => {
-                                                        setSelectedVictim(victim);
-                                                        setVictimInitialTab('info');
-                                                        setShowVictimModal(true);
-                                                    }}
-                                                />}
+                                            <td className="px-6 py-4 text-sm text-gray-400" aria-label="Progression affichée dans la fiche victime">
+                                                -
                                             </td>
                                             <td className="px-6 py-4 text-left">
                                                 <div className="flex items-center gap-2 justify-start">

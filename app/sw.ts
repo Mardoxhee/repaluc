@@ -56,6 +56,8 @@ const runtimeCaching: RuntimeCaching[] = [
   {
     matcher: ({ url, request }) =>
       request.method === "GET" &&
+      request.destination !== "image" &&
+      request.destination !== "font" &&
       url.origin !== (self as unknown as { location: Location }).location.origin &&
       !url.hostname.includes("fonts.g"),
     handler: new NetworkFirst({

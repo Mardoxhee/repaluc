@@ -166,7 +166,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
   const [uploadingFile, setUploadingFile] = useState(false);
   const [deletingFileId, setDeletingFileId] = useState<number | null>(null);
   const [newFileFile, setNewFileFile] = useState<File | null>(null);
-  const [pendingDocs, setPendingDocs] = useState<Array<{ id: number; label: string; name: string }>>([]);
+  const [pendingDocs, setPendingDocs] = useState<Array<{ id: number; label: string; name: string; isPending: true }>>([]);
   const [selectedFile, setSelectedFile] = useState<{ id: number; label: string; name: string; lien?: string } | null>(null);
   const [editFileIdx, setEditFileIdx] = useState<number | null>(null);
   const [editFileLabel, setEditFileLabel] = useState('');
@@ -428,7 +428,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
     setPendingDocs(
       pending
         .filter((d) => !d.synced)
-        .map((d) => ({ id: d.id || 0, label: d.label, name: d.fileName }))
+        .map((d) => ({ id: d.id || 0, label: d.label, name: d.fileName, isPending: true as const }))
         .filter((d) => d.id)
     );
   };
@@ -773,9 +773,9 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
   }, [currentVictim?.id, tab]);
 
   // Fonction pour ouvrir un fichier
-  const handleOpenFile = async (file: { id: number; label: string; name?: string; lien?: string }) => {
+  const handleOpenFile = async (file: { id: number; label: string; name?: string; lien?: string; isPending?: boolean }) => {
     // Doc en attente (offline)
-    if (!file.lien && typeof file.id === 'number') {
+    if (file.isPending) {
       try {
         const pending = await getPendingVictimDocById(file.id);
         if (!pending?.fileData) throw new Error('Document local introuvable');
@@ -795,7 +795,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
       }
     }
 
-    if (!file.lien) {
+    if (!file.id && !file.lien) {
       await Swal.fire({
         icon: 'error',
         title: 'Erreur',
@@ -805,7 +805,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
     }
 
     try {
-      const fileUrl = file.id ? await getVictimDocumentDownloadUrl(file.id) : await getFileLink(file.lien);
+      const fileUrl = file.id ? await getVictimDocumentDownloadUrl(file.id) : await getFileLink(file.lien!);
       setDocPreviewTitle(file.label || 'Document');
       setDocPreviewUrl(fileUrl);
       setDocPreviewIsObjectUrl(false);
@@ -997,9 +997,9 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
                     key={`pending-${doc.id}`}
                     role="button"
                     tabIndex={0}
-                    onClick={() => handleOpenFile({ id: doc.id, label: doc.label, name: doc.name })}
+                    onClick={() => handleOpenFile({ ...doc, isPending: true })}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') handleOpenFile({ id: doc.id, label: doc.label, name: doc.name });
+                      if (e.key === 'Enter' || e.key === ' ') handleOpenFile({ ...doc, isPending: true });
                     }}
                     className="w-full text-left flex items-center justify-between p-3 !bg-yellow-50 rounded-lg !border !border-yellow-200 hover:!bg-yellow-100 transition-colors cursor-pointer"
                   >
@@ -1026,7 +1026,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleOpenFile({ id: doc.id, label: doc.label, name: doc.name });
+                          handleOpenFile({ ...doc, isPending: true });
                         }}
                         className="px-2 py-1 !bg-yellow-100 !text-yellow-800 text-sm rounded hover:!bg-yellow-200 flex items-center gap-1"
                         title="Voir le document"
@@ -1199,7 +1199,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
                         });
 
                         setPendingDocs((prev) => [
-                          { id: idbId, label: newFileLabel, name: newFileFile.name },
+                          { id: idbId, label: newFileLabel, name: newFileFile.name, isPending: true },
                           ...prev,
                         ]);
 

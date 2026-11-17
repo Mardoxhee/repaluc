@@ -21,7 +21,7 @@ NEXT_PUBLIC_LOGOUT_URL=http://10.140.0.106:4201/login
 - **Utilisation** : API principale pour les victimes, documents et PECMU
 - **Endpoints** :
   - `/victime/*` - Gestion des victimes
-  - `/victime/document/*` - Documents des victimes
+  - `/document-victime/*` - Documents des victimes (upload, liste, téléchargement, modification et suppression)
   - `/minio/files/*` - Fichiers MinIO
   - `/minio/files/upload` - Upload de fichiers
   - `/fiche-pecmu/*` - Fiches d'enregistrement PECMU
