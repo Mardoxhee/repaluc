@@ -19,7 +19,7 @@ import { Modal } from 'flowbite-react';
 import InfosVictim from './infosVictim';
 import Swal from 'sweetalert2';
 import { authenticatedFetch } from '@/app/utils/authFetch';
-import { readUploadResponseLink } from '@/app/utils/uploadResponse';
+import { getVictimDocumentDownloadUrl, listVictimDocuments, uploadVictimDocument } from '@/app/utils/victimDocumentApi';
 
 // Fonction pour obtenir le lien réel du fichier
 const getFileLink = async (lien: string): Promise<string> => {
@@ -119,19 +119,8 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
     const fetchDocs = async () => {
       setLoadingFiles(true);
       try {
-        const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
-        const res = await authenticatedFetch(`${baseUrl}/victime/document/${currentVictim.id}`);
-        if (!res.ok) throw new Error('Erreur récupération des documents');
-        const data = await res.json();
-
-        // Extraire les documents de la réponse
-        const documents = data?.documentVictime || [];
-        const mappedFiles = documents.map((doc: any) => ({
-          id: doc.id,
-          label: doc.label,
-          name: doc.lien, // Le nom du fichier est dans 'lien'
-          lien: doc.lien
-        }));
+        const documents = await listVictimDocuments(currentVictim.id);
+        const mappedFiles = documents.map((doc) => ({ ...doc }));
 
         setFiles(mappedFiles);
       } catch (e) {
@@ -157,7 +146,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
     }
 
     try {
-      const fileUrl = await getFileLink(file.lien);
+      const fileUrl = file.id ? await getVictimDocumentDownloadUrl(file.id) : await getFileLink(file.lien);
       window.open(fileUrl, '_blank');
     } catch (error) {
       await Swal.fire({
@@ -350,33 +339,8 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
 
                     setUploadingFile(true);
                     try {
-                      // 1. Upload fichier sur Minio
-                      const formData = new FormData();
-                      formData.append('file', newFileFile);
-                      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
-                      const uploadRes = await authenticatedFetch(`${baseUrl}/minio/files/upload`, {
-                        method: 'POST',
-                        body: formData
-                      });
-
-                      const lien = await readUploadResponseLink(uploadRes);
-
-                      // 2. POST sur /document_victime
-                      const docRes = await authenticatedFetch(`${baseUrl}/document-victime`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          label: newFileLabel,
-                          lien,
-                          victimeId: currentVictim.id,
-                          userId: 1
-                        })
-                      });
-
-                      if (!docRes.ok) {
-                        const bodyText = await docRes.text().catch(() => '');
-                        throw new Error(`Erreur enregistrement document (${docRes.status})${bodyText ? `: ${bodyText}` : ''}`);
-                      }
+                      // Le backend téléverse et associe le fichier à la victime en une seule requête.
+                      await uploadVictimDocument(currentVictim.id, newFileFile, newFileLabel);
 
                       // 3. Succès et recharge la liste
                       await Swal.fire({
@@ -394,18 +358,8 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
                       // Recharge la liste des documents
                       setLoadingFiles(true);
                       try {
-                        const res = await authenticatedFetch(`${baseUrl}/victime/document/${currentVictim.id}`);
-                        if (res.ok) {
-                          const data = await res.json();
-                          const documents = data?.documentVictime || [];
-                          const mappedFiles = documents.map((doc: any) => ({
-                            id: doc.id,
-                            label: doc.label,
-                            name: doc.lien,
-                            lien: doc.lien
-                          }));
-                          setFiles(mappedFiles);
-                        }
+                        const documents = await listVictimDocuments(currentVictim.id);
+                        setFiles(documents.map((doc) => ({ ...doc })));
                       } catch (e) {
                         console.log('Erreur lors du rechargement des documents:', e);
                       } finally {

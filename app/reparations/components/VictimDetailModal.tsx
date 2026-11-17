@@ -33,7 +33,7 @@ import Swal from 'sweetalert2';
 import { isOnline } from '@/app/utils/victimsCache';
 import { deletePendingVictimDocById, getPendingDocsForVictim, getPendingVictimDocById, savePendingVictimDoc } from '@/app/utils/victimDocsCache';
 import { authenticatedFetch } from '@/app/utils/authFetch';
-import { readUploadResponseLink } from '@/app/utils/uploadResponse';
+import { getVictimDocumentDownloadUrl, listVictimDocuments, uploadVictimDocument } from '@/app/utils/victimDocumentApi';
 import { savePendingVictimUpdate } from '@/app/utils/victimUpdatesCache';
 import { syncPendingVictimUpdates } from '@/app/utils/victimUpdatesSyncService';
 
@@ -350,7 +350,8 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
     }
   };
 
-  const resolveDownloadUrl = async (lien?: string) => {
+  const resolveDownloadUrl = async (documentId: number, lien?: string) => {
+    if (documentId) return getVictimDocumentDownloadUrl(documentId);
     if (!lien) return '';
     if (/^https?:\/\//i.test(lien)) return lien;
     const realUrl = await getFileLink(lien);
@@ -395,7 +396,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
     }
   };
 
-  const handleDownloadServerDoc = async (file: { name?: string; lien?: string; label?: string }) => {
+  const handleDownloadServerDoc = async (file: { id: number; name?: string; lien?: string; label?: string }) => {
     try {
       if (!isOnline()) {
         await Swal.fire({
@@ -407,7 +408,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
         return;
       }
 
-      const url = await resolveDownloadUrl(file.lien);
+      const url = await resolveDownloadUrl(file.id, file.lien);
       if (!url) throw new Error('Lien du fichier indisponible');
 
       const filename = file.name || file.lien || (file.label ? `${file.label}.pdf` : 'fichier');
@@ -685,19 +686,8 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
     const fetchDocs = async () => {
       setLoadingFiles(true);
       try {
-        const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
-        const res = await authenticatedFetch(`${baseUrl}/victime/document/${currentVictim.id}`);
-        if (!res.ok) console.log('Erreur récupération des documents');
-        const data = await res.json();
-
-        // Extraire les documents de la réponse
-        const documents = data?.documentVictime || [];
-        const mappedFiles = documents.map((doc: any) => ({
-          id: doc.id,
-          label: doc.label,
-          name: doc.lien, // Le nom du fichier est dans 'lien'
-          lien: doc.lien
-        }));
+        const documents = await listVictimDocuments(currentVictim.id);
+        const mappedFiles = documents.map((doc) => ({ ...doc }));
 
         setFiles(mappedFiles);
 
@@ -732,20 +722,8 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
   const reloadServerDocs = async (victimId: number) => {
     setLoadingFiles(true);
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
-      const res = await authenticatedFetch(`${baseUrl}/victime/document/${victimId}`);
-      if (!res.ok) {
-        setFiles([]);
-        return;
-      }
-      const data = await res.json();
-      const documents = data?.documentVictime || [];
-      const mappedFiles = documents.map((doc: any) => ({
-        id: doc.id,
-        label: doc.label,
-        name: doc.lien,
-        lien: doc.lien,
-      }));
+      const documents = await listVictimDocuments(victimId);
+      const mappedFiles = documents.map((doc) => ({ ...doc }));
       setFiles(mappedFiles);
 
       const hasPieceIdentite = Array.isArray(documents)
@@ -827,7 +805,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
     }
 
     try {
-      const fileUrl = await getFileLink(file.lien);
+      const fileUrl = file.id ? await getVictimDocumentDownloadUrl(file.id) : await getFileLink(file.lien);
       setDocPreviewTitle(file.label || 'Document');
       setDocPreviewUrl(fileUrl);
       setDocPreviewIsObjectUrl(false);
@@ -1239,33 +1217,8 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
                         return;
                       }
 
-                      // 1. Upload fichier sur Minio
-                      const formData = new FormData();
-                      formData.append('file', newFileFile);
-                      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
-                      const uploadRes = await authenticatedFetch(`${baseUrl}/minio/files/upload`, {
-                        method: 'POST',
-                        body: formData
-                      });
-
-                      const lien = await readUploadResponseLink(uploadRes);
-
-                      // 2. POST sur /document_victime
-                      const docRes = await authenticatedFetch(`${baseUrl}/document-victime`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          label: newFileLabel,
-                          lien,
-                          victimeId: currentVictim.id,
-                          userId: 1
-                        })
-                      });
-
-                      if (!docRes.ok) {
-                        const bodyText = await docRes.text().catch(() => '');
-                        throw new Error(`Erreur enregistrement document (${docRes.status})${bodyText ? `: ${bodyText}` : ''}`);
-                      }
+                      // Le backend associe le document à la victime sur cette route multipart.
+                      await uploadVictimDocument(currentVictim.id, newFileFile, newFileLabel);
 
                       // 3. Succès et recharge la liste
                       await Swal.fire({
@@ -1283,18 +1236,8 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
                       // Recharge la liste des documents
                       setLoadingFiles(true);
                       try {
-                        const res = await authenticatedFetch(`${baseUrl}/victime/document/${currentVictim.id}`);
-                        if (res.ok) {
-                          const data = await res.json();
-                          const documents = data?.documentVictime || [];
-                          const mappedFiles = documents.map((doc: any) => ({
-                            id: doc.id,
-                            label: doc.label,
-                            name: doc.lien,
-                            lien: doc.lien
-                          }));
-                          setFiles(mappedFiles);
-                        }
+                        const documents = await listVictimDocuments(currentVictim.id);
+                        setFiles(documents.map((doc) => ({ ...doc })));
                       } catch (e) {
                         console.log('Erreur lors du rechargement des documents:', e);
                       } finally {

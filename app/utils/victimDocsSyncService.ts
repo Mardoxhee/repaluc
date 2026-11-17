@@ -2,63 +2,16 @@
 
 import { getAllPendingVictimDocs, getPendingVictimDocsToSyncForVictim, markVictimDocSynced, PendingVictimDoc } from './victimDocsCache';
 import { isOnline } from './victimsCache';
-import { authenticatedFetch } from './authFetch';
-import { readUploadResponseLink } from './uploadResponse';
+import { uploadVictimDocument } from './victimDocumentApi';
 
 let isSyncing = false;
 let syncInterval: NodeJS.Timeout | null = null;
 
 const uploadDoc = async (doc: PendingVictimDoc): Promise<string> => {
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!baseUrl) {
-    throw new Error("NEXT_PUBLIC_API_BASE_URL n'est pas configurée");
-  }
-
   const file = new File([doc.fileData], doc.fileName, { type: doc.mimeType || 'application/octet-stream' });
-  const formData = new FormData();
-  formData.append('file', file);
-
-  const resp = await authenticatedFetch(`${baseUrl}/minio/files/upload`, {
-    method: 'POST',
-    body: formData,
-  });
-
-  return await readUploadResponseLink(resp);
-};
-
-const attachDocToVictim = async (doc: PendingVictimDoc, lien: string): Promise<boolean> => {
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!baseUrl) {
-    throw new Error("NEXT_PUBLIC_API_BASE_URL n'est pas configurée");
-  }
-
-  const resp = await authenticatedFetch(`${baseUrl}/document-victime`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      label: doc.label,
-      lien,
-      victimeId: doc.victimId,
-      userId: 1,
-    }),
-  });
-
-  if (!resp.ok) {
-    let bodyText = '';
-    try {
-      bodyText = await resp.text();
-    } catch {
-      // ignore
-    }
-    console.error('[VictimDocsSync] POST document-victime failed', {
-      victimId: doc.victimId,
-      status: resp.status,
-      statusText: resp.statusText,
-      bodyText,
-    });
-  }
-
-  return resp.ok;
+  const result = await uploadVictimDocument(doc.victimId, file, doc.label);
+  const documentId = result?.id ?? result?.data?.id ?? result?.document?.id;
+  return String(documentId ?? doc.fileName);
 };
 
 export const syncPendingVictimDocsForVictim = async (
@@ -90,19 +43,8 @@ export const syncPendingVictimDocsForVictim = async (
       }
 
       try {
-        const lien = await uploadDoc(item);
-        if (!lien) {
-          failed++;
-          continue;
-        }
-
-        const ok = await attachDocToVictim(item, lien);
-        if (!ok) {
-          failed++;
-          continue;
-        }
-
-        await markVictimDocSynced(item.id, lien);
+        const reference = await uploadDoc(item);
+        await markVictimDocSynced(item.id, reference);
         synced++;
       } catch (e) {
         console.error('[VictimDocsSync] Failed to sync doc (per victim)', { itemId: item.id, victimId: item.victimId, error: e });
@@ -139,19 +81,8 @@ export const syncPendingVictimDocs = async (): Promise<{ synced: number; failed:
       }
 
       try {
-        const lien = await uploadDoc(item);
-        if (!lien) {
-          failed++;
-          continue;
-        }
-
-        const ok = await attachDocToVictim(item, lien);
-        if (!ok) {
-          failed++;
-          continue;
-        }
-
-        await markVictimDocSynced(item.id, lien);
+        const reference = await uploadDoc(item);
+        await markVictimDocSynced(item.id, reference);
         synced++;
       } catch (e) {
         console.error('[VictimDocsSync] Failed to sync doc', { itemId: item.id, victimId: item.victimId, error: e });
