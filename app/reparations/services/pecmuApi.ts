@@ -23,6 +23,8 @@ export type PecmuFilterRule = {
 export type FichePecmu = {
   workflowStatus?: WorkflowStatus;
   id: number;
+  victimeId?: number;
+  victimId?: number;
   victimName?: string;
   age?: number;
   sex?: string;
@@ -38,6 +40,9 @@ export type FichePecmu = {
   careStructureAddress?: string;
   doctorOrNurseContact?: string;
   alertSourceFullName?: string;
+  alertSourceStructureName?: string;
+  alertSourceStructureType?: string;
+  alertSourceOtherStructureType?: string | null;
   alertSourcePhone?: string;
   alertSourceRelationship?: string;
   alertSourceAddress?: string;
@@ -232,8 +237,9 @@ export const buildFichePecmuQuery = (params: {
 };
 
 export const mapFichePecmuToVictimRow = (fiche: FichePecmu) => ({
-  id: fiche.id,
+  id: Number(fiche.victimeId ?? fiche.victimId ?? (fiche as any).victime?.id) || fiche.id,
   pecmuFicheId: fiche.id,
+  masterVictimId: Number(fiche.victimeId ?? fiche.victimId ?? (fiche as any).victime?.id) || undefined,
   nom: fiche.victimName || `Fiche PECMU #${fiche.id}`,
   age: fiche.age,
   sexe: fiche.sex,
@@ -266,6 +272,9 @@ export const mapF2ValuesToFichePecmuPayload = (values: Record<string, string>): 
     careStructureAddress: values.adresseStructure,
     doctorOrNurseContact: values.contactMedecin,
     alertSourceFullName: values.sourceNom,
+    alertSourceStructureName: values.alertSourceStructureName,
+    alertSourceStructureType: values.alertSourceStructureType,
+    alertSourceOtherStructureType: values.alertSourceStructureType === 'AUTRE' ? values.alertSourceOtherStructureType : null,
     alertSourcePhone: values.sourceContact,
     alertSourceRelationship: values.sourceRapport,
     alertSourceAddress: values.sourceAdresse,
@@ -321,8 +330,12 @@ export const listFichesPecmu = async (
   };
 };
 
-export const createFichePecmu = async (fetcher: PecmuFetcher, values: Record<string, string>) => {
+export const createFichePecmu = async (fetcher: PecmuFetcher, values: Record<string, string>, victimId?: number) => {
   const payload = mapF2ValuesToFichePecmuPayload(values);
+  if (victimId) {
+    for (const key of ['victimName', 'age', 'sex', 'province', 'locality', 'victimAddress', 'victimPhone'] as const) delete payload[key];
+    (payload as Record<string, unknown>).victimeId = victimId;
+  }
   const response = await fetcher('/fiche-pecmu', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -334,6 +347,17 @@ export const createFichePecmu = async (fetcher: PecmuFetcher, values: Record<str
   }
 
   return (response.data?.id ? response.data : response) as FichePecmu;
+};
+
+export const listFichesPecmuByVictim = async (fetcher: PecmuFetcher, victimId: number): Promise<FichePecmu[]> => {
+  const response = await fetcher(`/fiche-pecmu/by-victime/${victimId}`);
+  return response ? normalizeApiList(response) as FichePecmu[] : [];
+};
+
+export const searchMasterVictims = async (fetcher: PecmuFetcher, search: string): Promise<any[]> => {
+  const params = new URLSearchParams({ page: '1', limit: '20', nom: search });
+  const response = await fetcher(`/victime/paginate/filtered?${params.toString()}`);
+  return normalizeApiList(response);
 };
 
 const requireResponse = <T,>(response: T | null | undefined, message: string): T => {

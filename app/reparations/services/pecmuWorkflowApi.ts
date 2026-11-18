@@ -11,7 +11,11 @@ export const statusLabels: Record<WorkflowStatus, string> = {
   CONSENT_REFUSED: 'Consentement refusé', READY_FOR_CARE: 'Prêt pour la prise en charge', IN_CARE: 'En cours de soins',
   TRANSFERRED: 'Transféré', CLOSURE_PENDING: 'Clôture en attente', LOST_TO_FOLLOW_UP: 'Perdu de vue', CLOSED: 'Clôturé',
 };
-export const consentTypes = { MEDICAL_CARE: 'Consentement à la prise en charge médicale', MEDICAL_TRANSFER: 'Consentement au transfert médical', MEDICAL_ACT: 'Consentement à l’acte médical', REFUSAL: 'Formulaire de refus' };
+export const consentTypes = {
+  MEDICAL_CARE: 'Consentement à la prise en charge médicale', MEDICAL_TRANSFER: 'Consentement au transfert médical',
+  MEDICAL_ACT: 'Consentement à l’acte médical', PSYCHOLOGICAL_CARE: 'Consentement à la prise en charge psychologique',
+  PSYCHOLOGICAL_ACT: 'Consentement à l’acte psychologique', REFUSAL: 'Formulaire de refus', OTHER: 'Autre consentement',
+};
 export const outcomeLabels = { STABILIZED_OR_CURED: 'Stabilisé/guéri', DECEASED: 'Décédé', TRANSFERRED: 'Transféré à un niveau supérieur', LOST_TO_FOLLOW_UP: 'Perdu de vue' };
 export const medicalDocumentTypes = { MEDICAL_REPORT: 'Rapport médical', DEATH_CERTIFICATE: 'Certificat de décès', TRANSFER_NOTE: 'Note de transfert', OTHER: 'Autre document médical' };
 export type FileMetadata = { id?: number | string; type?: string; documentType?: string; originalName?: string; filename?: string; mimeType?: string; size?: number };
@@ -31,8 +35,18 @@ export type WorkflowSnapshot = {
   fiche: FichePecmu & { documents?: FileMetadata[] };
   consents: WorkflowConsent[]; medicalCare: MedicalCare[]; followUps: SuiviAccompagnement[];
   currentStatus: WorkflowStatus; nextActions: string[];
+  psychologicalCare?: PsychologicalCare | null;
   history?: Array<{ id?: string | number; action?: string; status?: string; createdAt?: string; comment?: string }>;
 };
+export type PsychologicalCare = {
+  id: number; fichePecmuId: number; status?: string; supervisorName?: string; complaints?: string;
+  initialEvaluation?: string; diagnosticHypothesis?: string; therapiesReceived?: string; therapyCount?: number;
+  therapySessions?: Array<{ id?: number; date?: string; therapy?: string; notes?: string; agent?: string }>;
+  homeVisits?: Array<{ id?: number; date?: string; observations?: string; agent?: string }>;
+  report?: FileMetadata | string | null; reportFile?: string; reportName?: string; postTherapyEvaluation?: string;
+  closureDate?: string; closureNotes?: string; isClosed?: boolean; [key: string]: any;
+};
+export type SupervisorOption = { value: string; label: string };
 export class PecmuApiError extends Error {
   constructor(public statusCode: number, public code: string, message: string) { super(message); this.name = 'PecmuApiError'; }
 }
@@ -102,32 +116,100 @@ export async function getCertificationFileUrl(fetcher: PecmuFetcher, reference: 
   if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) throw new Error('Le lien de la note de certification est indisponible.');
   return url;
 }
+export async function getMedicalSupervisorOptions(fetcher: PecmuFetcher): Promise<{ data: SupervisorOption[]; other: SupervisorOption & { requiresSpecification?: boolean } }> {
+  const response = await fetcher('/acte-medical-pecmu/supervisors/options');
+  const payload = response?.data?.data ? response.data : response;
+  return {
+    data: Array.isArray(payload?.data) ? payload.data.filter((item: any) => typeof item?.value === 'string' && typeof item?.label === 'string') : [],
+    other: payload?.other && typeof payload.other.value === 'string'
+      ? payload.other
+      : { value: 'OTHER', label: 'Autre à préciser', requiresSpecification: true },
+  };
+}
+
+const psychologicalBase = '/prise-en-charge-psychologique-pecmu';
+export async function getPsychologicalCare(fetcher: PecmuFetcher, ficheId: number): Promise<PsychologicalCare> {
+  const response = await fetcher(`${psychologicalBase}/by-fiche/${ficheId}`);
+  return (response?.data ?? response) as PsychologicalCare;
+}
+export async function createPsychologicalCare(fetcher: PecmuFetcher, payload: Record<string, unknown>) {
+  return fetcher(psychologicalBase, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+}
+export async function updatePsychologicalCare(fetcher: PecmuFetcher, id: number, payload: Record<string, unknown>) {
+  return fetcher(`${psychologicalBase}/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+}
+export async function addPsychologicalTherapySession(fetcher: PecmuFetcher, id: number, payload: Record<string, unknown>) {
+  return fetcher(`${psychologicalBase}/${id}/therapy-sessions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+}
+export async function addPsychologicalHomeVisit(fetcher: PecmuFetcher, id: number, payload: Record<string, unknown>) {
+  return fetcher(`${psychologicalBase}/${id}/home-visits`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+}
+export async function uploadPsychologicalReport(fetcher: PecmuFetcher, id: number, file: File) {
+  return uploadPecmuFile(fetcher, `${psychologicalBase}/${id}/report`, file);
+}
+export async function getPsychologicalReportUrl(fetcher: PecmuFetcher, id: number) {
+  return getPecmuDocumentUrl(fetcher, `${psychologicalBase}/${id}/report/download-url`);
+}
+export async function closePsychologicalCare(fetcher: PecmuFetcher, id: number, payload: Record<string, unknown>) {
+  return fetcher(`${psychologicalBase}/${id}/close`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+}
 export const actionPermissions: Record<string, string> = {
-  UPLOAD_CERTIFICATION_NOTE: 'fiche-pecmu:update', CERTIFY_ALERT: 'fiche-pecmu:update', RECORD_MEDICAL_DECISION: 'fiche-pecmu:medical-decision',
+  UPLOAD_CERTIFICATION_NOTE: 'fiche-pecmu:update', CERTIFY_ALERT: 'fiche-pecmu:update', RECORD_MEDICAL_DECISION: 'fiche-pecmu:update',
   RECORD_CONSENT: 'acte-consentement-pecmu:create', OPEN_MEDICAL_CARE: 'acte-medical-pecmu:create', UPDATE_MEDICAL_CARE: 'acte-medical-pecmu:update',
   UPLOAD_MEDICAL_DOCUMENT: 'acte-medical-pecmu:create', UPLOAD_TRANSFER_NOTE: 'acte-medical-pecmu:create', OPEN_TRANSFERRED_MEDICAL_CARE: 'acte-medical-pecmu:create',
   CONTINUE_FOLLOW_UP: 'suivi-accompagnement:create', UPLOAD_MEDICAL_REPORT: 'acte-medical-pecmu:create', UPLOAD_CLOSURE_FORM: 'fiche-pecmu:update',
   CLOSE_CASE: 'fiche-pecmu:update', RECORD_POST_PECMU_ORIENTATIONS: 'fiche-pecmu:update',
+  OPEN_PSYCHOLOGICAL_CARE: 'prise-en-charge-psychologique-pecmu:create',
+  OPEN_OR_UPDATE_PSYCHOLOGICAL_CARE: 'prise-en-charge-psychologique-pecmu:update',
+  CLOSE_PSYCHOLOGICAL_CARE_IF_OPEN: 'prise-en-charge-psychologique-pecmu:update',
 };
 export function canPerform(state: WorkflowSnapshot, action: string, permissions: string[] | null) {
-  return state.nextActions.includes(action) && (permissions === null || permissions.includes(actionPermissions[action]));
+  const permission = actionPermissions[action];
+  return state.nextActions.includes(action) && Boolean(permission && permissions?.includes(permission));
 }
-// Only consume explicit permission claims. If the SSO does not expose them here,
-// nextActions controls presentation and every request is still authorized by the API.
+// Only consume explicit permission claims; never infer privileges from a role label.
 export function getPecmuPermissions(): string[] | null {
   if (typeof window === 'undefined') return null;
-  try {
-    for (const key of ['auth', 'usr']) {
-      const value = JSON.parse(localStorage.getItem(key) || 'null');
-      const list = Array.isArray(value) ? value : value?.permissions;
-      if (Array.isArray(list) && list.every(p => typeof p === 'string')) return list;
+  const collect = (value: any, depth = 0): string[] | null => {
+    if (!value || depth > 4 || typeof value !== 'object') return null;
+    if (Array.isArray(value)) {
+      const strings = value.filter((entry): entry is string => typeof entry === 'string');
+      if (strings.length === value.length) return strings;
+      const nested = value.flatMap(entry => collect(entry, depth + 1) || []);
+      return nested.length ? nested : null;
     }
-  } catch { /* Missing SSO claims are not inferred from role names. */ }
+    for (const key of ['permissions', 'permissionList', 'privileges', 'perms']) {
+      if (Array.isArray(value[key])) {
+        const list = value[key].map((entry: any) => typeof entry === 'string' ? entry : entry?.name ?? entry?.code ?? entry?.permission).filter((entry: unknown): entry is string => typeof entry === 'string');
+        if (list.length) return list;
+      }
+    }
+    for (const key of ['data', 'user', 'usr', 'auth', 'apps', 'access', 'claims']) {
+      const nested = collect(value[key], depth + 1);
+      if (nested) return nested;
+    }
+    return null;
+  };
+  try {
+    for (const key of ['auth', 'usr', 'apps']) {
+      const list = collect(JSON.parse(localStorage.getItem(key) || 'null'));
+      if (list) return list;
+    }
+    const token = localStorage.getItem('token');
+    if (token) {
+      const claims = token.split('.')[1];
+      if (claims) {
+        const decoded = JSON.parse(atob(claims.replace(/-/g, '+').replace(/_/g, '/')));
+        return collect(decoded) || [];
+      }
+    }
+  } catch { /* Missing SSO claims are treated as no granted permissions. */ }
   return null;
 }
-export type WorkflowTab = 'identity' | 'certification' | 'decision' | 'consents' | 'care' | 'followups' | 'closure' | 'orientations' | 'history';
+export type WorkflowTab = 'identity' | 'certification' | 'decision' | 'consents' | 'care' | 'psychological' | 'followups' | 'closure' | 'orientations' | 'history';
 export function isWorkflowTabAvailable(status: WorkflowStatus, tab: WorkflowTab): boolean {
   if (['identity', 'certification', 'history'].includes(tab)) return true;
+  if (tab === 'psychological') return ['READY_FOR_CARE', 'IN_CARE', 'TRANSFERRED', 'CLOSURE_PENDING', 'LOST_TO_FOLLOW_UP'].includes(status);
   const stages: Record<WorkflowStatus, number> = {
     CERTIFICATION_PENDING: 0, NOT_CERTIFIED: 0,
     MEDICAL_DECISION_PENDING: 1, NOT_ELIGIBLE: 1,

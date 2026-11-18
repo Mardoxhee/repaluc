@@ -20,12 +20,15 @@ import { normalizeText } from '../utils/mentionStats';
 import {
   createFichePecmu,
   listActesMedicauxByFiche,
+  listFichesPecmuByVictim,
   listFichesPecmu,
+  type FichePecmu,
 } from '../services/pecmuApi';
 import { violationGroups, violationOptions } from '../constants/violations';
 import YesNoToggle from './YesNoToggle';
 import PecmuDossierModal from './PecmuDossierModal';
 import PecmuPartnersSettings from '../../reglages/PecmuPartnersSettings';
+import PecmuVictimSearch, { masterVictimAge, masterVictimLocality, masterVictimName, type MasterVictim } from './PecmuVictimSearch';
 
 type Victim = {
   id: number;
@@ -48,6 +51,9 @@ type Victim = {
   mention?: string;
   photo?: string | null;
   pecmuFicheId?: number;
+  masterVictimId?: number;
+  pecmuAlertCount?: number;
+  pecmuFicheIds?: number[];
   variablesSpecifiques?: Record<string, string | null | undefined>;
   [key: string]: any;
 };
@@ -91,6 +97,7 @@ type FormField = {
   label: string;
   type?: FieldType;
   options?: string[];
+  required?: boolean;
 };
 
 type FilterRule = {
@@ -155,6 +162,8 @@ const f2Sections: Array<{ title: string; fields: FormField[] }> = [
   {
     title: 'Source de l’alerte',
     fields: [
+      { key: 'alertSourceStructureName', label: 'Nom de la structure ayant lancé l’alerte', required: true },
+      { key: 'alertSourceStructureType', label: 'Type de structure', type: 'select', options: ['STRUCTURE_MEDICALE', 'ONG', 'RELAIS_COMMUNAUTAIRE', 'SERVICE_PUBLIC', 'AUTRE'], required: true },
       { key: 'sourceNom', label: 'Nom complet' },
       { key: 'sourceContact', label: 'Contact téléphone' },
       { key: 'sourceRapport', label: 'Rapports avec la victime ou le cas' },
@@ -340,10 +349,27 @@ const PecmuModulePage: React.FC = () => {
   const [alerts, setAlerts] = useState<PecmuAlert[]>([]);
   const [medicalActs, setMedicalActs] = useState<MedicalAct[]>([]);
   const [medicalActCounts, setMedicalActCounts] = useState<Record<number, number>>({});
-  const [alertVictimId, setAlertVictimId] = useState<string>('');
+  const [alertMasterVictim, setAlertMasterVictim] = useState<MasterVictim | null>(null);
+  const [existingVictimAlerts, setExistingVictimAlerts] = useState<FichePecmu[]>([]);
+  const [loadingVictimAlerts, setLoadingVictimAlerts] = useState(false);
+  const [showVictimAlerts, setShowVictimAlerts] = useState(false);
   const [alertValues, setAlertValues] = useState<Record<string, string>>(() => buildF2Values(null));
   const [submittingAlert, setSubmittingAlert] = useState(false);
   const [otherViolation, setOtherViolation] = useState(false);
+
+  const groupFicheRows = (rows: Victim[]) => {
+    const grouped = new Map<string, Victim>();
+    rows.forEach(row => {
+      const key = row.masterVictimId ? `victim:${row.masterVictimId}` : `fiche:${row.pecmuFicheId || row.id}`;
+      const current = grouped.get(key);
+      if (!current) grouped.set(key, { ...row, pecmuAlertCount: 1, pecmuFicheIds: row.pecmuFicheId ? [row.pecmuFicheId] : [] });
+      else {
+        current.pecmuAlertCount = (current.pecmuAlertCount || 1) + 1;
+        if (row.pecmuFicheId && !current.pecmuFicheIds?.includes(row.pecmuFicheId)) current.pecmuFicheIds = [...(current.pecmuFicheIds || []), row.pecmuFicheId];
+      }
+    });
+    return [...grouped.values()];
+  };
 
   useEffect(() => {
     setAlerts(readStorage<PecmuAlert[]>(ALERTS_STORAGE_KEY, []));
@@ -374,7 +400,7 @@ const PecmuModulePage: React.FC = () => {
         });
 
         if (pecmuResult) {
-          const rows = pecmuResult.rows as Victim[];
+          const rows = groupFicheRows(pecmuResult.rows as Victim[]);
           const filteredRows = applyFilterRules(rows);
           setVictims(filteredRows);
           setMeta((prev) => ({
@@ -393,7 +419,7 @@ const PecmuModulePage: React.FC = () => {
       }
 
       const cached = await getVictimsFromCache(cacheKey);
-      const cachedRows = (Array.isArray(cached?.data) ? cached!.data : []).filter(isPecmuVictim);
+      const cachedRows = groupFicheRows((Array.isArray(cached?.data) ? cached!.data : []).filter(isPecmuVictim));
       const filtered = search
         ? cachedRows.filter((victim: Victim) => (
           [
@@ -448,7 +474,7 @@ const PecmuModulePage: React.FC = () => {
   useEffect(() => {
     let mounted = true;
     const ficheIds = victims
-      .map((victim) => victim.pecmuFicheId)
+      .flatMap((victim) => victim.pecmuFicheIds || (victim.pecmuFicheId ? [victim.pecmuFicheId] : []))
       .filter((id): id is number => Number.isFinite(Number(id)));
 
     if (ficheIds.length === 0 || usingCache) {
@@ -464,7 +490,14 @@ const PecmuModulePage: React.FC = () => {
         })
       );
 
-      if (mounted) setMedicalActCounts(Object.fromEntries(entries));
+      if (mounted) {
+        const counts: Record<number, number> = {};
+        const byFiche = Object.fromEntries(entries);
+        victims.forEach(victim => {
+          counts[victim.id] = (victim.pecmuFicheIds || (victim.pecmuFicheId ? [victim.pecmuFicheId] : [])).reduce((total, ficheId) => total + (byFiche[ficheId] || 0), 0);
+        });
+        setMedicalActCounts(counts);
+      }
     };
 
     loadActCounts();
@@ -500,24 +533,62 @@ const PecmuModulePage: React.FC = () => {
 
   const openAlertModal = (victim?: Victim | null) => {
     const selected = victim || selectedVictim;
-    setAlertVictimId(selected?.id ? String(selected.id) : '');
+    const linked = selected?.masterVictimId ? ({
+      id: selected.masterVictimId, nom: selected.nom, prenom: selected.prenom, postnom: selected.postnom,
+      age: selected.age, sexe: selected.sexe, province: selected.province, territoire: selected.territoire,
+      commune: selected.commune, village: selected.village, adresse: selected.adresse,
+    } as MasterVictim) : null;
+    setAlertMasterVictim(linked);
+    setExistingVictimAlerts([]);
+    if (linked) void listFichesPecmuByVictim(fetcher, linked.id).then(setExistingVictimAlerts).catch(() => setExistingVictimAlerts([]));
     const values = buildF2Values(selected);
     setOtherViolation(Boolean(values.typeViolation && !violationOptions.includes(values.typeViolation)));
     setAlertValues(values);
     setShowAlertModal(true);
   };
 
+  const selectAlertVictim = async (victim: MasterVictim | null) => {
+    setAlertMasterVictim(victim);
+    setExistingVictimAlerts([]);
+    if (!victim) return;
+    setAlertValues(previous => ({ ...previous, ...buildF2Values(victim as Victim) }));
+    setLoadingVictimAlerts(true);
+    try { setExistingVictimAlerts(await listFichesPecmuByVictim(fetcher, victim.id)); }
+    catch (error: any) { setListError(error?.message || 'Impossible de charger les alertes précédentes.'); }
+    finally { setLoadingVictimAlerts(false); }
+  };
+
+  const openVictimAlertHistory = async (victim: Victim) => {
+    if (!victim.masterVictimId) {
+      if (victim.pecmuFicheId) setOpenDossierId(victim.pecmuFicheId);
+      return;
+    }
+    setSelectedVictim(victim);
+    setAlertMasterVictim({
+      id: victim.masterVictimId, nom: victim.nom, prenom: victim.prenom, postnom: victim.postnom,
+      age: victim.age, sexe: victim.sexe, province: victim.province, territoire: victim.territoire,
+      commune: victim.commune, village: victim.village, adresse: victim.adresse,
+    });
+    setLoadingVictimAlerts(true); setExistingVictimAlerts([]); setShowVictimAlerts(true);
+    try { setExistingVictimAlerts(await listFichesPecmuByVictim(fetcher, victim.masterVictimId)); }
+    catch (error: any) { setListError(error?.message || 'Impossible de charger les alertes de cette victime.'); }
+    finally { setLoadingVictimAlerts(false); }
+  };
+
   const handleAlertSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (submittingAlert) return;
+    if (!permissions?.includes('fiche-pecmu:create')) {
+      await Swal.fire({ icon: 'warning', title: 'Action non autorisée', text: 'Votre profil ne possède pas la permission PECMU nécessaire pour créer une alerte.' });
+      return;
+    }
     if (otherViolation && !alertValues.typeViolation?.trim()) {
       await Swal.fire({ icon: 'warning', title: 'Type de violation manquant', text: 'Précisez le type de violation pour l’option Autre.' });
       return;
     }
-    const victim = victims.find((item) => String(item.id) === alertVictimId) || selectedVictim;
-    const patientName = alertValues.nomVictime || getVictimName(victim);
+    const patientName = alertMasterVictim ? masterVictimName(alertMasterVictim) : alertValues.nomVictime;
 
-    if (!patientName.trim()) {
+    if (!alertMasterVictim && !patientName.trim()) {
       await Swal.fire({
         icon: 'warning',
         title: 'Victime non renseignée',
@@ -527,7 +598,7 @@ const PecmuModulePage: React.FC = () => {
       return;
     }
 
-    const age = alertValues.age.trim();
+    const age = alertMasterVictim ? '' : alertValues.age.trim();
     if (age && (!/^\d+$/.test(age) || Number(age) > 120)) {
       await Swal.fire({
         icon: 'warning',
@@ -537,10 +608,18 @@ const PecmuModulePage: React.FC = () => {
       });
       return;
     }
+    if (!alertValues.alertSourceStructureName?.trim() || !alertValues.alertSourceStructureType) {
+      await Swal.fire({ icon: 'warning', title: 'Structure d’alerte incomplète', text: 'Renseignez le nom et le type de la structure ayant lancé l’alerte.' });
+      return;
+    }
+    if (alertValues.alertSourceStructureType === 'AUTRE' && !alertValues.alertSourceOtherStructureType?.trim()) {
+      await Swal.fire({ icon: 'warning', title: 'Type de structure manquant', text: 'Précisez le type de structure sélectionné « Autre ».' });
+      return;
+    }
 
     setSubmittingAlert(true);
     try {
-      const created = await createFichePecmu(fetcher, { ...alertValues, typeViolation: alertValues.typeViolation.trim() });
+      const created = await createFichePecmu(fetcher, { ...alertValues, typeViolation: alertValues.typeViolation.trim() }, alertMasterVictim?.id);
       setShowAlertModal(false);
       if (created.id) setOpenDossierId(created.id);
       await loadVictims();
@@ -567,6 +646,14 @@ const PecmuModulePage: React.FC = () => {
     const options = field.key === 'typeViolation' ? violationOptions : field.options;
     const value = alertValues[field.key] || '';
     const update = (nextValue: string) => setAlertValues((prev) => ({ ...prev, [field.key]: nextValue }));
+
+    if (field.key === 'alertSourceStructureType') {
+      const labels: Record<string, string> = { STRUCTURE_MEDICALE: 'Structure médicale', ONG: 'ONG', RELAIS_COMMUNAUTAIRE: 'Relais communautaire', SERVICE_PUBLIC: 'Service public', AUTRE: 'Autre' };
+      return <div key={field.key} className="space-y-3">
+        <label className="block"><span className="text-xs font-bold uppercase tracking-wide text-slate-600">{field.label} *</span><select required className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" value={value} onChange={event => { update(event.target.value); if (event.target.value !== 'AUTRE') setAlertValues(previous => ({ ...previous, alertSourceOtherStructureType: '' })); }}><option value="">Sélectionner</option>{Object.entries(labels).map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
+        {value === 'AUTRE' && <label className="block"><span className="text-xs font-bold uppercase tracking-wide text-slate-600">Précisez le type de structure *</span><input required className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" value={alertValues.alertSourceOtherStructureType || ''} onChange={event => setAlertValues(previous => ({ ...previous, alertSourceOtherStructureType: event.target.value }))} /></label>}
+      </div>;
+    }
 
     if (field.key === 'typeViolation') {
       const inputClass = 'mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary';
@@ -602,15 +689,16 @@ const PecmuModulePage: React.FC = () => {
       <label key={field.key} className={field.type === 'textarea' ? 'md:col-span-2' : ''}>
         <span className="text-xs font-bold uppercase tracking-wide text-slate-600">{field.label}</span>
         {field.type === 'textarea' ? (
-          <textarea className="mt-1 min-h-20 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary-500" value={value} onChange={(event) => update(event.target.value)} />
+          <textarea required={field.required} className="mt-1 min-h-20 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary-500" value={value} onChange={(event) => update(event.target.value)} />
         ) : field.type === 'select' ? (
-          <select className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary-500" value={value} onChange={(event) => update(event.target.value)}>
+          <select required={field.required} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary-500" value={value} onChange={(event) => update(event.target.value)}>
             <option value="">Sélectionner</option>
             {value && !options?.includes(value) ? <option value={value}>{value}</option> : null}
             {options?.map((option) => <option key={option} value={option}>{option}</option>)}
           </select>
         ) : (
-          <input
+        <input
+            required={field.required}
             type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'}
             min={field.key === 'age' ? 0 : undefined}
             max={field.key === 'age' ? 120 : undefined}
@@ -639,7 +727,7 @@ const PecmuModulePage: React.FC = () => {
           </div>
           <button
             type="button"
-            disabled={permissions !== null && !permissions.includes('fiche-pecmu:create')}
+            disabled={!permissions?.includes('fiche-pecmu:create')}
             onClick={() => openAlertModal()}
             className={`${activeView === 'victimes' ? 'inline-flex' : 'hidden'} items-center justify-center gap-2 bg-red-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-red-700`}
           >
@@ -854,9 +942,9 @@ const PecmuModulePage: React.FC = () => {
               <tbody className="divide-y divide-slate-100">
                 {victims.map((victim, index) => {
                   const active = selectedVictim?.id === victim.id;
-                  const alertCount = (victim.pecmuFicheId ? 1 : 0) + alerts.filter((alert) => alert.victimId === victim.id).length;
-                  const actCount = victim.pecmuFicheId
-                    ? (medicalActCounts[victim.pecmuFicheId] ?? 0)
+                  const alertCount = victim.pecmuAlertCount || (victim.pecmuFicheId ? 1 : 0) + alerts.filter((alert) => alert.victimId === victim.id).length;
+                  const actCount = victim.pecmuFicheIds?.length || victim.pecmuFicheId
+                    ? (medicalActCounts[victim.id] ?? 0)
                     : medicalActs.filter((act) => act.victimId === victim.id).length;
 
                   return (
@@ -864,7 +952,7 @@ const PecmuModulePage: React.FC = () => {
                       key={victim.id}
                       onClick={() => {
                         setSelectedVictim(victim);
-                        if (victim.pecmuFicheId) setOpenDossierId(victim.pecmuFicheId);
+                        void openVictimAlertHistory(victim);
                       }}
                       className={`cursor-pointer transition-colors ${active ? 'bg-primary-50' : 'hover:bg-slate-50'}`}
                     >
@@ -877,7 +965,8 @@ const PecmuModulePage: React.FC = () => {
                       <td className="px-4 py-3 text-sm text-slate-700">{victim.status || '-'}</td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex flex-wrap justify-end gap-2">
-                          <span className="inline-flex items-center whitespace-nowrap border border-primary/20 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary">{alertCount} fiche{alertCount > 1 ? 's' : ''} F2</span>
+                          <button type="button" onClick={event => { event.stopPropagation(); void openVictimAlertHistory(victim); }} className="inline-flex items-center whitespace-nowrap border border-primary/20 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/10">{alertCount} alerte{alertCount > 1 ? 's' : ''} · Voir</button>
+                          {permissions?.includes('fiche-pecmu:create') && <button type="button" onClick={event => { event.stopPropagation(); openAlertModal(victim); }} className="inline-flex items-center whitespace-nowrap border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100">Nouvelle alerte</button>}
                           <span className="inline-flex items-center whitespace-nowrap border border-secondary/20 bg-secondary/5 px-2.5 py-1 text-xs font-medium text-secondary">{actCount} {actCount > 1 ? 'actes médicaux' : 'acte médical'}</span>
                         </div>
                       </td>
@@ -935,12 +1024,17 @@ const PecmuModulePage: React.FC = () => {
             <div className="border-b !border-gray-200 px-4 pb-5 pt-8 md:px-7 md:pt-6">
               <div className="text-[11px] font-black uppercase tracking-[0.35em] !text-red-600">Nouvelle alerte</div>
               <h2 className="mt-2 text-2xl font-black !text-gray-950 md:text-3xl">Fiche identification cas</h2>
-              <p className="mt-1 text-sm !text-gray-500 md:text-base">Signalement d’une victime en situation d’urgence médicale.</p>
+              <p className="mt-1 text-sm !text-gray-500 md:text-base">Cherchez d’abord la victime existante. Une nouvelle alerte créera un dossier distinct.</p>
             </div>
 
             <div className="max-h-[calc(100vh-230px)] overflow-y-auto px-4 py-5 md:px-7">
               <fieldset disabled={submittingAlert} className="space-y-5">
-                {f2Sections.map((section) => (
+                <PecmuVictimSearch fetcher={fetcher} selected={alertMasterVictim} onSelect={victim => { void selectAlertVictim(victim); }} disabled={submittingAlert} />
+                {alertMasterVictim && <section className="space-y-3 rounded border border-slate-200 bg-white p-4">
+                  <div className="flex items-center justify-between gap-3"><h3 className="font-semibold">Alertes PECMU déjà enregistrées</h3><span className="rounded bg-primary/5 px-2 py-1 text-xs font-semibold text-primary">{existingVictimAlerts.length} alerte{existingVictimAlerts.length > 1 ? 's' : ''}</span></div>
+                  {loadingVictimAlerts ? <p role="status" className="text-sm text-slate-500">Chargement des alertes…</p> : existingVictimAlerts.length ? <ol className="space-y-2">{existingVictimAlerts.map(alert => <li key={alert.id} className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3"><div><p className="text-sm font-semibold">Fiche PECMU #{alert.id} · {alert.alertSourceStructureName || alert.careStructureName || 'Structure non renseignée'}</p><p className="text-xs text-slate-500">{alert.incidentPeriod || 'Période non renseignée'} · {alert.workflowStatus ? statusLabels[alert.workflowStatus] : alert.medicalStatus || 'Statut non renseigné'} · {alert.createdAt ? new Date(alert.createdAt).toLocaleDateString('fr-FR') : 'Date non renseignée'}</p></div><button type="button" className="text-sm font-semibold text-primary underline" onClick={() => { setShowAlertModal(false); setOpenDossierId(alert.id); }}>Ouvrir le dossier</button></li>)}</ol> : <p className="text-sm text-slate-500">Aucune alerte précédente trouvée pour cette victime.</p>}
+                </section>}
+                {f2Sections.filter((_, index) => !(alertMasterVictim && index === 0)).map((section) => (
                   <section key={section.title} className="border !border-gray-200 !bg-white p-4 md:p-5">
                     <h3 className="mb-4 text-sm font-black uppercase tracking-wide !text-gray-800">{section.title}</h3>
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -976,7 +1070,7 @@ const PecmuModulePage: React.FC = () => {
 
             <div className="flex justify-end gap-3 border-t !border-gray-200 bg-white px-4 py-4 md:px-7">
               <button type="button" onClick={() => setShowAlertModal(false)} className="border !border-gray-300 px-4 py-2 text-sm font-bold !text-gray-700 hover:!bg-gray-50">Annuler</button>
-              <button type="submit" disabled={submittingAlert} className="inline-flex items-center gap-2 !bg-red-600 px-4 py-2 text-sm font-bold text-white hover:!bg-red-700 disabled:cursor-not-allowed disabled:opacity-60">
+              <button type="submit" disabled={submittingAlert || !permissions?.includes('fiche-pecmu:create')} className="inline-flex items-center gap-2 !bg-red-600 px-4 py-2 text-sm font-bold text-white hover:!bg-red-700 disabled:cursor-not-allowed disabled:opacity-60">
                 <Save size={16} />
                 {submittingAlert ? 'Enregistrement...' : 'Enregistrer l’alerte F2'}
               </button>
