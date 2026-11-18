@@ -9,7 +9,7 @@ export type MasterVictim = {
   nom?: string;
   prenom?: string;
   postnom?: string;
-  age?: number;
+  age?: number | string;
   dateNaissance?: string;
   sexe?: string;
   province?: string;

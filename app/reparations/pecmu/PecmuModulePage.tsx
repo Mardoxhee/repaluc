@@ -1008,6 +1008,19 @@ const PecmuModulePage: React.FC = () => {
       </section>
       )}
 
+      <Modal show={showVictimAlerts} onClose={() => setShowVictimAlerts(false)} size="4xl" className="!z-[100] !h-dvh !bg-slate-950/60" aria-label="Alertes PECMU de la victime">
+        <ModalBody className="!p-0">
+          <section className="space-y-5 !bg-white p-6 !text-gray-900">
+            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-4">
+              <div><p className="text-xs font-bold uppercase tracking-widest text-primary">Historique PECMU</p><h2 className="mt-1 text-2xl font-bold">{alertMasterVictim ? masterVictimName(alertMasterVictim) : 'Alertes de la victime'}</h2><p className="mt-1 text-sm text-slate-500">{existingVictimAlerts.length} alerte{existingVictimAlerts.length === 1 ? '' : 's'} enregistrée{existingVictimAlerts.length === 1 ? '' : 's'}</p></div>
+              <button type="button" onClick={() => setShowVictimAlerts(false)} className="rounded p-2 text-slate-500 hover:bg-slate-100" aria-label="Fermer"><X size={22} /></button>
+            </div>
+            {loadingVictimAlerts ? <p role="status" className="py-8 text-center text-sm text-slate-500">Chargement des alertes…</p> : existingVictimAlerts.length ? <ol className="max-h-[60vh] divide-y divide-slate-100 overflow-y-auto">{existingVictimAlerts.map(alert => <li key={alert.id} className="flex flex-wrap items-center justify-between gap-3 py-4"><div><p className="font-semibold">Fiche PECMU #{alert.id} · {alert.alertSourceStructureName || alert.careStructureName || 'Structure non renseignée'}</p><p className="text-sm text-slate-500">{alert.incidentPeriod || 'Période non renseignée'} · {alert.workflowStatus ? statusLabels[alert.workflowStatus] : alert.medicalStatus || 'Statut non renseigné'} · {alert.createdAt ? new Date(alert.createdAt).toLocaleDateString('fr-FR') : 'Date non renseignée'}</p></div><button type="button" className="text-sm font-semibold text-primary underline" onClick={() => { setShowVictimAlerts(false); setOpenDossierId(alert.id); }}>Ouvrir le dossier</button></li>)}</ol> : <p className="py-8 text-center text-sm text-slate-500">Aucune alerte enregistrée pour cette victime.</p>}
+            <div className="flex justify-end gap-3 border-t border-slate-200 pt-4"><button type="button" onClick={() => setShowVictimAlerts(false)} className="border border-slate-300 px-4 py-2 text-sm font-semibold">Fermer</button>{permissions?.includes('fiche-pecmu:create') && selectedVictim && <button type="button" onClick={() => { setShowVictimAlerts(false); openAlertModal(selectedVictim); }} className="bg-primary px-4 py-2 text-sm font-semibold text-white">Nouvelle alerte</button>}</div>
+          </section>
+        </ModalBody>
+      </Modal>
+
       <Modal show={showAlertModal} onClose={() => setShowAlertModal(false)} size="7xl" className="!z-[100] !h-dvh !bg-slate-950/60" aria-label="Nouvelle alerte PECMU">
         <ModalBody className="!p-0">
           <form onSubmit={handleAlertSubmit} className="relative !bg-white !text-gray-900">
