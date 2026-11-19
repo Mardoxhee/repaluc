@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { Modal, ModalBody } from 'flowbite-react';
 import Swal from 'sweetalert2';
-import { pecmuRequest, getPecmuPermissions, statusLabels } from '../services/pecmuWorkflowApi';
+import { pecmuRequest, getPecmuPermissions, PecmuApiError, statusLabels } from '../services/pecmuWorkflowApi';
 import { getVictimsFromCache, isOnline } from '../../utils/victimsCache';
 import { normalizeText } from '../utils/mentionStats';
 import {
@@ -553,12 +553,17 @@ const PecmuModulePage: React.FC = () => {
     const currentPermissions = getPecmuPermissions();
     setPermissions(currentPermissions);
     if (!currentPermissions?.includes('fiche-pecmu:create')) {
+      const permissionList = currentPermissions === null
+        ? 'Permissions détectées : indisponibles dans la session.'
+        : currentPermissions.length
+          ? `Permissions détectées (${currentPermissions.length}) :\n${currentPermissions.join('\n')}`
+          : 'Permissions détectées : aucune.';
       void Swal.fire({
         icon: 'warning',
         title: 'Création d’alerte indisponible',
-        text: currentPermissions === null
+        text: `${currentPermissions === null
           ? 'Les permissions de votre session SSO ne sont pas disponibles. Actualisez la page ou reconnectez-vous.'
-          : 'Votre profil ne possède pas la permission PECMU « fiche-pecmu:create ». Demandez son activation à votre administrateur.',
+          : 'Votre profil ne possède pas la permission PECMU « fiche-pecmu:create ». Demandez son activation à votre administrateur.'}\n\n${permissionList}\n\nAucune requête de création n’a été envoyée au backend : le blocage a eu lieu dans l’interface.`,
         confirmButtonColor: '#901c67',
       });
       return;
@@ -650,10 +655,13 @@ const PecmuModulePage: React.FC = () => {
         showConfirmButton: false,
       });
     } catch (error: any) {
+      const backendResponse = error instanceof PecmuApiError
+        ? `Réponse du backend (HTTP ${error.statusCode}, code ${error.code}) :\n${error.responseBody !== undefined ? JSON.stringify(error.responseBody, null, 2) : error.responseText || error.message}`
+        : 'Aucune réponse structurée du backend n’a été reçue.';
       await Swal.fire({
         icon: 'error',
         title: 'Alerte non enregistrée',
-        text: error?.message || "L'API PECMU n'a pas confirmé l'enregistrement.",
+        text: `${error?.message || "L'API PECMU n'a pas confirmé l'enregistrement."}\n\n${backendResponse}`,
         confirmButtonColor: '#901c67',
       });
     } finally {

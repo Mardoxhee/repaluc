@@ -48,7 +48,13 @@ export type PsychologicalCare = {
 };
 export type SupervisorOption = { value: string; label: string };
 export class PecmuApiError extends Error {
-  constructor(public statusCode: number, public code: string, message: string) { super(message); this.name = 'PecmuApiError'; }
+  constructor(
+    public statusCode: number,
+    public code: string,
+    message: string,
+    public responseBody?: unknown,
+    public responseText?: string,
+  ) { super(message); this.name = 'PecmuApiError'; }
 }
 // Unlike the legacy fetcher this preserves business errors and handles 204 responses.
 export const pecmuRequest: PecmuFetcher = async (path, options = {}) => {
@@ -59,7 +65,7 @@ export const pecmuRequest: PecmuFetcher = async (path, options = {}) => {
   try { body = text ? JSON.parse(text) : undefined; } catch { body = undefined; }
   if (!response.ok) {
     const message = Array.isArray(body?.message) ? body.message.join(' · ') : body?.message;
-    throw new PecmuApiError(response.status, body?.code || 'PECMU_REQUEST_FAILED', message || `La requête PECMU a échoué (${response.status}).`);
+    throw new PecmuApiError(response.status, body?.code || 'PECMU_REQUEST_FAILED', message || `La requête PECMU a échoué (${response.status}).`, body, body === undefined ? text : undefined);
   }
   return body;
 };
