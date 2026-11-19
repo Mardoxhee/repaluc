@@ -547,6 +547,25 @@ const PecmuModulePage: React.FC = () => {
     setShowAlertModal(true);
   };
 
+  const requestAlertModal = (victim?: Victim | null) => {
+    // Read the current SSO claims at click time so a late session load or refresh
+    // cannot leave the create button silently disabled with stale permissions.
+    const currentPermissions = getPecmuPermissions();
+    setPermissions(currentPermissions);
+    if (!currentPermissions?.includes('fiche-pecmu:create')) {
+      void Swal.fire({
+        icon: 'warning',
+        title: 'Création d’alerte indisponible',
+        text: currentPermissions === null
+          ? 'Les permissions de votre session SSO ne sont pas disponibles. Actualisez la page ou reconnectez-vous.'
+          : 'Votre profil ne possède pas la permission PECMU « fiche-pecmu:create ». Demandez son activation à votre administrateur.',
+        confirmButtonColor: '#901c67',
+      });
+      return;
+    }
+    openAlertModal(victim);
+  };
+
   const selectAlertVictim = async (victim: MasterVictim | null) => {
     setAlertMasterVictim(victim);
     setExistingVictimAlerts([]);
@@ -727,8 +746,9 @@ const PecmuModulePage: React.FC = () => {
           </div>
           <button
             type="button"
-            disabled={!permissions?.includes('fiche-pecmu:create')}
-            onClick={() => openAlertModal()}
+            onClick={() => requestAlertModal()}
+            aria-disabled={!permissions?.includes('fiche-pecmu:create')}
+            title={!permissions?.includes('fiche-pecmu:create') ? 'Vérifier la permission SSO de création' : undefined}
             className={`${activeView === 'victimes' ? 'inline-flex' : 'hidden'} items-center justify-center gap-2 bg-red-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-red-700`}
           >
             <Plus size={16} />
@@ -966,7 +986,7 @@ const PecmuModulePage: React.FC = () => {
                       <td className="px-4 py-3 text-right">
                         <div className="flex flex-wrap justify-end gap-2">
                           <button type="button" onClick={event => { event.stopPropagation(); void openVictimAlertHistory(victim); }} className="inline-flex items-center whitespace-nowrap border border-primary/20 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/10">{alertCount} alerte{alertCount > 1 ? 's' : ''} · Voir</button>
-                          {permissions?.includes('fiche-pecmu:create') && <button type="button" onClick={event => { event.stopPropagation(); openAlertModal(victim); }} className="inline-flex items-center whitespace-nowrap border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100">Nouvelle alerte</button>}
+                          {permissions?.includes('fiche-pecmu:create') && <button type="button" onClick={event => { event.stopPropagation(); requestAlertModal(victim); }} className="inline-flex items-center whitespace-nowrap border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100">Nouvelle alerte</button>}
                           <span className="inline-flex items-center whitespace-nowrap border border-secondary/20 bg-secondary/5 px-2.5 py-1 text-xs font-medium text-secondary">{actCount} {actCount > 1 ? 'actes médicaux' : 'acte médical'}</span>
                         </div>
                       </td>
@@ -1016,7 +1036,7 @@ const PecmuModulePage: React.FC = () => {
               <button type="button" onClick={() => setShowVictimAlerts(false)} className="rounded p-2 text-slate-500 hover:bg-slate-100" aria-label="Fermer"><X size={22} /></button>
             </div>
             {loadingVictimAlerts ? <p role="status" className="py-8 text-center text-sm text-slate-500">Chargement des alertes…</p> : existingVictimAlerts.length ? <ol className="max-h-[60vh] divide-y divide-slate-100 overflow-y-auto">{existingVictimAlerts.map(alert => <li key={alert.id} className="flex flex-wrap items-center justify-between gap-3 py-4"><div><p className="font-semibold">Fiche PECMU #{alert.id} · {alert.alertSourceStructureName || alert.careStructureName || 'Structure non renseignée'}</p><p className="text-sm text-slate-500">{alert.incidentPeriod || 'Période non renseignée'} · {alert.workflowStatus ? statusLabels[alert.workflowStatus] : alert.medicalStatus || 'Statut non renseigné'} · {alert.createdAt ? new Date(alert.createdAt).toLocaleDateString('fr-FR') : 'Date non renseignée'}</p></div><button type="button" className="text-sm font-semibold text-primary underline" onClick={() => { setShowVictimAlerts(false); setOpenDossierId(alert.id); }}>Ouvrir le dossier</button></li>)}</ol> : <p className="py-8 text-center text-sm text-slate-500">Aucune alerte enregistrée pour cette victime.</p>}
-            <div className="flex justify-end gap-3 border-t border-slate-200 pt-4"><button type="button" onClick={() => setShowVictimAlerts(false)} className="border border-slate-300 px-4 py-2 text-sm font-semibold">Fermer</button>{permissions?.includes('fiche-pecmu:create') && selectedVictim && <button type="button" onClick={() => { setShowVictimAlerts(false); openAlertModal(selectedVictim); }} className="bg-primary px-4 py-2 text-sm font-semibold text-white">Nouvelle alerte</button>}</div>
+            <div className="flex justify-end gap-3 border-t border-slate-200 pt-4"><button type="button" onClick={() => setShowVictimAlerts(false)} className="border border-slate-300 px-4 py-2 text-sm font-semibold">Fermer</button>{selectedVictim && <button type="button" onClick={() => { setShowVictimAlerts(false); requestAlertModal(selectedVictim); }} className="bg-primary px-4 py-2 text-sm font-semibold text-white">Nouvelle alerte</button>}</div>
           </section>
         </ModalBody>
       </Modal>
