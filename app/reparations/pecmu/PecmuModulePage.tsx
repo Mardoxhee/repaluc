@@ -280,6 +280,13 @@ const buildF2Values = (victim?: Victim | null): Record<string, string> => {
   return values;
 };
 
+const parseViolationSelection = (value?: string) => {
+  const entries = (value || '').split(/\s*;\s*/).map(item => item.trim()).filter(Boolean);
+  const selected = entries.filter(item => violationOptions.includes(item));
+  const custom = entries.filter(item => !violationOptions.includes(item)).join('; ');
+  return { selected, custom, other: Boolean(custom) };
+};
+
 const getFilterValue = (victim: Victim, field: string, victimAlerts: PecmuAlert[]): string => {
   const alertValues = victimAlerts.map((alert) => alert.values);
 
@@ -356,6 +363,8 @@ const PecmuModulePage: React.FC = () => {
   const [alertValues, setAlertValues] = useState<Record<string, string>>(() => buildF2Values(null));
   const [submittingAlert, setSubmittingAlert] = useState(false);
   const [otherViolation, setOtherViolation] = useState(false);
+  const [selectedViolations, setSelectedViolations] = useState<string[]>([]);
+  const [customViolation, setCustomViolation] = useState('');
 
   const groupFicheRows = (rows: Victim[]) => {
     const grouped = new Map<string, Victim>();
@@ -542,7 +551,10 @@ const PecmuModulePage: React.FC = () => {
     setExistingVictimAlerts([]);
     if (linked) void listFichesPecmuByVictim(fetcher, linked.id).then(setExistingVictimAlerts).catch(() => setExistingVictimAlerts([]));
     const values = buildF2Values(selected);
-    setOtherViolation(Boolean(values.typeViolation && !violationOptions.includes(values.typeViolation)));
+    const violations = parseViolationSelection(values.typeViolation);
+    setSelectedViolations(violations.selected);
+    setCustomViolation(violations.custom);
+    setOtherViolation(violations.other);
     setAlertValues(values);
     setShowAlertModal(true);
   };
@@ -559,7 +571,12 @@ const PecmuModulePage: React.FC = () => {
     setAlertMasterVictim(victim);
     setExistingVictimAlerts([]);
     if (!victim) return;
-    setAlertValues(previous => ({ ...previous, ...buildF2Values(victim as Victim) }));
+    const values = buildF2Values(victim as Victim);
+    const violations = parseViolationSelection(values.typeViolation);
+    setSelectedViolations(violations.selected);
+    setCustomViolation(violations.custom);
+    setOtherViolation(violations.other);
+    setAlertValues(previous => ({ ...previous, ...values }));
     setLoadingVictimAlerts(true);
     try { setExistingVictimAlerts(await listFichesPecmuByVictim(fetcher, victim.id)); }
     catch (error: any) { setListError(error?.message || 'Impossible de charger les alertes précédentes.'); }
@@ -586,7 +603,7 @@ const PecmuModulePage: React.FC = () => {
   const handleAlertSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (submittingAlert) return;
-    if (otherViolation && !alertValues.typeViolation?.trim()) {
+    if (otherViolation && !customViolation.trim()) {
       await Swal.fire({ icon: 'warning', title: 'Type de violation manquant', text: 'Précisez le type de violation pour l’option Autre.' });
       return;
     }
@@ -623,7 +640,8 @@ const PecmuModulePage: React.FC = () => {
 
     setSubmittingAlert(true);
     try {
-      const created = await createFichePecmu(fetcher, { ...alertValues, typeViolation: alertValues.typeViolation.trim() }, alertMasterVictim?.id);
+      const violationType = [...selectedViolations, ...(otherViolation && customViolation.trim() ? [customViolation.trim()] : [])].join(' ; ');
+      const created = await createFichePecmu(fetcher, { ...alertValues, typeViolation: violationType }, alertMasterVictim?.id);
       setShowAlertModal(false);
       if (created.id) setOpenDossierId(created.id);
       await loadVictims();
@@ -663,27 +681,13 @@ const PecmuModulePage: React.FC = () => {
     }
 
     if (field.key === 'typeViolation') {
-      const inputClass = 'mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary';
+      const toggleViolation = (violation: string) => setSelectedViolations(current => current.includes(violation) ? current.filter(item => item !== violation) : [...current, violation]);
       return (
         <div key={field.key} className="space-y-3 md:col-span-2">
-          <label className="block">
-            <span className="text-xs font-bold uppercase tracking-wide text-slate-600">{field.label}</span>
-            <select className={inputClass} value={otherViolation ? '__other__' : value} onChange={(event) => {
-              const isOther = event.target.value === '__other__';
-              setOtherViolation(isOther);
-              update(isOther ? '' : event.target.value);
-            }}>
-              <option value="">Sélectionner</option>
-              {violationGroups.map(group => <optgroup key={group.label} label={group.label}>
-                {group.violations.map(violation => <option key={violation} value={violation}>{violation}</option>)}
-              </optgroup>)}
-              <option value="__other__">Autre</option>
-            </select>
-          </label>
-          {otherViolation && <label className="block">
-            <span className="text-xs font-bold uppercase tracking-wide text-slate-600">Précisez le type de violation *</span>
-            <input required className={inputClass} value={value} onChange={(event) => update(event.target.value)} placeholder="Saisir le type de violation" />
-          </label>}
+          <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs font-bold uppercase tracking-wide text-slate-600">{field.label}</span><span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">{selectedViolations.length + (otherViolation && customViolation.trim() ? 1 : 0)} sélectionnée(s)</span></div>
+          {selectedViolations.length > 0 || (otherViolation && customViolation.trim()) ? <div className="flex flex-wrap gap-2 rounded-lg border border-primary/15 bg-primary/[0.035] p-3">{selectedViolations.map(item => <span key={item} className="inline-flex max-w-full items-center gap-1 rounded-full border border-primary/20 bg-white py-1 pl-3 pr-1 text-xs font-medium text-slate-700"><span className="max-w-[22rem] truncate">{item}</span><button type="button" onClick={() => toggleViolation(item)} aria-label={`Retirer ${item}`} title="Retirer" className="rounded-full p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"><X size={14} /></button></span>)}{otherViolation && customViolation.trim() && <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-amber-200 bg-amber-50 py-1 pl-3 pr-1 text-xs font-medium text-amber-900"><span className="max-w-[22rem] truncate">Autre : {customViolation.trim()}</span><button type="button" onClick={() => { setOtherViolation(false); setCustomViolation(''); }} aria-label="Retirer la violation personnalisée" title="Retirer" className="rounded-full p-1 text-amber-600 hover:bg-white"><X size={14} /></button></span>}</div> : <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-500">Aucune violation sélectionnée. Choisissez une ou plusieurs options ci-dessous.</p>}
+          <div className="max-h-80 space-y-4 overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">{violationGroups.map(group => <fieldset key={group.label}><legend className="mb-2 text-sm font-bold text-slate-800">{group.label}</legend><div className="grid gap-2 sm:grid-cols-2">{group.violations.map(violation => { const checked = selectedViolations.includes(violation); return <label key={violation} className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2.5 text-sm transition-colors ${checked ? 'border-primary/40 bg-primary/5 text-primary' : 'border-slate-100 bg-slate-50 text-slate-700 hover:border-slate-300 hover:bg-white'}`}><input type="checkbox" checked={checked} onChange={() => toggleViolation(violation)} className="mt-0.5 accent-primary" /><span>{violation}</span></label>; })}</div></fieldset>)}</div>
+          <div className="rounded-lg border border-slate-200 p-3"><label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-800"><input type="checkbox" checked={otherViolation} onChange={event => { setOtherViolation(event.target.checked); if (!event.target.checked) setCustomViolation(''); }} className="accent-primary" />Autre type de violation</label>{otherViolation && <input required className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary" value={customViolation} onChange={event => setCustomViolation(event.target.value)} placeholder="Préciser la violation" />}</div>
         </div>
       );
     }
@@ -1044,11 +1048,6 @@ const PecmuModulePage: React.FC = () => {
               <div className="text-[11px] font-black uppercase tracking-[0.35em] !text-red-600">Nouvelle alerte</div>
               <h2 className="mt-2 text-2xl font-black !text-gray-950 md:text-3xl">Fiche identification cas</h2>
               <p className="mt-1 text-sm !text-gray-500 md:text-base">Cherchez d’abord la victime existante. Une nouvelle alerte créera un dossier distinct.</p>
-              <details className="mt-3 rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                <summary className="cursor-pointer font-semibold">Habilitations détectées dans la session</summary>
-                <p className="mt-2">Cette liste est informative. Le backend décide si l’action est autorisée.</p>
-                {permissions === null ? <p className="mt-1">Permissions non disponibles côté navigateur.</p> : permissions.length ? <ul className="mt-1 max-h-36 list-inside list-disc overflow-y-auto">{permissions.map(permission => <li key={permission}>{permission}</li>)}</ul> : <p className="mt-1">Aucune habilitation lisible côté navigateur.</p>}
-              </details>
             </div>
 
             <div className="max-h-[calc(100vh-230px)] overflow-y-auto px-4 py-5 md:px-7">
