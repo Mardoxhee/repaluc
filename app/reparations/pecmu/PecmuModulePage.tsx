@@ -548,26 +548,10 @@ const PecmuModulePage: React.FC = () => {
   };
 
   const requestAlertModal = (victim?: Victim | null) => {
-    // Read the current SSO claims at click time so a late session load or refresh
-    // cannot leave the create button silently disabled with stale permissions.
+    // Read the current SSO claims for display only. The backend remains the
+    // authority for accepting or rejecting the create request.
     const currentPermissions = getPecmuPermissions();
     setPermissions(currentPermissions);
-    if (!currentPermissions?.includes('fiche-pecmu:create')) {
-      const permissionList = currentPermissions === null
-        ? 'Permissions détectées : indisponibles dans la session.'
-        : currentPermissions.length
-          ? `Permissions détectées (${currentPermissions.length}) :\n${currentPermissions.join('\n')}`
-          : 'Permissions détectées : aucune.';
-      void Swal.fire({
-        icon: 'warning',
-        title: 'Création d’alerte indisponible',
-        text: `${currentPermissions === null
-          ? 'Les permissions de votre session SSO ne sont pas disponibles. Actualisez la page ou reconnectez-vous.'
-          : 'Votre profil ne possède pas la permission PECMU « fiche-pecmu:create ». Demandez son activation à votre administrateur.'}\n\n${permissionList}\n\nAucune requête de création n’a été envoyée au backend : le blocage a eu lieu dans l’interface.`,
-        confirmButtonColor: '#901c67',
-      });
-      return;
-    }
     openAlertModal(victim);
   };
 
@@ -602,10 +586,6 @@ const PecmuModulePage: React.FC = () => {
   const handleAlertSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (submittingAlert) return;
-    if (!permissions?.includes('fiche-pecmu:create')) {
-      await Swal.fire({ icon: 'warning', title: 'Action non autorisée', text: 'Votre profil ne possède pas la permission PECMU nécessaire pour créer une alerte.' });
-      return;
-    }
     if (otherViolation && !alertValues.typeViolation?.trim()) {
       await Swal.fire({ icon: 'warning', title: 'Type de violation manquant', text: 'Précisez le type de violation pour l’option Autre.' });
       return;
@@ -755,8 +735,6 @@ const PecmuModulePage: React.FC = () => {
           <button
             type="button"
             onClick={() => requestAlertModal()}
-            aria-disabled={!permissions?.includes('fiche-pecmu:create')}
-            title={!permissions?.includes('fiche-pecmu:create') ? 'Vérifier la permission SSO de création' : undefined}
             className={`${activeView === 'victimes' ? 'inline-flex' : 'hidden'} items-center justify-center gap-2 bg-red-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-red-700`}
           >
             <Plus size={16} />
@@ -994,7 +972,7 @@ const PecmuModulePage: React.FC = () => {
                       <td className="px-4 py-3 text-right">
                         <div className="flex flex-wrap justify-end gap-2">
                           <button type="button" onClick={event => { event.stopPropagation(); void openVictimAlertHistory(victim); }} className="inline-flex items-center whitespace-nowrap border border-primary/20 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/10">{alertCount} alerte{alertCount > 1 ? 's' : ''} · Voir</button>
-                          {permissions?.includes('fiche-pecmu:create') && <button type="button" onClick={event => { event.stopPropagation(); requestAlertModal(victim); }} className="inline-flex items-center whitespace-nowrap border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100">Nouvelle alerte</button>}
+                          <button type="button" onClick={event => { event.stopPropagation(); requestAlertModal(victim); }} className="inline-flex items-center whitespace-nowrap border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100">Nouvelle alerte</button>
                           <span className="inline-flex items-center whitespace-nowrap border border-secondary/20 bg-secondary/5 px-2.5 py-1 text-xs font-medium text-secondary">{actCount} {actCount > 1 ? 'actes médicaux' : 'acte médical'}</span>
                         </div>
                       </td>
@@ -1066,6 +1044,11 @@ const PecmuModulePage: React.FC = () => {
               <div className="text-[11px] font-black uppercase tracking-[0.35em] !text-red-600">Nouvelle alerte</div>
               <h2 className="mt-2 text-2xl font-black !text-gray-950 md:text-3xl">Fiche identification cas</h2>
               <p className="mt-1 text-sm !text-gray-500 md:text-base">Cherchez d’abord la victime existante. Une nouvelle alerte créera un dossier distinct.</p>
+              <details className="mt-3 rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                <summary className="cursor-pointer font-semibold">Habilitations détectées dans la session</summary>
+                <p className="mt-2">Cette liste est informative. Le backend décide si l’action est autorisée.</p>
+                {permissions === null ? <p className="mt-1">Permissions non disponibles côté navigateur.</p> : permissions.length ? <ul className="mt-1 max-h-36 list-inside list-disc overflow-y-auto">{permissions.map(permission => <li key={permission}>{permission}</li>)}</ul> : <p className="mt-1">Aucune habilitation lisible côté navigateur.</p>}
+              </details>
             </div>
 
             <div className="max-h-[calc(100vh-230px)] overflow-y-auto px-4 py-5 md:px-7">
@@ -1111,7 +1094,7 @@ const PecmuModulePage: React.FC = () => {
 
             <div className="flex justify-end gap-3 border-t !border-gray-200 bg-white px-4 py-4 md:px-7">
               <button type="button" onClick={() => setShowAlertModal(false)} className="border !border-gray-300 px-4 py-2 text-sm font-bold !text-gray-700 hover:!bg-gray-50">Annuler</button>
-              <button type="submit" disabled={submittingAlert || !permissions?.includes('fiche-pecmu:create')} className="inline-flex items-center gap-2 !bg-red-600 px-4 py-2 text-sm font-bold text-white hover:!bg-red-700 disabled:cursor-not-allowed disabled:opacity-60">
+              <button type="submit" disabled={submittingAlert} className="inline-flex items-center gap-2 !bg-red-600 px-4 py-2 text-sm font-bold text-white hover:!bg-red-700 disabled:cursor-not-allowed disabled:opacity-60">
                 <Save size={16} />
                 {submittingAlert ? 'Enregistrement...' : 'Enregistrer l’alerte F2'}
               </button>
