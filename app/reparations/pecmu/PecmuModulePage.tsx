@@ -952,7 +952,6 @@ const PecmuModulePage: React.FC = () => {
               <tbody className="divide-y divide-slate-100">
                 {victims.map((victim, index) => {
                   const active = selectedVictim?.id === victim.id;
-                  const alertCount = victim.pecmuAlertCount || (victim.pecmuFicheId ? 1 : 0) + alerts.filter((alert) => alert.victimId === victim.id).length;
                   const actCount = victim.pecmuFicheIds?.length || victim.pecmuFicheId
                     ? (medicalActCounts[victim.id] ?? 0)
                     : medicalActs.filter((act) => act.victimId === victim.id).length;
@@ -962,9 +961,8 @@ const PecmuModulePage: React.FC = () => {
                       key={victim.id}
                       onClick={() => {
                         setSelectedVictim(victim);
-                        void openVictimAlertHistory(victim);
                       }}
-                      className={`cursor-pointer transition-colors ${active ? 'bg-primary-50' : 'hover:bg-slate-50'}`}
+                      className={`transition-colors ${active ? 'bg-primary-50' : 'hover:bg-slate-50'}`}
                     >
                       <td className="px-4 py-3 text-sm font-semibold tabular-nums text-slate-500">{(meta.page - 1) * meta.limit + index + 1}</td>
                       <td className="px-4 py-3">
@@ -975,7 +973,6 @@ const PecmuModulePage: React.FC = () => {
                       <td className="px-4 py-3 text-sm text-slate-700">{victim.status || '-'}</td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex flex-wrap justify-end gap-2">
-                          <button type="button" onClick={event => { event.stopPropagation(); void openVictimAlertHistory(victim); }} className="inline-flex items-center whitespace-nowrap border border-primary/20 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/10">{alertCount} alerte{alertCount > 1 ? 's' : ''} · Voir</button>
                           <button type="button" onClick={event => { event.stopPropagation(); requestAlertModal(victim); }} className="inline-flex items-center whitespace-nowrap border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100">Nouvelle alerte</button>
                           <span className="inline-flex items-center whitespace-nowrap border border-secondary/20 bg-secondary/5 px-2.5 py-1 text-xs font-medium text-secondary">{actCount} {actCount > 1 ? 'actes médicaux' : 'acte médical'}</span>
                         </div>
