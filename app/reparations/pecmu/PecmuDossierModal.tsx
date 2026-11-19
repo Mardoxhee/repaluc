@@ -3,7 +3,7 @@
 import { rdcProvinces } from '../constants/provinces';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Modal, ModalBody } from 'flowbite-react';
-import { Building2, CalendarDays, Download, Eye, HeartPulse, Pencil, Plus, RefreshCw, ShieldAlert, Stethoscope, Trash2, UserRound, X } from 'lucide-react';
+import { Download, Eye, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { getConnectedAgentFullName, getConnectedAgentFunction } from '../../utils/currentUser';
 import type { PecmuFetcher } from '../services/pecmuApi';
@@ -247,7 +247,7 @@ export default function PecmuDossierModal({ ficheId, fetcher, onClose, onChanged
           {!loading && state && <>
             {negative && <p className="border border-secondary/20 bg-secondary/5 p-4 text-sm">{statusLabels[state.currentStatus]}. Le parcours ne peut pas se poursuivre vers la prise en charge.</p>}
             {tab === 'identity' && <>
-              <MedicalAlertSheet fiche={state.fiche} status={statusLabels[state.currentStatus] || state.currentStatus} />
+              <MedicalAlertSheet fiche={state.fiche} />
               {!closed && !negative && !state.fiche.victimeId && !state.fiche.victimId && permitted('fiche-pecmu:update') && <Panel title="Rattacher à une victime">
                 <PecmuVictimSearch fetcher={fetcher} selected={linkedVictim} disabled={busy || syncFailed} onSelect={setLinkedVictim} />
                 {linkedVictim && <div className="space-y-3 rounded border border-amber-200 bg-amber-50 p-4 text-sm"><p className="font-semibold text-amber-900">Attention : l’identité de la fiche sera resynchronisée depuis « {masterVictimName(linkedVictim)} ». Ce rattachement ne pourra plus être remplacé.</p><button type="button" disabled={busy || syncFailed} className={buttonClass} onClick={async () => {
@@ -430,7 +430,6 @@ const orientationLabels: Record<string, string> = { PSYCHOLOGICAL_SUPPORT: 'Acco
 function Panel({ title, children }: { title: string; children: React.ReactNode }) { return <section className="space-y-4 border border-slate-200 bg-white p-5"><h3 className="text-lg font-semibold">{title}</h3>{children}</section>; }
 function Empty({ text }: { text: string }) { return <p className="py-4 text-sm text-slate-500">{text}</p>; }
 function ReadOnly() { return <p className="text-sm text-slate-500">Cette étape est en consultation. Les actions disponibles dépendent de l’état du dossier et de vos droits.</p>; }
-type MedicalSheetField = [string, string, boolean?];
 const medicalSheetValue = (value: any, key?: string) => {
   if (value === undefined || value === null || value === '') return '—';
   if (typeof value === 'boolean') return value ? 'Oui' : 'Non';
@@ -444,54 +443,26 @@ const medicalSheetValue = (value: any, key?: string) => {
   if (key === 'alertSourceStructureType') return alertStructureTypes[String(value)] || String(value);
   return String(value);
 };
-function MedicalSheetSection({ title, icon, fields, values }: { title: string; icon: React.ReactNode; fields: MedicalSheetField[]; values: Record<string, any> }) {
-  return <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-    <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50/80 px-4 py-3 text-sm font-bold text-slate-800"><span className="text-teal-700">{icon}</span>{title}</div>
-    <dl className="grid gap-0 sm:grid-cols-2">{fields.map(([key, label, wide]) => <div key={key} className={`min-w-0 border-b border-slate-100 px-4 py-3 last:border-b-0 sm:odd:border-r ${wide ? 'sm:col-span-2 sm:odd:border-r-0' : ''}`}>
-      <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">{label}</dt><dd className="mt-1 whitespace-pre-wrap break-words text-sm font-semibold leading-5 text-slate-900">{medicalSheetValue(values[key], key)}</dd>
-    </div>)}</dl>
-  </section>;
-}
-function MedicalAlertSheet({ fiche, status }: { fiche: Record<string, any>; status: string }) {
-  const sections: Array<{ title: string; icon: React.ReactNode; fields: MedicalSheetField[] }> = [
-    { title: 'Identification de la victime', icon: <UserRound size={17} />, fields: [
-      ['victimeId', 'Identifiant de la victime maître'], ['locality', 'Localité'], ['victimAddress', 'Adresse', true], ['victimPhone', 'Téléphone'], ['emergencyContactName', 'Contact d’urgence'], ['emergencyContactRelationship', 'Lien de parenté'],
+function MedicalAlertSheet({ fiche }: { fiche: Record<string, any> }) {
+  const values = { ...fiche, sex: medicalSheetValue(fiche.sex, 'sex'), alertSourceStructureType: medicalSheetValue(fiche.alertSourceStructureType, 'alertSourceStructureType') };
+  const sections: Array<{ title: string; fields: Array<[string, string]> }> = [
+    { title: 'Identification de la victime', fields: [
+      ['victimName', 'Nom de la victime'], ['victimeId', 'Identifiant de la victime maître'], ['lucNumber', 'Numéro LUC'], ['age', 'Âge'], ['sex', 'Sexe'], ['province', 'Province'], ['locality', 'Localité'], ['victimAddress', 'Adresse'], ['victimPhone', 'Téléphone'], ['emergencyContactName', 'Contact d’urgence'], ['emergencyContactRelationship', 'Lien de parenté'],
     ] },
-    { title: 'Structure de prise en charge', icon: <Building2 size={17} />, fields: [
-      ['careStructureName', 'Établissement'], ['healthZone', 'Zone de santé'], ['healthArea', 'Aire de santé'], ['careStructureAddress', 'Adresse de la structure', true], ['doctorOrNurseContact', 'Contact médical'],
+    { title: 'Structure de prise en charge', fields: [
+      ['careStructureName', 'Établissement'], ['healthZone', 'Zone de santé'], ['healthArea', 'Aire de santé'], ['careStructureAddress', 'Adresse de la structure'], ['doctorOrNurseContact', 'Contact médical'],
     ] },
-    { title: 'Origine de l’alerte', icon: <ShieldAlert size={17} />, fields: [
-      ['alertSourceStructureName', 'Structure ayant lancé l’alerte'], ['alertSourceStructureType', 'Type de structure'], ['alertSourceOtherStructureType', 'Précision (autre type)'], ['alertSourceFullName', 'Personne de contact'], ['alertSourcePhone', 'Téléphone de la source'], ['alertSourceRelationship', 'Relation avec la victime'], ['alertSourceAddress', 'Adresse de la source', true],
+    { title: 'Origine de l’alerte', fields: [
+      ['alertSourceStructureName', 'Structure ayant lancé l’alerte'], ['alertSourceStructureType', 'Type de structure'], ['alertSourceOtherStructureType', 'Précision (autre type)'], ['alertSourceFullName', 'Personne de contact'], ['alertSourcePhone', 'Téléphone de la source'], ['alertSourceRelationship', 'Relation avec la victime'], ['alertSourceAddress', 'Adresse de la source'],
     ] },
-    { title: 'Situation médicale et incident', icon: <Stethoscope size={17} />, fields: [
-      ['violationType', 'Violation(s) signalée(s)', true], ['incidentDetails', 'Détails de l’incident', true], ['incidentPeriod', 'Période / dates'], ['affectedBodyParts', 'Parties du corps atteintes', true], ['medicalStatus', 'Statut médical'], ['vitalPrognosis', 'Pronostic vital'], ['otherComplaints', 'Autres plaintes', true],
+    { title: 'Situation médicale', fields: [
+      ['violationType', 'Violation(s) signalée(s)'], ['incidentDetails', 'Détails de l’incident'], ['incidentPeriod', 'Période / dates'], ['affectedBodyParts', 'Parties du corps atteintes'], ['medicalStatus', 'Statut médical'], ['vitalPrognosis', 'Pronostic vital'], ['otherComplaints', 'Autres plaintes'],
+    ] },
+    { title: 'Signes cliniques', fields: [
+      ['highFever', 'Forte fièvre'], ['comaOrLossOfConsciousness', 'Coma / perte de connaissance'], ['convulsions', 'Convulsions'], ['extremeFatigue', 'Fatigue intense'], ['hypertension', 'Hypertension'], ['hyperglycemia', 'Hyperglycémie'], ['bleeding', 'Saignement'], ['wounds', 'Plaies'], ['breathingDifficulty', 'Difficulté à respirer'], ['severeDiarrhea', 'Diarrhée sévère'], ['vomiting', 'Vomissement'],
     ] },
   ];
-  const signs: Array<[string, string]> = [
-    ['highFever', 'Fièvre élevée'], ['comaOrLossOfConsciousness', 'Coma / perte de connaissance'], ['convulsions', 'Convulsions'], ['extremeFatigue', 'Fatigue intense'], ['hypertension', 'Hypertension'], ['hyperglycemia', 'Hyperglycémie'], ['bleeding', 'Saignement'], ['wounds', 'Plaies'], ['breathingDifficulty', 'Difficulté à respirer'], ['severeDiarrhea', 'Diarrhée sévère'], ['vomiting', 'Vomissements'],
-  ];
-  const signValue = (value: any) => value === true || value === 1 || ['oui', 'true', '1'].includes(String(value ?? '').trim().toLowerCase());
-  return <article className="mx-auto max-w-5xl overflow-hidden rounded-2xl border border-slate-200 bg-[#f8fafb] shadow-sm">
-    <div className="h-1.5 bg-gradient-to-r from-teal-700 via-teal-500 to-cyan-400" />
-    <header className="bg-[#102c3a] px-5 py-5 text-white md:px-7">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div><p className="text-[10px] font-bold uppercase tracking-[0.22em] text-teal-200">PECMU · dossier médical</p><h3 className="mt-1 text-xl font-bold tracking-tight md:text-2xl">Fiche d’alerte médicale</h3></div>
-        <div className="flex flex-wrap items-center gap-2"><span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold">Dossier #{fiche.id ?? '—'}</span><span className="rounded-full bg-teal-300/15 px-3 py-1 text-xs font-semibold text-teal-100">{status}</span></div>
-      </div>
-      <div className="mt-5 border-t border-white/15 pt-4"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-300">Patient(e)</p><h4 className="mt-1 text-2xl font-bold md:text-3xl">{medicalSheetValue(fiche.victimName)}</h4></div>
-    </header>
-    <div className="space-y-4 p-4 md:p-6">
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">{[
-        ['Âge', fiche.age === undefined || fiche.age === null || fiche.age === '' ? '—' : `${fiche.age} ans`], ['Sexe', fiche.sex], ['Province', fiche.province], ['Numéro LUC', fiche.lucNumber],
-      ].map(([label, value]) => <div key={label} className="rounded-lg border border-slate-200 bg-white px-3 py-3"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 truncate text-sm font-bold text-slate-900">{medicalSheetValue(value)}</p></div>)}</div>
-      {sections.map(section => <MedicalSheetSection key={section.title} title={section.title} icon={section.icon} fields={section.fields} values={fiche} />)}
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50/80 px-4 py-3 text-sm font-bold text-slate-800"><HeartPulse size={17} className="text-rose-600" />Signes cliniques signalés</div>
-        <div className="flex flex-wrap gap-2 p-4">{signs.filter(([key]) => signValue(fiche[key])).length ? signs.filter(([key]) => signValue(fiche[key])).map(([key, label]) => <span key={key} className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-800">{label}</span>) : <p className="text-sm text-slate-500">Aucun signe clinique déclaré.</p>}</div>
-      </section>
-      {fiche.createdAt && <p className="flex items-center justify-end gap-1.5 text-xs text-slate-500"><CalendarDays size={14} />Fiche créée le {dateLabel(fiche.createdAt)}</p>}
-    </div>
-  </article>;
+  return <Panel title="Fiche d’alerte"><div className="divide-y divide-slate-200">{sections.map(section => <section key={section.title} className="py-3 first:pt-0 last:pb-0"><h4 className="border-b border-slate-100 pb-2 text-sm font-semibold text-slate-800">{section.title}</h4><Details values={values} fields={section.fields} /></section>)}</div></Panel>;
 }
 function Details({ values, fields }: { values: Record<string, any>; fields: Array<[string, string]> }) {
   return <dl className="grid gap-3 py-3 text-sm md:grid-cols-2">{fields.map(([key, label]) => <div key={key}><dt className="text-slate-500">{label}</dt><dd className="mt-1 whitespace-pre-wrap break-words font-medium">{typeof values[key] === 'boolean' ? values[key] ? 'Oui' : 'Non' : Array.isArray(values[key]) ? values[key].map((value: any) => typeof value === 'string' ? orientationLabels[value] || value : value.label || value.type || '—').join(', ') : typeof values[key] === 'object' ? '—' : values[key] ?? '—'}</dd></div>)}</dl>;

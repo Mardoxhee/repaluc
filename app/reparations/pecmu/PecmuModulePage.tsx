@@ -961,8 +961,9 @@ const PecmuModulePage: React.FC = () => {
                       key={victim.id}
                       onClick={() => {
                         setSelectedVictim(victim);
+                        void openVictimAlertHistory(victim);
                       }}
-                      className={`transition-colors ${active ? 'bg-primary-50' : 'hover:bg-slate-50'}`}
+                      className={`cursor-pointer transition-colors ${active ? 'bg-primary-50' : 'hover:bg-slate-50'}`}
                     >
                       <td className="px-4 py-3 text-sm font-semibold tabular-nums text-slate-500">{(meta.page - 1) * meta.limit + index + 1}</td>
                       <td className="px-4 py-3">
