@@ -267,11 +267,11 @@ export default function PecmuDossierModal({ ficheId, fetcher, onClose, onChanged
               ]} /></Panel>}
             </>}
             {tab === 'certification' && <Panel title="Certification de l’alerte">
-              <fieldset disabled={busy || hasRecordedCertification || (!can('CERTIFY_ALERT') && !can('UPLOAD_CERTIFICATION_NOTE'))}>
+              <fieldset disabled={busy || hasRecordedCertification}>
                 <YesNoToggle label="Certifier l’alerte" checked={certifyAlert} onChange={setCertificationChoice} />
               </fieldset>
               {certifyAlert && <>
-                {!hasRecordedCertification && (can('CERTIFY_ALERT') || can('UPLOAD_CERTIFICATION_NOTE')) && <label className="block text-sm font-medium">Ajouter la note de certification
+                {!hasRecordedCertification && <label className="block text-sm font-medium">Ajouter la note de certification
                   <input disabled={busy} type="file" accept=".pdf,.png,.jpg,.jpeg" className={fieldClass} onChange={event => {
                     setCertificationFile(event.target.files?.[0] || null);
                     uploadedCertification.current = null;
@@ -280,7 +280,7 @@ export default function PecmuDossierModal({ ficheId, fetcher, onClose, onChanged
                 </label>}
                 {hasRecordedCertification && <><p className="text-sm text-primary">Note de certification enregistrée.</p>{ficheDocument('CERTIFICATION_NOTE', 'Note de certification')}</>}
               </>}
-              {!hasRecordedCertification && can('CERTIFY_ALERT') && <button type="button" disabled={busy} className={buttonClass} onClick={async () => {
+              {!hasRecordedCertification && <button type="button" disabled={busy} className={buttonClass} onClick={async () => {
                 if (!certifyAlert && !await confirm('Rejeter la certification de cette alerte ?')) return;
                 const success = await mutate(async () => {
                   let reference = uploadedCertification.current || savedCertificationFile;
