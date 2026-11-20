@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { Modal, ModalBody } from 'flowbite-react';
 import Swal from 'sweetalert2';
-import { pecmuRequest, getPecmuPermissions, PecmuApiError, statusLabels } from '../services/pecmuWorkflowApi';
+import { pecmuRequest, PecmuApiError, statusLabels } from '../services/pecmuWorkflowApi';
 import { getVictimsFromCache, isOnline } from '../../utils/victimsCache';
 import { normalizeText } from '../utils/mentionStats';
 import {
@@ -339,9 +339,7 @@ const matchesFilterRule = (victim: Victim, rule: FilterRule, victimAlerts: Pecmu
 
 const PecmuModulePage: React.FC = () => {
   const fetcher = pecmuRequest;
-  const [permissions, setPermissions] = useState<string[] | null>(null);
   const [listError, setListError] = useState('');
-  useEffect(() => { setPermissions(getPecmuPermissions()); }, []);
   const [victims, setVictims] = useState<Victim[]>([]);
   const [meta, setMeta] = useState<PageMeta>(emptyMeta);
   const [loadingVictims, setLoadingVictims] = useState(true);
@@ -559,13 +557,7 @@ const PecmuModulePage: React.FC = () => {
     setShowAlertModal(true);
   };
 
-  const requestAlertModal = (victim?: Victim | null) => {
-    // Read the current SSO claims for display only. The backend remains the
-    // authority for accepting or rejecting the create request.
-    const currentPermissions = getPecmuPermissions();
-    setPermissions(currentPermissions);
-    openAlertModal(victim);
-  };
+  const requestAlertModal = (victim?: Victim | null) => openAlertModal(victim);
 
   const selectAlertVictim = async (victim: MasterVictim | null) => {
     setAlertMasterVictim(victim);

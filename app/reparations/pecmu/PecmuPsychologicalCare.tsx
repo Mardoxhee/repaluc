@@ -5,13 +5,12 @@ import { ExternalLink, Plus, Save, Upload } from 'lucide-react';
 import type { PecmuFetcher } from '../services/pecmuApi';
 import {
   addPsychologicalHomeVisit, addPsychologicalTherapySession, closePsychologicalCare,
-  createPsychologicalCare, getMedicalSupervisorOptions, getPecmuPermissions, getPsychologicalCare,
+  createPsychologicalCare, getMedicalSupervisorOptions, getPsychologicalCare,
   getPsychologicalReportUrl, PecmuApiError, updatePsychologicalCare, uploadPsychologicalReport,
   type PsychologicalCare, type SupervisorOption,
 } from '../services/pecmuWorkflowApi';
 import { buttonClass, fieldClass } from './WorkflowForm';
 
-const eligibleStatuses = ['READY_FOR_CARE', 'IN_CARE', 'TRANSFERRED', 'CLOSURE_PENDING', 'LOST_TO_FOLLOW_UP'];
 const today = () => new Date().toISOString().slice(0, 10);
 const errorMessages: Record<string, string> = {
   PSYCHOLOGICAL_CARE_ALREADY_EXISTS: 'Une prise en charge psychologique existe déjà.',
@@ -29,11 +28,10 @@ const hasReport = (care: PsychologicalCare | null) => Boolean(care && (care.repo
 type FormState = { supervisorName: string; supervisorOtherName: string; complaints: string; initialEvaluation: string; diagnosticHypothesis: string; therapiesReceived: string };
 const blankForm = (): FormState => ({ supervisorName: '', supervisorOtherName: '', complaints: '', initialEvaluation: '', diagnosticHypothesis: '', therapiesReceived: '' });
 
-export default function PecmuPsychologicalCare({ ficheId, status, nextActions, fetcher, onChanged }: {
-  ficheId: number; status: string; nextActions: string[]; fetcher: PecmuFetcher; onChanged: () => void;
+export default function PecmuPsychologicalCare({ ficheId, fetcher, onChanged }: {
+  ficheId: number; fetcher: PecmuFetcher; onChanged: () => void;
 }) {
   const [care, setCare] = useState<PsychologicalCare | null>(null);
-  const [permissions, setPermissions] = useState<string[] | null>(null);
   const [supervisors, setSupervisors] = useState<SupervisorOption[]>([]);
   const [otherOption, setOtherOption] = useState<SupervisorOption & { requiresSpecification?: boolean }>({ value: 'OTHER', label: 'Autre à préciser', requiresSpecification: true });
   const [supervisorLookupFailed, setSupervisorLookupFailed] = useState(false);
@@ -70,7 +68,7 @@ export default function PecmuPsychologicalCare({ ficheId, status, nextActions, f
     } finally { setLoading(false); }
   }, [fetcher, ficheId, reload]);
 
-  useEffect(() => { setPermissions(getPecmuPermissions()); void load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
   useEffect(() => {
     let active = true;
     void getMedicalSupervisorOptions(fetcher).then(result => {
@@ -80,10 +78,9 @@ export default function PecmuPsychologicalCare({ ficheId, status, nextActions, f
     return () => { active = false; };
   }, [fetcher]);
 
-  const permitted = (permission: string) => permissions?.includes(permission) === true;
   const closed = care?.isClosed === true || care?.status === 'CLOSED';
-  const createAllowed = eligibleStatuses.includes(status) && nextActions.includes('OPEN_PSYCHOLOGICAL_CARE') && permitted('prise-en-charge-psychologique-pecmu:create');
-  const updateAllowed = !closed && !loading && (nextActions.includes('OPEN_OR_UPDATE_PSYCHOLOGICAL_CARE') || Boolean(care)) && permitted('prise-en-charge-psychologique-pecmu:update');
+  const createAllowed = !loading && !care;
+  const updateAllowed = !loading && Boolean(care);
   const sessions = Array.isArray(care?.therapySessions) ? care.therapySessions : Array.isArray((care as any)?.sessions) ? (care as any).sessions : [];
   const visits = Array.isArray(care?.homeVisits) ? care.homeVisits : Array.isArray((care as any)?.visits) ? (care as any).visits : [];
 
@@ -97,7 +94,6 @@ export default function PecmuPsychologicalCare({ ficheId, status, nextActions, f
   const supervisorName = (values: FormState) => values.supervisorName === otherOption.value ? values.supervisorOtherName.trim() : values.supervisorName.trim();
   const saveCare = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!updateAllowed && care) return;
     const name = supervisorName(form);
     if (!name) { setError('Choisissez ou saisissez le nom du superviseur.'); return; }
     const payload = { supervisorName: name, complaints: form.complaints, initialEvaluation: form.initialEvaluation, diagnosticHypothesis: form.diagnosticHypothesis, therapiesReceived: form.therapiesReceived };
@@ -113,13 +109,12 @@ export default function PecmuPsychologicalCare({ ficheId, status, nextActions, f
   return <section className="space-y-5">
     {error && <div role="alert" className="border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
     {loading ? <p role="status" className="text-sm text-slate-500">Chargement du dossier psychologique…</p> : null}
-    {!loading && !eligibleStatuses.includes(status) && <p className="rounded border border-slate-200 bg-white p-4 text-sm text-slate-600">La prise en charge psychologique est disponible lorsque le dossier est prêt pour les soins, en cours de prise en charge, transféré, en clôture ou perdu de vue.</p>}
-    {!loading && eligibleStatuses.includes(status) && notFound && <section className="space-y-3 rounded border border-slate-200 bg-white p-5">
+    {!loading && notFound && <section className="space-y-3 rounded border border-slate-200 bg-white p-5">
       <h3 className="text-lg font-semibold">Aucune prise en charge psychologique</h3><p className="text-sm text-slate-600">Ce dossier est éligible à un suivi psychologique distinct du suivi médical.</p>
       {createAllowed ? <form onSubmit={saveCare} className="space-y-4">
         <SupervisorSelect form={form} setForm={setForm} supervisors={supervisors} otherOption={otherOption} freeEntry={supervisorLookupFailed} disabled={busy} />
         <button disabled={busy} className={`${buttonClass} inline-flex items-center gap-2`}><Plus size={16} />{busy ? 'Ouverture…' : 'Commencer la prise en charge psychologique'}</button>
-      </form> : <p className="text-sm text-slate-500">Votre profil ne dispose pas de l’action et de la permission SSO nécessaires pour ouvrir ce suivi.</p>}
+      </form> : null}
     </section>}
     {!loading && care && <>
       <form onSubmit={saveCare} className="space-y-4 rounded border border-slate-200 bg-white p-5">
@@ -157,23 +152,23 @@ export default function PecmuPsychologicalCare({ ficheId, status, nextActions, f
 
       <section className="space-y-3 rounded border border-slate-200 bg-white p-5">
         <h3 className="text-lg font-semibold">Rapport psychologique</h3>
-        {hasReport(care) ? <div className="flex flex-wrap items-center justify-between gap-3 rounded border border-slate-100 p-3"><span className="break-all text-sm">{String(reportLabel || 'Rapport psychologique enregistré')}</span>{permitted('prise-en-charge-psychologique-pecmu:read') && <button type="button" onClick={openReport} className="inline-flex items-center gap-2 text-sm font-semibold text-primary"><ExternalLink size={16} />Ouvrir le rapport</button>}</div> : <p className="text-sm text-slate-500">Aucun rapport déposé.</p>}
-        {updateAllowed && !hasReport(care) && <form onSubmit={event => { event.preventDefault(); if (reportFile) void run(() => uploadPsychologicalReport(fetcher, care.id, reportFile)).then(ok => { if (ok) setReportFile(null); }); }} className="flex flex-wrap items-end gap-3">
+        {hasReport(care) ? <div className="flex flex-wrap items-center justify-between gap-3 rounded border border-slate-100 p-3"><span className="break-all text-sm">{String(reportLabel || 'Rapport psychologique enregistré')}</span><button type="button" onClick={openReport} className="inline-flex items-center gap-2 text-sm font-semibold text-primary"><ExternalLink size={16} />Ouvrir le rapport</button></div> : <p className="text-sm text-slate-500">Aucun rapport déposé.</p>}
+        {updateAllowed && <form onSubmit={event => { event.preventDefault(); if (reportFile) void run(() => uploadPsychologicalReport(fetcher, care.id, reportFile)).then(ok => { if (ok) setReportFile(null); }); }} className="flex flex-wrap items-end gap-3">
           <label className="min-w-0 flex-1 text-sm">Fichier PDF, PNG ou JPEG<input required type="file" accept=".pdf,.png,.jpg,.jpeg" className={fieldClass} onChange={event => setReportFile(event.target.files?.[0] || null)} /></label>
           <button disabled={busy || !reportFile} className={`${buttonClass} inline-flex items-center gap-2`}><Upload size={16} />Téléverser le rapport</button>
         </form>}
       </section>
 
-      {closed ? <section className="rounded border border-emerald-200 bg-emerald-50 p-5"><h3 className="font-semibold text-emerald-900">Prise en charge clôturée</h3><p className="mt-2 text-sm">{care.postTherapyEvaluation || postTherapyEvaluation || 'Évaluation post-thérapie non renseignée'}</p><p className="text-sm text-slate-600">Clôturée le {care.closureDate || '—'}{care.closureNotes ? ` · ${care.closureNotes}` : ''}</p></section> : updateAllowed && <section className="space-y-4 rounded border border-slate-200 bg-white p-5">
+      {closed && <section className="rounded border border-slate-200 bg-white p-5"><h3 className="font-semibold">Prise en charge clôturée</h3><p className="mt-2 text-sm">{care.postTherapyEvaluation || postTherapyEvaluation || 'Évaluation post-thérapie non renseignée'}</p><p className="text-sm text-slate-600">Clôturée le {care.closureDate || '—'}{care.closureNotes ? ` · ${care.closureNotes}` : ''}</p></section>}
+      {updateAllowed && <section className="space-y-4 rounded border border-slate-200 bg-white p-5">
         <h3 className="text-lg font-semibold">Clôture psychologique</h3>
-        <p className="text-sm text-slate-600">Le rapport psychologique doit être déposé avant la clôture.</p>
+        <p className="text-sm text-slate-600">Enregistrez les informations de clôture. Le backend validera les pièces obligatoires.</p>
         <label className="block text-sm">Évaluation post-thérapie<textarea className={fieldClass} value={postTherapyEvaluation} onChange={event => setPostTherapyEvaluation(event.target.value)} /></label>
         <label className="block text-sm">Date de clôture<input type="date" className={fieldClass} value={closureDate} onChange={event => setClosureDate(event.target.value)} /></label>
         <label className="block text-sm">Notes de clôture<textarea className={fieldClass} value={closureNotes} onChange={event => setClosureNotes(event.target.value)} /></label>
-        <button type="button" disabled={busy || !hasReport(care) || !nextActions.includes('CLOSE_PSYCHOLOGICAL_CARE_IF_OPEN') || !permitted('prise-en-charge-psychologique-pecmu:update')} onClick={() => void run(() => closePsychologicalCare(fetcher, care.id, { postTherapyEvaluation, closureDate, closureNotes }))} className={buttonClass}>Clôturer le suivi psychologique</button>
+        <button type="button" disabled={busy} onClick={() => void run(() => closePsychologicalCare(fetcher, care.id, { postTherapyEvaluation, closureDate, closureNotes }))} className={buttonClass}>Clôturer le suivi psychologique</button>
       </section>}
     </>}
-    {!permissions?.length && !loading && <p className="text-xs text-slate-500">Les actions restent masquées tant que les permissions PECMU du SSO ne sont pas disponibles dans la session.</p>}
   </section>;
 }
 
