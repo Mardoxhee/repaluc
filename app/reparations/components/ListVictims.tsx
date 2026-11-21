@@ -10,6 +10,7 @@ import ViewEvaluationModal from "./ViewEvaluationModal";
 import { saveVictimsToCache, getVictimsFromCache, isOnline, saveProgress, getProgress } from '../../utils/victimsCache';
 import { saveQuestions, isCacheValid, getQuestions } from '../../utils/planVieQuestionsCache';
 import { deletePendingVictimPhotosForVictim } from '@/app/utils/victimPhotosCache';
+import { savePendingVictimUpdate } from '@/app/utils/victimUpdatesCache';
 import { authenticatedFetch } from '@/app/utils/authFetch';
 import * as XLSX from 'xlsx';
 
@@ -285,6 +286,8 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
             const matchesSearch = !searchTerm ||
                 (victim.nom && victim.nom.toLowerCase().includes(searchTerm.toLowerCase())) ||
                 (victim.prenom && victim.prenom.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                (victim.postnom && victim.postnom.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                (victim.codeUnique && String(victim.codeUnique).toLowerCase().includes(searchTerm.toLowerCase())) ||
                 (victim.reference && victim.reference.toLowerCase().includes(searchTerm.toLowerCase()));
 
             const statusValue = typeof victim?.status === 'string' ? victim.status.trim().toLowerCase() : '';
@@ -294,6 +297,9 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
             const selectedMentionValue = effectiveMention.toLowerCase();
 
             const matchesMention = !selectedMentionValue || mentionValue === selectedMentionValue;
+            const agentValue = victim?.agentReparation ?? victim?.variablesSpecifiques?.agentReparation ?? '';
+            const matchesAgent = !agentReparation || String(agentValue).toLowerCase().includes(agentReparation.toLowerCase());
+            const matchesPhoto = !photoNotNull || Boolean(victim?.photo);
 
             const matchesVictimType = (() => {
                 if (victimTypeFilter === 'all') return true;
@@ -355,9 +361,9 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                 }
             });
 
-            return matchesSearch && matchesMention && matchesVictimType && matchesRules;
+            return matchesSearch && matchesMention && matchesVictimType && matchesRules && matchesAgent && matchesPhoto;
         });
-    }, [searchTerm, filterRules, victimTypeFilter, effectiveMention]);
+    }, [searchTerm, filterRules, victimTypeFilter, effectiveMention, agentReparation, photoNotNull]);
     const [victims, setVictims] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string>("");
@@ -403,6 +409,10 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
 
         const updatedVictim = { ...victimToUpdate, photo: null };
 
+        if (!isOnline()) {
+            await savePendingVictimUpdate(victimToUpdate.id, { photo: null });
+        }
+
         setVictims((prev) => prev.map((v) => (v.id === victimToUpdate.id ? updatedVictim : v)));
         setSelectedVictim((prev: any) => (prev?.id === victimToUpdate.id ? updatedVictim : prev));
 
@@ -442,6 +452,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                 }
 
                 if (!first.response.ok) {
+                    await savePendingVictimUpdate(victimToUpdate.id, { photo: null }).catch(() => undefined);
                     await Swal.fire({
                         icon: 'error',
                         title: 'Suppression non enregistrée',
@@ -468,6 +479,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                     }
                 }
             } catch {
+                await savePendingVictimUpdate(victimToUpdate.id, { photo: null }).catch(() => undefined);
                 await Swal.fire({
                     icon: 'error',
                     title: 'Suppression non enregistrée',
@@ -532,6 +544,17 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
             const combinedIds = new Set<string>();
             const missingMentions: string[] = [];
 
+            const persisted = await Promise.all(mentionsToLoad.map(async (contractMention) => ({
+                mention: contractMention,
+                entry: await getVictimsFromCache(`signed-contract-ids:${contractMention}`),
+            })));
+            persisted.forEach(({ mention: contractMention, entry }) => {
+                if (entry?.data?.length) {
+                    const ids = new Set<string>(entry.data.map((row: any) => String(row.id)));
+                    signedContractIdsCache.set(contractMention, ids);
+                }
+            });
+
             mentionsToLoad.forEach((contractMention) => {
                 const cachedIds = signedContractIdsCache.get(contractMention);
                 if (cachedIds) {
@@ -575,6 +598,11 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
                     }
 
                     signedContractIdsCache.set(contractMention, ids);
+                    void saveVictimsToCache(
+                        `signed-contract-ids:${contractMention}`,
+                        [...ids].map((id) => ({ id })),
+                        { total: ids.size, timestamp: Date.now() }
+                    );
                     ids.forEach((id) => combinedIds.add(id));
                 }));
 
@@ -993,6 +1021,35 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
 
         const cacheKey = 'all-victims-cache';
 
+        // Afficher d'abord la copie locale, même si le navigateur pense être en ligne.
+        // navigator.onLine ne garantit pas que l'API soit joignable (Wi-Fi sans Internet,
+        // portail captif, serveur indisponible). La requête réseau pourra ensuite actualiser
+        // la liste sans rendre les données déjà synchronisées inaccessibles.
+        if (!signedContractsOnly) {
+            const cachedResult = await getVictimsFromCache(cacheKey);
+            if (cachedResult?.data?.length) {
+                const filteredData = applyLocalFilters(cachedResult.data);
+                const totalItems = filteredData.length;
+                const totalPages = Math.max(1, Math.ceil(totalItems / meta.limit));
+                const currentPage = Math.min(meta.page, totalPages);
+                const start = (currentPage - 1) * meta.limit;
+                const end = start + meta.limit;
+
+                setVictims(filteredData.slice(start, end));
+                setMeta(prev => ({
+                    ...prev,
+                    page: currentPage,
+                    total: totalItems,
+                    totalPages,
+                    hasNextPage: end < totalItems,
+                    hasPreviousPage: currentPage > 1,
+                }));
+                setUsingCache(true);
+                setError("");
+                setLoading(false);
+            }
+        }
+
         if (signedContractsOnly) {
             try {
                 const cachedResult = await getVictimsFromCache(cacheKey).catch(() => null);
@@ -1348,7 +1405,7 @@ const ListVictims: React.FC<ReglagesProps> = ({ mockCategories, agentReparation,
             setError('Impossible de charger les données. Vérifiez votre connexion Internet.');
             setLoading(false);
         }
-    }, [buildQueryParams, fetchCtx?.fetcher, meta.page, meta.limit, filters, searchTerm, applyLocalFilters, signedContractsOnly, effectiveMention, victimTypeFilter]);
+    }, [buildQueryParams, fetchCtx?.fetcher, meta.page, meta.limit, filters, searchTerm, applyLocalFilters, signedContractsOnly, effectiveMention, victimTypeFilter, signedContractVictimIds]);
 
     useEffect(() => {
         const debounceTimeout = setTimeout(() => {

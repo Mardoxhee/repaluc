@@ -7,6 +7,7 @@ import OfflineIndicator from "./components/OfflineIndicator";
 import PWAInstaller from "./components/PWAInstaller";
 import SerwistProvider from "./components/SerwistProvider";
 import FloatingOrientationButton from "./components/FloatingOrientationButton";
+import { OfflineSyncProviders } from "./components/OfflineSyncProviders";
 
 // Configuration de la police Rubik avec les sous-ensembles et styles nécessaires
 const rubik = Rubik({
@@ -61,7 +62,7 @@ export default function RootLayout({
           <PWAInstaller />
           <OfflineIndicator />
           <FloatingOrientationButton />
-          {children}
+          <OfflineSyncProviders>{children}</OfflineSyncProviders>
         </FetchProvider>
       </body>
     </html>

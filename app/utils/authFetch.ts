@@ -61,6 +61,10 @@ const clearAuthSession = () => {
   void import('./authCache')
     .then(({ clearOfflineCredentials }) => clearOfflineCredentials())
     .catch(() => undefined);
+
+  if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+    window.location.assign('/login');
+  }
 };
 
 export const authenticatedFetch = async (
@@ -78,8 +82,8 @@ export const authenticatedFetch = async (
     headers: withAuthHeaders(baseHeaders),
   });
 
-  if (response.status === 401 && isAuthRequest(input) && getRequestUrl(input).includes('/auth/verify-token')) {
-    // A rejected explicit token verification invalidates the local session.
+  if ((response.status === 401 || response.status === 403) && !isAuthRequest(input)) {
+    // Toute réponse d'authentification invalide sur une route protégée invalide la session.
     clearAuthSession();
   }
 

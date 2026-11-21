@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { isOnline } from '../../../utils/victimsCache';
 import { savePendingContract, getAllPendingContracts, deletePendingContract } from '../../../utils/contractsCache';
-import { authenticatedFetch } from '../../../utils/authFetch';
+import { authenticatedFetch, getAuthToken } from '../../../utils/authFetch';
 import { getConnectedAgentFullName } from '../../../utils/currentUser';
 import type { PendingContract } from '../../../utils/contractsCache';
 import type { Victim, Tranche, Contrat, Consentements, Representant, SaveMessage, ContractForm, ContractTemplateId, MesureReparationKey } from './types';
@@ -744,7 +744,7 @@ export function useContrat(victim: Victim) {
                     ? existingContrat?.signatureRepresentant || ''
                     : existingContrat?.signatureBeneficiaire || '';
 
-                if (signatureDataUrl && existingContrat) {
+                if (signatureDataUrl && existingContrat && isOnline() && getAuthToken()) {
                     finalSignature = await uploadSignature(signatureDataUrl);
                 }
 
@@ -780,8 +780,18 @@ export function useContrat(victim: Victim) {
                 };
 
                 if (existingContrat) {
-                    if (!isOnline()) {
-                        setSaveMessage({ type: 'error', text: 'Connecte-toi pour enregistrer les modifications d’un acte de consentement MPU déjà existant.' });
+                    if (!isOnline() || !getAuthToken()) {
+                        await savePendingContract({
+                            victimId: victim.id,
+                            contractData: mpuPayload,
+                            signatureDataUrl,
+                            targetType: 'consentement-mpu',
+                            action: 'update',
+                            targetId: existingContrat.id,
+                        });
+                        setExistingContrat({ ...existingContrat, ...mpuPayload } as Contrat);
+                        setSaveMessage({ type: 'success', text: 'Acte modifié sur cet appareil. Il sera synchronisé dès qu’Internet et une session valide seront disponibles.' });
+                        setTimeout(() => setSaveMessage(null), 4000);
                         return;
                     }
 
@@ -897,8 +907,17 @@ export function useContrat(victim: Victim) {
             };
 
             if (existingContrat) {
-                if (!isOnline()) {
-                    setSaveMessage({ type: 'error', text: 'Connecte-toi pour enregistrer les modifications d’un contrat déjà existant.' });
+                if (!isOnline() || !getAuthToken()) {
+                    await savePendingContract({
+                        victimId: victim.id,
+                        contractData,
+                        signatureDataUrl,
+                        action: 'update',
+                        targetId: existingContrat.id,
+                    });
+                    setExistingContrat({ ...existingContrat, ...contractData } as unknown as Contrat);
+                    setSaveMessage({ type: 'success', text: 'Contrat modifié sur cet appareil. Il sera synchronisé dès qu’Internet et une session valide seront disponibles.' });
+                    setTimeout(() => setSaveMessage(null), 4000);
                     return;
                 }
 

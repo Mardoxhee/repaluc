@@ -3,6 +3,7 @@
 import { getAllPendingVictimDocs, getPendingVictimDocsToSyncForVictim, markVictimDocSynced, PendingVictimDoc } from './victimDocsCache';
 import { isOnline } from './victimsCache';
 import { uploadVictimDocument } from './victimDocumentApi';
+import { getAuthToken } from './authFetch';
 
 let isSyncing = false;
 let syncInterval: NodeJS.Timeout | null = null;
@@ -19,7 +20,7 @@ export const syncPendingVictimDocsForVictim = async (
   opts?: { limit?: number }
 ): Promise<{ synced: number; failed: number; skipped: number }> => {
   if (isSyncing) return { synced: 0, failed: 0, skipped: 0 };
-  if (!isOnline()) return { synced: 0, failed: 0, skipped: 0 };
+  if (!isOnline() || !getAuthToken()) return { synced: 0, failed: 0, skipped: 0 };
 
   isSyncing = true;
   let synced = 0;
@@ -33,6 +34,7 @@ export const syncPendingVictimDocsForVictim = async (
     const toSync = typeof limit === 'number' ? filtered.slice(0, limit) : filtered;
 
     for (const item of toSync) {
+      if (!getAuthToken()) break;
       if (item.synced) {
         skipped++;
         continue;
@@ -60,7 +62,7 @@ export const syncPendingVictimDocsForVictim = async (
 
 export const syncPendingVictimDocs = async (): Promise<{ synced: number; failed: number; skipped: number }> => {
   if (isSyncing) return { synced: 0, failed: 0, skipped: 0 };
-  if (!isOnline()) return { synced: 0, failed: 0, skipped: 0 };
+  if (!isOnline() || !getAuthToken()) return { synced: 0, failed: 0, skipped: 0 };
 
   isSyncing = true;
   let synced = 0;
@@ -71,6 +73,7 @@ export const syncPendingVictimDocs = async (): Promise<{ synced: number; failed:
     const pending = await getAllPendingVictimDocs();
 
     for (const item of pending) {
+      if (!getAuthToken()) break;
       if (item.synced) {
         skipped++;
         continue;

@@ -1,5 +1,7 @@
 'use client';
 
+import { getVictimsFromCache, saveVictimsToCache } from './victimsCache';
+
 const DB_NAME = 'VictimUpdatesDB';
 const DB_VERSION = 1;
 const STORE_NAME = 'pendingVictimUpdates';
@@ -46,6 +48,24 @@ export const savePendingVictimUpdate = async (
   return new Promise((resolve, reject) => {
     request.onsuccess = () => resolve(request.result as number);
     request.onerror = () => reject(request.error);
+  }).then(async (id) => {
+    try {
+      const cached = await getVictimsFromCache('all-victims-cache');
+      if (cached?.data) {
+        const nextData = cached.data.map((victim: any) => {
+          if (String(victim?.id) !== String(victimId)) return victim;
+          const next = { ...victim, ...payload };
+          if (payload.variablesSpecifiques && typeof payload.variablesSpecifiques === 'object') {
+            next.variablesSpecifiques = { ...victim.variablesSpecifiques, ...payload.variablesSpecifiques };
+          }
+          return next;
+        });
+        await saveVictimsToCache('all-victims-cache', nextData, cached.meta);
+      }
+    } catch (error) {
+      console.warn('[VictimUpdatesCache] Mise à jour du cache victimes impossible:', error);
+    }
+    return id as number;
   });
 };
 

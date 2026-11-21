@@ -1,7 +1,7 @@
 'use client';
 import { getAllPendingContracts, deletePendingContract, PendingContract } from './contractsCache';
 import { isOnline } from './victimsCache';
-import { authenticatedFetch } from './authFetch';
+import { authenticatedFetch, getAuthToken } from './authFetch';
 import { getConnectedAgentFullName } from './currentUser';
 
 let isSyncing = false;
@@ -104,13 +104,13 @@ const buildPendingPayload = (
     };
 };
 
-export const syncPendingContracts = async (): Promise<{ synced: number; failed: number; skipped: number }> => {
+export const syncPendingContracts = async (opts?: { targetType?: 'contrat' | 'consentement-mpu' }): Promise<{ synced: number; failed: number; skipped: number }> => {
     if (isSyncing) {
         console.log('[ContractsSyncService] Synchronisation déjà en cours...');
         return { synced: 0, failed: 0, skipped: 0 };
     }
 
-    if (!isOnline()) {
+    if (!isOnline() || !getAuthToken()) {
         console.log('[ContractsSyncService] Hors ligne, synchronisation reportée');
         return { synced: 0, failed: 0, skipped: 0 };
     }
@@ -121,7 +121,10 @@ export const syncPendingContracts = async (): Promise<{ synced: number; failed: 
     let skipped = 0;
 
     try {
-        const pending: PendingContract[] = await getAllPendingContracts();
+        const allPending: PendingContract[] = await getAllPendingContracts();
+        const pending = opts?.targetType
+            ? allPending.filter((item) => getPendingTargetType(item) === opts.targetType)
+            : allPending;
 
         if (pending.length === 0) {
             console.log('[ContractsSyncService] Aucun document en attente');
@@ -131,10 +134,13 @@ export const syncPendingContracts = async (): Promise<{ synced: number; failed: 
         console.log(`[ContractsSyncService] ${pending.length} document(s) en attente de synchronisation`);
 
         for (const item of pending) {
+            if (!getAuthToken()) break;
             try {
                 const targetType = getPendingTargetType(item);
-                // Vérifier si un contrat / acte existe déjà pour cette victime
-                const contractExists = await checkExistingContract(item.victimId, targetType);
+                const isUpdate = item.action === 'update' && Number.isFinite(item.targetId);
+                // Les créations vérifient les doublons; les modifications ciblent l'ID conservé localement.
+                const contractExists = isUpdate ? false : await checkExistingContract(item.victimId, targetType);
+                if (!getAuthToken()) break;
 
                 if (contractExists) {
                     // Le document existe déjà, supprimer de la file d'attente sans re-créer
@@ -154,10 +160,15 @@ export const syncPendingContracts = async (): Promise<{ synced: number; failed: 
                     finalSignature = await uploadSignature(item.signatureDataUrl, item.victimId);
                 }
 
-                const { endpoint, payload, label } = buildPendingPayload(item, finalSignature);
+                const built = buildPendingPayload(item, finalSignature);
+                const endpoint = isUpdate
+                    ? `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006'}/${targetType === 'consentement-mpu' ? 'consentements-mpu' : 'contrat'}/${item.targetId}`
+                    : built.endpoint;
+                const payload = built.payload;
+                const label = built.label;
 
                 const resp = await authenticatedFetch(endpoint, {
-                    method: 'POST',
+                    method: isUpdate ? 'PATCH' : 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },

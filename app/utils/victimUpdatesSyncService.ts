@@ -1,6 +1,6 @@
 'use client';
 
-import { authenticatedFetch } from '@/app/utils/authFetch';
+import { authenticatedFetch, getAuthToken } from '@/app/utils/authFetch';
 import { isOnline } from '@/app/utils/victimsCache';
 import {
   deletePendingVictimUpdate,
@@ -44,7 +44,7 @@ export const syncPendingVictimUpdates = async (): Promise<{ synced: number; fail
     return { synced: 0, failed: 0, skipped: 0 };
   }
 
-  if (!isOnline()) {
+  if (!isOnline() || !getAuthToken()) {
     return { synced: 0, failed: 0, skipped: 0 };
   }
 
@@ -57,6 +57,7 @@ export const syncPendingVictimUpdates = async (): Promise<{ synced: number; fail
     const pending = await getAllPendingVictimUpdates();
 
     for (const item of pending) {
+      if (!getAuthToken()) break;
       if (!item.id) {
         skipped++;
         continue;

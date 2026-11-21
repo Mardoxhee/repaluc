@@ -258,7 +258,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
 
         if (!response.ok) {
           const error = new Error('Erreur lors de la mise à jour des détails du camp') as Error & { skipOfflineSave?: boolean };
-          error.skipOfflineSave = true;
+          error.skipOfflineSave = response.status !== 401 && response.status !== 403 && response.status < 500;
           throw error;
         }
       }
@@ -836,6 +836,15 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
 
     setIsConfirming(true);
     try {
+      if (!isOnline()) {
+        await savePendingVictimUpdate(currentVictim.id, { status: 'confirmé' });
+        const updatedVictim = { ...currentVictim, status: 'confirmé' };
+        setCurrentVictim(updatedVictim);
+        onVictimUpdate?.(updatedVictim);
+        alert('Confirmation enregistrée sur cet appareil. Elle sera synchronisée à la reconnexion.');
+        return;
+      }
+
       const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
       const response = await authenticatedFetch(`${baseUrl}/victime/${currentVictim.id}`, {
         method: 'PATCH',
@@ -853,11 +862,20 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
         onVictimUpdate?.(updatedVictim);
         alert('Victime confirmée avec succès');
       } else {
-        throw new Error('Erreur lors de la confirmation');
+        throw Object.assign(new Error('Erreur lors de la confirmation'), { status: response.status });
       }
     } catch (error) {
       console.log('Erreur:', error);
-      alert('Erreur lors de la confirmation de la victime');
+      const statusCode = Number((error as any)?.status);
+      if (!statusCode || statusCode === 401 || statusCode === 403 || statusCode >= 500) {
+        await savePendingVictimUpdate(currentVictim.id, { status: 'confirmé' });
+        const updatedVictim = { ...currentVictim, status: 'confirmé' };
+        setCurrentVictim(updatedVictim);
+        onVictimUpdate?.(updatedVictim);
+        alert('Confirmation conservée sur cet appareil. Elle sera synchronisée dès qu’une session valide sera disponible.');
+      } else {
+        alert('Erreur lors de la confirmation de la victime');
+      }
     } finally {
       setIsConfirming(false);
     }
@@ -1245,11 +1263,32 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
                       }
 
                     } catch (err: any) {
-                      await Swal.fire({
-                        icon: 'error',
-                        title: 'Erreur',
-                        text: err.message || 'Erreur lors de l\'upload'
-                      });
+                      try {
+                        const idbId = await savePendingVictimDoc({
+                          victimId: currentVictim.id,
+                          label: newFileLabel,
+                          file: newFileFile,
+                        });
+                        setPendingDocs((prev) => [
+                          { id: idbId, label: newFileLabel, name: newFileFile.name, isPending: true },
+                          ...prev,
+                        ]);
+                        setNewFileLabel('');
+                        setNewFileFile(null);
+                        setAddFileMode(false);
+                        await Swal.fire({
+                          icon: 'warning',
+                          title: 'Document conservé hors ligne',
+                          text: 'L’envoi a échoué. Le document est gardé sur cet appareil et sera repris à la synchronisation.',
+                          confirmButtonColor: '#901c67',
+                        });
+                      } catch (cacheError: any) {
+                        await Swal.fire({
+                          icon: 'error',
+                          title: 'Enregistrement impossible',
+                          text: cacheError?.message || err.message || 'Erreur lors de l’upload',
+                        });
+                      }
                     } finally {
                       setUploadingFile(false);
                     }

@@ -398,6 +398,41 @@ const PecmuModulePage: React.FC = () => {
     };
 
     try {
+      // Rendre immédiatement les victimes déjà synchronisées. La présence du Wi-Fi
+      // ne signifie pas forcément que l'API est joignable; le cache reste donc visible
+      // pendant la tentative réseau et sert de repli si elle échoue.
+      const cached = await getVictimsFromCache(cacheKey);
+      const cachedRows = groupFicheRows((Array.isArray(cached?.data) ? cached.data : []).filter(isPecmuVictim));
+      const cachedMatches = search
+        ? cachedRows.filter((victim: Victim) => (
+          [getVictimName(victim), victim.reference, victim.codeUnique, victim.province, victim.territoire, victim.status]
+            .map(normalizeText).join(' ').includes(normalizeText(search))
+        ))
+        : cachedRows;
+      const cachedFiltered = applyFilterRules(cachedMatches);
+      const cachedTotalPages = Math.max(1, Math.ceil(cachedFiltered.length / meta.limit));
+      const cachedPage = Math.min(meta.page, cachedTotalPages);
+      const cachedStart = (cachedPage - 1) * meta.limit;
+      const cachedPageRows = cachedFiltered.slice(cachedStart, cachedStart + meta.limit);
+
+      if (cachedRows.length > 0) {
+        setVictims(cachedPageRows);
+        setMeta((prev) => ({
+          ...prev,
+          page: cachedPage,
+          total: cachedFiltered.length,
+          totalPages: cachedTotalPages,
+          hasNextPage: cachedStart + meta.limit < cachedFiltered.length,
+          hasPreviousPage: cachedPage > 1,
+        }));
+        setUsingCache(true);
+        setSelectedVictim((current) => {
+          if (current && cachedPageRows.some((victim: Victim) => victim.id === current.id)) return current;
+          return cachedPageRows[0] || null;
+        });
+        setLoadingVictims(false);
+      }
+
       if (isOnline()) {
         const pecmuResult = await listFichesPecmu(fetcher, {
           page: meta.page,
@@ -425,43 +460,22 @@ const PecmuModulePage: React.FC = () => {
         }
       }
 
-      const cached = await getVictimsFromCache(cacheKey);
-      const cachedRows = groupFicheRows((Array.isArray(cached?.data) ? cached!.data : []).filter(isPecmuVictim));
-      const filtered = search
-        ? cachedRows.filter((victim: Victim) => (
-          [
-            getVictimName(victim),
-            victim.reference,
-            victim.codeUnique,
-            victim.province,
-            victim.territoire,
-            victim.status,
-          ].map(normalizeText).join(' ').includes(normalizeText(search))
-        ))
-        : cachedRows;
-      const filteredWithRules = applyFilterRules(filtered);
-      const totalPages = Math.max(1, Math.ceil(filteredWithRules.length / meta.limit));
-      const currentPage = Math.min(meta.page, totalPages);
-      const start = (currentPage - 1) * meta.limit;
-      const pageRows = filteredWithRules.slice(start, start + meta.limit);
-
-      setVictims(pageRows);
+      setVictims(cachedPageRows);
       setMeta((prev) => ({
         ...prev,
-        page: currentPage,
-        total: filteredWithRules.length,
-        totalPages,
-        hasNextPage: start + meta.limit < filteredWithRules.length,
-        hasPreviousPage: currentPage > 1,
+        page: cachedPage,
+        total: cachedFiltered.length,
+        totalPages: cachedTotalPages,
+        hasNextPage: cachedStart + meta.limit < cachedFiltered.length,
+        hasPreviousPage: cachedPage > 1,
       }));
       setUsingCache(true);
       setSelectedVictim((current) => {
-        if (current && pageRows.some((victim: Victim) => victim.id === current.id)) return current;
-        return pageRows[0] || null;
+        if (current && cachedPageRows.some((victim: Victim) => victim.id === current.id)) return current;
+        return cachedPageRows[0] || null;
       });
     } catch (error: any) {
       setListError(error?.message || 'Impossible de charger les dossiers PECMU.');
-      setVictims([]);
     } finally {
       setLoadingVictims(false);
     }

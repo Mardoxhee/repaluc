@@ -2,7 +2,7 @@
 
 import { getAllPendingVictimPhotos, getPendingVictimPhotosToSyncForVictim, markVictimPhotoSynced, PendingVictimPhoto } from './victimPhotosCache';
 import { isOnline } from './victimsCache';
-import { authenticatedFetch } from './authFetch';
+import { authenticatedFetch, getAuthToken } from './authFetch';
 
 let isSyncing = false;
 let syncInterval: NodeJS.Timeout | null = null;
@@ -114,7 +114,7 @@ export const syncPendingVictimPhotosForVictim = async (
     return { synced: 0, failed: 0, skipped: 0 };
   }
 
-  if (!isOnline()) {
+  if (!isOnline() || !getAuthToken()) {
     return { synced: 0, failed: 0, skipped: 0 };
   }
 
@@ -130,6 +130,7 @@ export const syncPendingVictimPhotosForVictim = async (
     const toSync = typeof limit === 'number' ? filtered.slice(0, limit) : filtered;
 
     for (const item of toSync) {
+      if (!getAuthToken()) break;
       if (item.synced) {
         skipped++;
         continue;
@@ -248,7 +249,7 @@ export const syncPendingVictimPhotos = async (): Promise<{ synced: number; faile
     return { synced: 0, failed: 0, skipped: 0 };
   }
 
-  if (!isOnline()) {
+  if (!isOnline() || !getAuthToken()) {
     return { synced: 0, failed: 0, skipped: 0 };
   }
 
@@ -261,6 +262,7 @@ export const syncPendingVictimPhotos = async (): Promise<{ synced: number; faile
     const pending: PendingVictimPhoto[] = await getAllPendingVictimPhotos();
 
     for (const item of pending) {
+      if (!getAuthToken()) break;
       if (item.synced) {
         skipped++;
         continue;

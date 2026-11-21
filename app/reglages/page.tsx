@@ -20,11 +20,14 @@ import {
 } from '@/app/utils/planVieCache';
 import { getPendingVictimDocsSummary } from '@/app/utils/victimDocsCache';
 import { getPendingVictimPhotosSummary } from '@/app/utils/victimPhotosCache';
-import { syncPendingVictimDocsForVictim } from '@/app/utils/victimDocsSyncService';
-import { syncPendingVictimPhotosForVictim } from '@/app/utils/victimPhotosSyncService';
+import { syncPendingVictimDocs, syncPendingVictimDocsForVictim } from '@/app/utils/victimDocsSyncService';
+import { syncPendingVictimPhotos, syncPendingVictimPhotosForVictim } from '@/app/utils/victimPhotosSyncService';
 import { getAllPendingContracts, type PendingContract } from '@/app/utils/contractsCache';
 import { syncPendingContracts } from '@/app/utils/contractsSyncService';
-import { authenticatedFetch } from '@/app/utils/authFetch';
+import { authenticatedFetch, getAuthToken } from '@/app/utils/authFetch';
+import { getAllPendingVictimUpdates } from '@/app/utils/victimUpdatesCache';
+import { syncPendingVictimUpdates } from '@/app/utils/victimUpdatesSyncService';
+import { syncPendingPlanVieForms } from '@/app/utils/planVieSyncService';
 import {
   refreshVictimsCacheInBackground,
   type VictimsCacheSyncProgress
@@ -92,6 +95,8 @@ const ReglagesPage = () => {
   const [pendingContracts, setPendingContracts] = useState<PendingContract[]>([]);
   const [loadingContracts, setLoadingContracts] = useState(false);
   const [contractsSyncing, setContractsSyncing] = useState(false);
+  const [syncingQueueType, setSyncingQueueType] = useState<string | null>(null);
+  const [queueCounts, setQueueCounts] = useState({ updates: 0, photos: 0, documents: 0, contracts: 0, consents: 0 });
   const [contractsSyncResult, setContractsSyncResult] = useState<{
     total: number;
     synced: number;
@@ -242,8 +247,8 @@ const ReglagesPage = () => {
   const refreshVictimsCache = async () => {
     if (victimsCacheSyncing) return;
 
-    if (!online) {
-      setVictimsCacheMessage('Connexion absente: impossible de compléter le cache maintenant.');
+    if (!online || !getAuthToken()) {
+      setVictimsCacheMessage(!online ? 'Connexion absente: impossible de compléter le cache maintenant.' : 'Connectez-vous pour synchroniser le cache.');
       return;
     }
 
@@ -301,20 +306,78 @@ const ReglagesPage = () => {
     }
   };
 
+  const loadQueueCounts = async () => {
+    try {
+      const [updates, photos, docs, contracts] = await Promise.all([
+        getAllPendingVictimUpdates(),
+        getPendingVictimPhotosSummary(),
+        getPendingVictimDocsSummary(),
+        getAllPendingContracts(),
+      ]);
+      setQueueCounts({
+        updates: updates.length,
+        photos: photos.pendingRecords,
+        documents: docs.pendingRecords,
+        contracts: contracts.filter((item) => item.targetType !== 'consentement-mpu').length,
+        consents: contracts.filter((item) => item.targetType === 'consentement-mpu').length,
+      });
+    } catch (error) {
+      console.error('[Reglages] Erreur de lecture des files hors ligne:', error);
+    }
+  };
+
+  const syncQueueType = async (type: 'updates' | 'photos' | 'documents' | 'contracts' | 'consents' | 'forms') => {
+    if (!online || !getAuthToken()) {
+      await Swal.fire({
+        icon: 'warning',
+        title: !online ? 'Hors ligne' : 'Session requise',
+        text: !online ? 'La synchronisation reprendra avec Internet.' : 'Connectez-vous pour envoyer les données en attente.',
+        confirmButtonColor: '#901c67',
+      });
+      return;
+    }
+
+    setSyncingQueueType(type);
+    try {
+      if (type === 'updates') await syncPendingVictimUpdates();
+      if (type === 'photos') await syncPendingVictimPhotos();
+      if (type === 'documents') await syncPendingVictimDocs();
+      if (type === 'contracts') await syncPendingContracts({ targetType: 'contrat' });
+      if (type === 'consents') await syncPendingContracts({ targetType: 'consentement-mpu' });
+      if (type === 'forms') await syncPendingPlanVieForms();
+
+      await Promise.all([loadQueueCounts(), loadPendingForms(), loadPendingContracts()]);
+      await loadPendingVictimMedia(pendingVictimPage);
+    } finally {
+      setSyncingQueueType(null);
+    }
+  };
+
+  const tokenPresent = mounted && Boolean(getAuthToken());
+
   useEffect(() => {
     setMounted(true);
     setLastUpdateTime(new Date().toLocaleTimeString('fr-FR'));
 
     loadPendingForms();
     loadPendingContracts();
+    loadQueueCounts();
+    loadPendingVictimMedia(1);
     checkOnlineStatus();
 
     const handleOnline = () => {
       setOnline(true);
       loadPendingForms();
       loadPendingContracts();
+      loadQueueCounts();
     };
     const handleOffline = () => setOnline(false);
+
+    const queueRefresh = window.setInterval(() => {
+      void loadQueueCounts();
+      void loadPendingForms();
+      void loadPendingContracts();
+    }, 10_000);
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
@@ -322,6 +385,7 @@ const ReglagesPage = () => {
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      window.clearInterval(queueRefresh);
     };
   }, []);
 
@@ -360,7 +424,7 @@ const ReglagesPage = () => {
         .filter((r) => !r.victimName)
         .map((r) => r.victimId);
 
-      if (online && missingNames.length > 0) {
+      if (online && getAuthToken() && missingNames.length > 0) {
         for (const id of missingNames) {
           const n = await fetchVictimNameFromApi(id);
           if (!n) continue;
@@ -397,11 +461,11 @@ const ReglagesPage = () => {
   };
 
   const syncOneVictim = async (victimId: number) => {
-    if (!online) {
+    if (!online || !getAuthToken()) {
       await Swal.fire({
         icon: 'warning',
-        title: 'Hors ligne',
-        text: 'Vous devez être en ligne pour synchroniser',
+        title: !online ? 'Hors ligne' : 'Session requise',
+        text: !online ? 'Vous devez être en ligne pour synchroniser' : 'Connectez-vous pour synchroniser',
         confirmButtonColor: '#901c67'
       });
       return;
@@ -420,11 +484,11 @@ const ReglagesPage = () => {
   };
 
   const syncBatchSelectedVictims = async () => {
-    if (!online) {
+    if (!online || !getAuthToken()) {
       await Swal.fire({
         icon: 'warning',
-        title: 'Hors ligne',
-        text: 'Vous devez être en ligne pour synchroniser',
+        title: !online ? 'Hors ligne' : 'Session requise',
+        text: !online ? 'Vous devez être en ligne pour synchroniser' : 'Connectez-vous pour synchroniser',
         confirmButtonColor: '#901c67'
       });
       return;
@@ -485,11 +549,11 @@ const ReglagesPage = () => {
   };
 
   const syncForm = async (form: PendingForm) => {
-    if (!online) {
+    if (!online || !getAuthToken()) {
       await Swal.fire({
         icon: 'warning',
-        title: 'Hors ligne',
-        text: 'Vous devez être en ligne pour synchroniser',
+        title: !online ? 'Hors ligne' : 'Session requise',
+        text: !online ? 'Vous devez être en ligne pour synchroniser' : 'Connectez-vous pour synchroniser',
         confirmButtonColor: '#901c67'
       });
       return;
@@ -554,11 +618,11 @@ const ReglagesPage = () => {
   };
 
   const syncAllForms = async () => {
-    if (!online) {
+    if (!online || !getAuthToken()) {
       await Swal.fire({
         icon: 'warning',
-        title: 'Hors ligne',
-        text: 'Vous devez être en ligne pour synchroniser',
+        title: !online ? 'Hors ligne' : 'Session requise',
+        text: !online ? 'Vous devez être en ligne pour synchroniser' : 'Connectez-vous pour synchroniser',
         confirmButtonColor: '#901c67'
       });
       return;
@@ -657,11 +721,11 @@ const ReglagesPage = () => {
   };
 
   const syncAllContracts = async () => {
-    if (!online) {
+    if (!online || !getAuthToken()) {
       await Swal.fire({
         icon: 'warning',
-        title: 'Hors ligne',
-        text: 'Vous devez être en ligne pour synchroniser',
+        title: !online ? 'Hors ligne' : 'Session requise',
+        text: !online ? 'Vous devez être en ligne pour synchroniser' : 'Connectez-vous pour synchroniser',
         confirmButtonColor: '#901c67'
       });
       return;
@@ -916,6 +980,46 @@ const ReglagesPage = () => {
 
         {activeTab === 'sync' && (
           <>
+            <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-6">
+              <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Files hors ligne</h2>
+                  <p className="text-sm text-gray-600">Les envois reprennent dès que le réseau et la session sont valides.</p>
+                </div>
+                <span className={`rounded-full px-3 py-1 text-xs font-medium ${online && tokenPresent ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+                  {!mounted ? 'Vérification de la session…' : online ? (tokenPresent ? 'En ligne · session présente' : 'En ligne · connexion requise') : 'Hors ligne'}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                {([
+                  ['updates', 'Informations et détails du camp', queueCounts.updates],
+                  ['photos', 'Photos', queueCounts.photos],
+                  ['documents', 'Pièces d’identité et documents', queueCounts.documents],
+                  ['contracts', 'Contrats', queueCounts.contracts],
+                  ['consents', 'Actes de consentement', queueCounts.consents],
+                  ['forms', 'Formulaires et plans de vie', pendingForms.length],
+                ] as const).map(([type, label, count]) => (
+                  <div key={type} className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 p-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-gray-800">{label}</div>
+                      <div className={`text-xs ${count > 0 ? 'text-amber-700' : 'text-green-700'}`}>
+                        {count} élément{count > 1 ? 's' : ''} en attente
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => syncQueueType(type)}
+                      disabled={!online || !tokenPresent || count === 0 || syncingQueueType !== null}
+                      className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-[#901c67] px-3 py-2 text-xs font-semibold text-white hover:bg-[#761652] disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      <CloudUpload size={14} className={syncingQueueType === type ? 'animate-pulse' : ''} />
+                      {syncingQueueType === type ? 'Envoi…' : 'Synchroniser'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+
             {/* Actions Bar */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
               <div className="flex flex-wrap items-center justify-between gap-4">
