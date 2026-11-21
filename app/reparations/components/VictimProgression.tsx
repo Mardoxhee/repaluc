@@ -1,12 +1,11 @@
 'use client';
-import { authenticatedFetch } from '../../utils/authFetch';
 import { useFetch } from '../../context/FetchContext';
+import { savePendingVictimDoc } from '@/app/utils/victimDocsCache';
 import { normalizeApiList } from '../utils/mentionStats';
 import styles from './VictimProgression.module.css';
-import { Activity, HeartPulse, Brain, BriefcaseBusiness, Wallet, FolderCheck, FileSignature, RefreshCw, CheckCircle2, Clock3, Circle, ArrowUpRight, Save, Plus, Pencil, Trash2, CalendarDays, MapPin, Upload, Landmark, ChevronRight, AlertCircle, LockKeyhole, type LucideIcon } from 'lucide-react';
+import { Activity, HeartPulse, Brain, BriefcaseBusiness, Wallet, FolderCheck, FileSignature, RefreshCw, CheckCircle2, Clock3, Circle, ArrowUpRight, Save, Plus, Pencil, Trash2, CalendarDays, MapPin, Upload, Landmark, ChevronRight, AlertCircle, type LucideIcon } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
-import { getPecmuPermissions } from '../services/pecmuWorkflowApi';
-import { progressionRequest, progressionPath, progressionFields, progressionChanges, ProgressionError, type Programme, type ProgressionPatch, type VictimProgression as Snapshot } from '../services/victimProgressionApi';
+import { progressionRequest, progressionPath, progressionFields, progressionChanges, type Programme, type ProgressionPatch, type VictimProgression as Snapshot } from '../services/victimProgressionApi';
 
 const labels: Record<string, string> = { NOT_EVALUATED: 'Non évaluée', EVALUATED: 'Évaluée', NOT_STARTED: 'Non commencée', PLANNED: 'Planifiée', STARTED: 'Commencée', IN_PROGRESS: 'En cours', COMPLETED: 'Terminée', CANCELLED: 'Annulée', TRADE: 'Métier', FORMAL_EDUCATION: 'Éducation formelle', LITERACY: 'Alphabétisation', OTHER: 'Autre formation' };
 const input = styles.input;
@@ -93,11 +92,9 @@ export default function VictimProgression({ victimId, programme, onNavigate, onU
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [forbidden, setForbidden] = useState(false);
   const [editor, setEditor] = useState<Editor | null>(null);
   const [editingCare, setEditingCare] = useState(false);
   const [editingConsent, setEditingConsent] = useState(false);
-  const [permissions, setPermissions] = useState<string[] | null>(null);
   const generation = useRef(0);
   const mutationPending = useRef(false);
   useEffect(() => {
@@ -105,10 +102,9 @@ export default function VictimProgression({ victimId, programme, onNavigate, onU
   }, [editor?.path]);
   const updateRef = useRef(onUpdate); updateRef.current = onUpdate;
   const path = progressionPath(victimId, programme);
-  const required = programme === 'LUC' ? 'indemnisation:read' : 'consentements-mpu:read';
-  const canEdit = !forbidden && (permissions === null || ['victime:update', required].every(p => permissions.includes(p)));
+  const canEdit = true;
   const accept = (next: Snapshot) => { setEditingCare(false); setEditingConsent(false); setData(next); setDraft(progressionFields(next)); setActivities(next.progression.economique.activitesGeneratricesRevenus.join('\n')); updateRef.current?.(next); };
-  const report = (e: unknown, mutation = false) => { setError(e instanceof Error ? e.message : 'Une erreur est survenue.'); if (mutation && e instanceof ProgressionError && e.status === 403) setForbidden(true); };
+  const report = (e: unknown) => { setError(e instanceof Error ? e.message : 'Une erreur est survenue.'); };
   const load = async () => {
     const version = ++generation.current; setBusy(true); setError(''); setSuccess('');
     try { const next = await progressionRequest(path); if (version === generation.current) accept(next); }
@@ -116,12 +112,11 @@ export default function VictimProgression({ victimId, programme, onNavigate, onU
     finally { if (version === generation.current) setBusy(false); }
   };
   useEffect(() => {
-    const claims = getPecmuPermissions(); setPermissions(claims); setData(null); setEditor(null); setForbidden(false);
-    if (claims !== null && !['victime:read', required].every(p => claims.includes(p))) { setBusy(false); setError('Habilitations de lecture insuffisantes.'); return; }
+    setData(null); setEditor(null);
     void load(); return () => { generation.current++; };
     // The component is remounted when returning from documents, contracts or payments.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, required]);
+  }, [path]);
   useEffect(() => {
     if (programme !== 'MPU') return;
     let active = true;
@@ -137,7 +132,7 @@ export default function VictimProgression({ victimId, programme, onNavigate, onU
     mutationPending.current = true;
     const version = generation.current; setBusy(true); setError(''); setSuccess('');
     try { const next = await progressionRequest(url, method, payload); if (version === generation.current) { accept(next); setEditor(null); setSuccess('Progression enregistrée.'); } }
-    catch (e) { if (version === generation.current) report(e, true); }
+    catch (e) { if (version === generation.current) report(e); }
     finally { mutationPending.current = false; if (version === generation.current) setBusy(false); }
   };
   const edit = (key: keyof ProgressionPatch, value: unknown) => setDraft(d => ({ ...d, [key]: value }));
@@ -156,16 +151,14 @@ export default function VictimProgression({ victimId, programme, onNavigate, onU
     const version = generation.current;
     setBusy(true); setError(''); setSuccess('');
     try {
-      const form = new FormData(); form.append('file', file); form.append('category', 'consent'); form.append('label', 'Acte de consentement MPU');
-      const base = (process.env.NEXT_PUBLIC_API_BASE_URL || '').replace(/\/$/, '');
-      const response = await authenticatedFetch(`${base}/document-victime/victime/${encodeURIComponent(victimId)}/upload`, { method: 'POST', body: form });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null);
-        throw new ProgressionError(response.status, body?.message || 'Impossible de déposer l’acte de consentement.');
-      }
-      const next = await progressionRequest(path);
-      if (version === generation.current) { accept(next); setSuccess('Acte de consentement déposé.'); }
-    } catch (e) { if (version === generation.current) report(e, true); }
+      await savePendingVictimDoc({
+        victimId: Number(victimId),
+        file,
+        label: 'Acte de consentement MPU',
+        category: 'document',
+      });
+      if (version === generation.current) setSuccess('Acte enregistré sur cet appareil. Pensez à le synchroniser dans Réglages dès que vous serez dans une zone couverte par Internet.');
+    } catch (e) { if (version === generation.current) report(e); }
     finally { mutationPending.current = false; if (version === generation.current) setBusy(false); }
   };
   const readonly = busy || !canEdit;
@@ -191,7 +184,6 @@ export default function VictimProgression({ victimId, programme, onNavigate, onU
     {busy && !data && <ProgressionSkeleton />}
     {busy && data && <p role="status" className={styles.loading}><RefreshCw size={15} className={styles.spinning} />Mise à jour du parcours…</p>}
     {data && p && <>
-      {!canEdit && <p className={styles.notice}><LockKeyhole size={15} />Lecture seule : habilitations de modification insuffisantes.</p>}
       <div className={styles.overview} aria-label="Synthèse du parcours">
         {progressItems.map(({ name, icon: Icon, tone, status, detail, target }) => <button type="button" key={name} className={styles.overviewItem} data-tone={tone} onClick={() => switchPanel(target)}>
           <span className={styles.overviewLabel}><span className={styles.iconTile}><Icon size={20} strokeWidth={1.8} /></span><span>{name}</span><ChevronRight size={15} /></span>

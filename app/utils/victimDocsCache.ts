@@ -9,6 +9,7 @@ export interface PendingVictimDoc {
   id?: number;
   victimId: number;
   label: string;
+  category?: 'document' | 'medical' | 'consent' | 'proof' | 'signature';
   fileName: string;
   mimeType: string;
   fileData: Blob;
@@ -70,6 +71,7 @@ export const savePendingVictimDoc = async (params: {
   victimId: number;
   label: string;
   file: File;
+  category?: PendingVictimDoc['category'];
 }): Promise<number> => {
   const db = await openDB();
   const tx = db.transaction([STORE_NAME], 'readwrite');
@@ -78,6 +80,7 @@ export const savePendingVictimDoc = async (params: {
   const entry: PendingVictimDoc = {
     victimId: params.victimId,
     label: params.label,
+    category: params.category || 'document',
     fileName: params.file.name,
     mimeType: params.file.type || 'application/octet-stream',
     fileData: params.file,

@@ -3,7 +3,6 @@ import { Camera, DollarSign, FileText, User, MapPin, Calendar, Shield, Check, Us
 import Swal from 'sweetalert2';
 import { isOnline } from '@/app/utils/victimsCache';
 import { savePendingVictimPhoto, getLatestVictimPhoto } from '@/app/utils/victimPhotosCache';
-import { syncPendingVictimPhotos } from '@/app/utils/victimPhotosSyncService';
 import { authenticatedFetch } from '@/app/utils/authFetch';
 import { getVictimBirthInfo } from '../utils/victimBirthInfo';
 
@@ -422,26 +421,11 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
             setLocalPhotoPreview(dataUrl);
             await savePendingVictimPhoto(id, dataUrl);
 
-            if (isOnline()) {
-                // Ne pas bloquer l'UI sur le réseau
-                syncPendingVictimPhotos().catch(async (err: any) => {
-                    await Swal.fire({
-                        icon: 'warning',
-                        title: 'Synchronisation échouée',
-                        text: err?.message || 'La photo est enregistrée, mais l’envoi a échoué. Elle sera réessayée plus tard.',
-                        confirmButtonColor: '#901c67',
-                    });
-                });
-            }
-
             await Swal.fire({
                 icon: 'success',
-                title: 'Photo enregistrée',
-                text: isOnline()
-                    ? 'Photo enregistrée. Synchronisation en cours si nécessaire.'
-                    : 'Photo enregistrée hors ligne. Elle sera envoyée à la reconnexion.',
-                timer: 1800,
-                showConfirmButton: false
+                title: 'Photo enregistrée avec succès',
+                text: 'La photo est conservée sur cet appareil. Pensez à la synchroniser dans Réglages dès que vous serez dans une zone couverte par Internet.',
+                confirmButtonColor: '#901c67',
             });
         } catch (err: any) {
             await Swal.fire({

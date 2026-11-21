@@ -10,7 +10,7 @@ let syncInterval: NodeJS.Timeout | null = null;
 
 const uploadDoc = async (doc: PendingVictimDoc): Promise<string> => {
   const file = new File([doc.fileData], doc.fileName, { type: doc.mimeType || 'application/octet-stream' });
-  const result = await uploadVictimDocument(doc.victimId, file, doc.label);
+  const result = await uploadVictimDocument(doc.victimId, file, doc.label, doc.category || 'document');
   const documentId = result?.id ?? result?.data?.id ?? result?.document?.id;
   return String(documentId ?? doc.fileName);
 };

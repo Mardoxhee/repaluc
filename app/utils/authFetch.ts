@@ -53,8 +53,8 @@ const isDocumentDisplayRequest = (input: RequestInfo | URL, init: RequestInit): 
 
   try {
     const url = new URL(getRequestUrl(input), typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
-    return /\/document-victime\/\d+\/(download-url|content)\/?$/i.test(url.pathname)
-      || /\/minio\/files\/[^/]+\/?$/i.test(url.pathname);
+    const pathname = url.pathname.toLowerCase();
+    return pathname.startsWith('/document-victime/') || pathname.startsWith('/minio/files/');
   } catch {
     return false;
   }

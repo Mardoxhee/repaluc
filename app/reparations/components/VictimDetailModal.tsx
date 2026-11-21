@@ -33,7 +33,7 @@ import Swal from 'sweetalert2';
 import { isOnline } from '@/app/utils/victimsCache';
 import { deletePendingVictimDocById, getPendingDocsForVictim, getPendingVictimDocById, savePendingVictimDoc } from '@/app/utils/victimDocsCache';
 import { authenticatedFetch } from '@/app/utils/authFetch';
-import { getVictimDocumentDownloadUrl, listVictimDocuments, uploadVictimDocument } from '@/app/utils/victimDocumentApi';
+import { getVictimDocumentDownloadUrl, listVictimDocuments } from '@/app/utils/victimDocumentApi';
 import { savePendingVictimUpdate } from '@/app/utils/victimUpdatesCache';
 import { syncPendingVictimUpdates } from '@/app/utils/victimUpdatesSyncService';
 
@@ -1208,87 +1208,35 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
 
                     setUploadingFile(true);
                     try {
-                      // Offline: stocker localement dans IndexedDB
-                      if (!isOnline()) {
-                        const idbId = await savePendingVictimDoc({
-                          victimId: currentVictim.id,
-                          label: newFileLabel,
-                          file: newFileFile,
-                        });
-
-                        setPendingDocs((prev) => [
-                          { id: idbId, label: newFileLabel, name: newFileFile.name, isPending: true },
-                          ...prev,
-                        ]);
-
-                        await Swal.fire({
-                          icon: 'success',
-                          title: 'Document enregistré',
-                          text: 'Document enregistré hors ligne. Il sera synchronisé à la reconnexion.',
-                          timer: 1500,
-                          showConfirmButton: false
-                        });
-
-                        setNewFileLabel('');
-                        setNewFileFile(null);
-                        setAddFileMode(false);
-                        return;
-                      }
-
-                      // Le backend associe le document à la victime sur cette route multipart.
-                      await uploadVictimDocument(currentVictim.id, newFileFile, newFileLabel);
-
-                      // 3. Succès et recharge la liste
-                      await Swal.fire({
-                        icon: 'success',
-                        title: 'Document numérisé',
-                        text: 'Le document a été numérisé et enregistré avec succès.',
-                        timer: 1500,
-                        showConfirmButton: false
+                      // Enregistrer d'abord sur l'appareil. L'envoi réseau est repris par
+                      // la file globale, sans faire échouer la capture si Internet est absent.
+                      const idbId = await savePendingVictimDoc({
+                        victimId: currentVictim.id,
+                        label: newFileLabel,
+                        file: newFileFile,
                       });
+
+                      setPendingDocs((prev) => [
+                        { id: idbId, label: newFileLabel, name: newFileFile.name, isPending: true },
+                        ...prev,
+                      ]);
 
                       setNewFileLabel('');
                       setNewFileFile(null);
                       setAddFileMode(false);
-
-                      // Recharge la liste des documents
-                      setLoadingFiles(true);
-                      try {
-                        const documents = await listVictimDocuments(currentVictim.id);
-                        setFiles(documents.map((doc) => ({ ...doc })));
-                      } catch (e) {
-                        console.log('Erreur lors du rechargement des documents:', e);
-                      } finally {
-                        setLoadingFiles(false);
-                      }
+                      await Swal.fire({
+                        icon: 'success',
+                        title: 'Document enregistré avec succès',
+                        text: 'Le document est conservé sur cet appareil. Pensez à le synchroniser dans Réglages dès que vous serez dans une zone couverte par Internet.',
+                        confirmButtonColor: '#901c67',
+                      });
 
                     } catch (err: any) {
-                      try {
-                        const idbId = await savePendingVictimDoc({
-                          victimId: currentVictim.id,
-                          label: newFileLabel,
-                          file: newFileFile,
-                        });
-                        setPendingDocs((prev) => [
-                          { id: idbId, label: newFileLabel, name: newFileFile.name, isPending: true },
-                          ...prev,
-                        ]);
-                        setNewFileLabel('');
-                        setNewFileFile(null);
-                        setAddFileMode(false);
-                        await Swal.fire({
-                          icon: 'warning',
-                          title: 'Document conservé hors ligne',
-                          text: 'L’envoi a échoué. Le document est gardé sur cet appareil et sera repris à la synchronisation.',
-                          confirmButtonColor: '#901c67',
-                        });
-                      } catch (cacheError: any) {
-                        await Swal.fire({
-                          icon: 'error',
-                          title: 'Enregistrement impossible',
-                          text: cacheError?.message || err.message || 'Erreur lors de l’upload',
-                        });
-                      }
+                      await Swal.fire({
+                        icon: 'error',
+                        title: 'Enregistrement impossible',
+                        text: err?.message || 'Impossible d’enregistrer le document sur cet appareil.',
+                      });
                     } finally {
                       setUploadingFile(false);
                     }

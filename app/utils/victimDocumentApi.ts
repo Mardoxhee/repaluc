@@ -11,6 +11,7 @@ export interface VictimDocument {
 }
 
 const getBaseUrl = () => (process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006').replace(/\/$/, '');
+export type VictimDocumentCategory = 'document' | 'medical' | 'consent' | 'proof' | 'signature';
 
 const readPayload = async (response: Response, action: string): Promise<any> => {
   const text = await response.text().catch(() => '');
@@ -47,9 +48,15 @@ export const listVictimDocuments = async (victimId: number): Promise<VictimDocum
   return normalizeVictimDocuments(await readPayload(response, 'Récupération des documents impossible'));
 };
 
-export const uploadVictimDocument = async (victimId: number, file: File, label: string): Promise<any> => {
+export const uploadVictimDocument = async (
+  victimId: number,
+  file: File,
+  label: string,
+  category: VictimDocumentCategory = 'document'
+): Promise<any> => {
   const formData = new FormData();
   formData.append('file', file);
+  formData.append('category', category);
   if (label.trim()) formData.append('label', label.trim());
 
   const response = await authenticatedFetch(`${getBaseUrl()}/document-victime/victime/${victimId}/upload`, {
