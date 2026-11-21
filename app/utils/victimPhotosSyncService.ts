@@ -3,6 +3,7 @@
 import { getAllPendingVictimPhotos, getPendingVictimPhotosToSyncForVictim, markVictimPhotoSynced, PendingVictimPhoto } from './victimPhotosCache';
 import { isOnline } from './victimsCache';
 import { authenticatedFetch, getAuthToken } from './authFetch';
+import type { SyncProgressCallback } from './syncProgress';
 
 let isSyncing = false;
 let syncInterval: NodeJS.Timeout | null = null;
@@ -100,7 +101,7 @@ const patchVictimPhoto = async (victimId: number, photoUrl: string): Promise<boo
     } catch {
       // ignore
     }
-    console.error('[VictimPhotosSync] PATCH failed', { victimId, status: resp.status, statusText: resp.statusText, bodyText });
+    console.warn('[VictimPhotosSync] PATCH failed', { victimId, status: resp.status, statusText: resp.statusText, bodyText });
   }
 
   return resp.ok;
@@ -168,7 +169,7 @@ export const syncPendingVictimPhotosForVictim = async (
         await markVictimPhotoSynced(item.id, remoteUrl);
         synced++;
       } catch (e) {
-        console.error('[VictimPhotosSync] Failed to sync photo (per victim)', {
+        console.warn('[VictimPhotosSync] Failed to sync photo (per victim)', {
           itemId: item.id,
           victimId: item.victimId,
           error: e,
@@ -233,7 +234,7 @@ const patchVictimAgentReparation = async (victimId: number, agentFullName: strin
     } catch {
       // ignore
     }
-    console.error('[VictimPhotosSync] PATCH agentReparation failed', {
+    console.warn('[VictimPhotosSync] PATCH agentReparation failed', {
       victimId,
       status: resp.status,
       statusText: resp.statusText,
@@ -244,7 +245,7 @@ const patchVictimAgentReparation = async (victimId: number, agentFullName: strin
   return resp.ok;
 };
 
-export const syncPendingVictimPhotos = async (): Promise<{ synced: number; failed: number; skipped: number }> => {
+export const syncPendingVictimPhotos = async (opts?: { onProgress?: SyncProgressCallback }): Promise<{ synced: number; failed: number; skipped: number }> => {
   if (isSyncing) {
     return { synced: 0, failed: 0, skipped: 0 };
   }
@@ -259,17 +260,18 @@ export const syncPendingVictimPhotos = async (): Promise<{ synced: number; faile
   let skipped = 0;
 
   try {
-    const pending: PendingVictimPhoto[] = await getAllPendingVictimPhotos();
+    const pending: PendingVictimPhoto[] = (await getAllPendingVictimPhotos()).filter((item) => item.synced !== true);
+    let processed = 0;
+    const reportProgress = (message?: string) => opts?.onProgress?.({ total: pending.length, processed, synced, failed, skipped, message });
+    reportProgress(pending.length ? 'Préparation des photos…' : 'Aucune photo à envoyer.');
 
     for (const item of pending) {
-      if (!getAuthToken()) break;
-      if (item.synced) {
-        skipped++;
-        continue;
-      }
+      if (!getAuthToken()) { reportProgress('Envoi interrompu : reconnectez-vous pour continuer.'); break; }
 
       if (!item.id) {
         failed++;
+        processed++;
+        reportProgress('Photo locale sans identifiant.');
         continue;
       }
 
@@ -278,6 +280,8 @@ export const syncPendingVictimPhotos = async (): Promise<{ synced: number; faile
 
         if (!remoteUrl) {
           failed++;
+          processed++;
+          reportProgress(`Le serveur n’a pas renvoyé de lien pour la photo ${processed}/${pending.length}.`);
           continue;
         }
 
@@ -285,6 +289,8 @@ export const syncPendingVictimPhotos = async (): Promise<{ synced: number; faile
 
         if (!ok) {
           failed++;
+          processed++;
+          reportProgress(`Le serveur a refusé l’association de la photo ${processed}/${pending.length}.`);
           continue;
         }
 
@@ -299,15 +305,21 @@ export const syncPendingVictimPhotos = async (): Promise<{ synced: number; faile
 
         await markVictimPhotoSynced(item.id, remoteUrl);
         synced++;
+        processed++;
+        reportProgress(`Photo ${processed}/${pending.length} synchronisée.`);
       } catch (e) {
-        console.error('[VictimPhotosSync] Failed to sync photo', {
+        console.warn('[VictimPhotosSync] Failed to sync photo', {
           itemId: item.id,
           victimId: item.victimId,
           error: e,
         });
         failed++;
+        processed++;
+        const message = e instanceof Error ? e.message : String(e);
+        reportProgress(`Blocage sur la photo ${processed}/${pending.length}: ${message}`);
       }
     }
+    if (processed < pending.length && getAuthToken()) reportProgress('Synchronisation interrompue avant la fin.');
   } finally {
     isSyncing = false;
   }

@@ -17,6 +17,8 @@ export interface PendingVictimDoc {
   synced: boolean;
   syncedAt?: number;
   remoteLien?: string;
+  lastSyncStatus?: number;
+  lastSyncError?: string;
 }
 
 export interface PendingVictimMediaSummary {
@@ -204,14 +206,37 @@ export const markVictimDocSynced = async (id: number, remoteLien: string): Promi
 
   if (!entry) return;
 
+  const { lastSyncStatus: _lastSyncStatus, lastSyncError: _lastSyncError, ...cleanEntry } = entry;
   const updated: PendingVictimDoc = {
-    ...entry,
+    ...cleanEntry,
     synced: true,
     syncedAt: Date.now(),
     remoteLien,
   };
 
   store.put(updated);
+
+  await new Promise<void>((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+};
+
+export const markVictimDocSyncFailed = async (
+  id: number,
+  status: number | undefined,
+  message: string
+): Promise<void> => {
+  const db = await openDB();
+  const tx = db.transaction([STORE_NAME], 'readwrite');
+  const store = tx.objectStore(STORE_NAME);
+  const request = store.get(id);
+
+  request.onsuccess = () => {
+    const entry = request.result as PendingVictimDoc | undefined;
+    if (!entry) return;
+    store.put({ ...entry, lastSyncStatus: status, lastSyncError: message });
+  };
 
   await new Promise<void>((resolve, reject) => {
     tx.oncomplete = () => resolve();

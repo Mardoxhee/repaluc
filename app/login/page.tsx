@@ -159,7 +159,6 @@ export default function LoginPage() {
       if (!data) {
         throw new Error('Réponse login invalide');
       }
-      if (data?.token) localStorage.setItem('token', data.token);
       setLoginData(data);
 
       setStep('2fa');

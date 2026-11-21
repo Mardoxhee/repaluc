@@ -60,6 +60,18 @@ const isDocumentDisplayRequest = (input: RequestInfo | URL, init: RequestInit): 
   }
 };
 
+const isInvalidSessionResponse = async (response: Response): Promise<boolean> => {
+  if (response.status === 401) return true;
+  if (response.status !== 403) return false;
+
+  try {
+    const body = await response.clone().text();
+    return /(?:invalid|expired|revoked|malformed|invalide|expiré|expire|révoqué|revoque).{0,40}(?:token|session|jwt)|(?:token|session|jwt).{0,40}(?:invalid|expired|revoked|malformed|invalide|expiré|expire|révoqué|revoque)/i.test(body);
+  } catch {
+    return false;
+  }
+};
+
 const clearAuthSession = () => {
   try {
     AUTH_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
@@ -95,8 +107,8 @@ export const authenticatedFetch = async (
     headers: withAuthHeaders(baseHeaders),
   });
 
-  if ((response.status === 401 || response.status === 403) && !isAuthRequest(input) && !isDocumentDisplayRequest(input, init)) {
-    // Toute réponse d'authentification invalide sur une route protégée invalide la session.
+  if (!isAuthRequest(input) && !isDocumentDisplayRequest(input, init) && await isInvalidSessionResponse(response)) {
+    // Un 403 d'habilitation ne signifie pas nécessairement que le token est invalide.
     clearAuthSession();
   }
 

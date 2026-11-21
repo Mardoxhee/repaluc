@@ -2,11 +2,12 @@
 
 import { authenticatedFetch, getAuthToken } from './authFetch';
 import { deleteDraft, deletePendingForm, getPendingForms, isOnline } from './planVieCache';
+import type { SyncProgressCallback } from './syncProgress';
 
 let isSyncing = false;
 let syncInterval: ReturnType<typeof setInterval> | null = null;
 
-export const syncPendingPlanVieForms = async (): Promise<{ synced: number; failed: number }> => {
+export const syncPendingPlanVieForms = async (opts?: { onProgress?: SyncProgressCallback }): Promise<{ synced: number; failed: number }> => {
   if (isSyncing || !isOnline() || !getAuthToken()) return { synced: 0, failed: 0 };
 
   isSyncing = true;
@@ -14,8 +15,11 @@ export const syncPendingPlanVieForms = async (): Promise<{ synced: number; faile
   let failed = 0;
   try {
     const pending = await getPendingForms();
+    let processed = 0;
+    const reportProgress = (message?: string) => opts?.onProgress?.({ total: pending.length, processed, synced, failed, skipped: 0, message });
+    reportProgress(pending.length ? 'Préparation des formulaires…' : 'Aucun formulaire à envoyer.');
     for (const form of pending) {
-      if (!getAuthToken()) break;
+      if (!getAuthToken()) { reportProgress('Envoi interrompu : reconnectez-vous pour continuer.'); break; }
       const questionResponse = Object.entries(form.formData || {}).map(([questionId, response]) => ({
         questionId: Number.parseInt(questionId, 10),
         reponse: Array.isArray(response) ? response.join(', ') : String(response ?? ''),
@@ -36,6 +40,9 @@ export const syncPendingPlanVieForms = async (): Promise<{ synced: number; faile
         });
         if (!response.ok) {
           failed++;
+          processed++;
+          const details = await response.clone().text().catch(() => '');
+          reportProgress(`Blocage sur le formulaire ${processed}/${pending.length}: HTTP ${response.status}${details ? ` — ${details}` : ''}`);
           continue;
         }
 
@@ -52,10 +59,15 @@ export const syncPendingPlanVieForms = async (): Promise<{ synced: number; faile
           // Le formulaire est déjà enregistré; le statut peut être repris séparément.
         }
         synced++;
+        processed++;
+        reportProgress(`Formulaire ${processed}/${pending.length} synchronisé.`);
       } catch {
         failed++;
+        processed++;
+        reportProgress(`Blocage sur le formulaire ${processed}/${pending.length}.`);
       }
     }
+    if (processed < pending.length && getAuthToken()) reportProgress('Synchronisation interrompue avant la fin.');
   } finally {
     isSyncing = false;
   }

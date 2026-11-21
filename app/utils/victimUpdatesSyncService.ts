@@ -2,6 +2,7 @@
 
 import { authenticatedFetch, getAuthToken } from '@/app/utils/authFetch';
 import { isOnline } from '@/app/utils/victimsCache';
+import type { SyncProgressCallback } from './syncProgress';
 import {
   deletePendingVictimUpdate,
   getAllPendingVictimUpdates,
@@ -28,7 +29,7 @@ const patchVictim = async (item: PendingVictimUpdate): Promise<boolean> => {
     } catch {
       // ignore
     }
-    console.error('[VictimUpdatesSync] PATCH failed', {
+    console.warn('[VictimUpdatesSync] PATCH failed', {
       victimId: item.victimId,
       status: response.status,
       statusText: response.statusText,
@@ -39,7 +40,7 @@ const patchVictim = async (item: PendingVictimUpdate): Promise<boolean> => {
   return response.ok;
 };
 
-export const syncPendingVictimUpdates = async (): Promise<{ synced: number; failed: number; skipped: number }> => {
+export const syncPendingVictimUpdates = async (opts?: { onProgress?: SyncProgressCallback }): Promise<{ synced: number; failed: number; skipped: number }> => {
   if (isSyncing) {
     return { synced: 0, failed: 0, skipped: 0 };
   }
@@ -55,11 +56,16 @@ export const syncPendingVictimUpdates = async (): Promise<{ synced: number; fail
 
   try {
     const pending = await getAllPendingVictimUpdates();
+    let processed = 0;
+    const reportProgress = (message?: string) => opts?.onProgress?.({ total: pending.length, processed, synced, failed, skipped, message });
+    reportProgress(pending.length ? 'Préparation des modifications…' : 'Aucune modification à envoyer.');
 
     for (const item of pending) {
-      if (!getAuthToken()) break;
+      if (!getAuthToken()) { reportProgress('Envoi interrompu : reconnectez-vous pour continuer.'); break; }
       if (!item.id) {
         skipped++;
+        processed++;
+        reportProgress('Modification locale sans identifiant.');
         continue;
       }
 
@@ -67,20 +73,28 @@ export const syncPendingVictimUpdates = async (): Promise<{ synced: number; fail
         const ok = await patchVictim(item);
         if (!ok) {
           failed++;
+          processed++;
+          reportProgress(`Le serveur a refusé la modification ${processed}/${pending.length}.`);
           continue;
         }
 
         await deletePendingVictimUpdate(item.id);
         synced++;
+        processed++;
+        reportProgress(`Modification ${processed}/${pending.length} synchronisée.`);
       } catch (error) {
-        console.error('[VictimUpdatesSync] Failed to sync victim update', {
+        console.warn('[VictimUpdatesSync] Failed to sync victim update', {
           itemId: item.id,
           victimId: item.victimId,
           error,
         });
         failed++;
+        processed++;
+        const message = error instanceof Error ? error.message : String(error);
+        reportProgress(`Blocage sur la modification ${processed}/${pending.length}: ${message}`);
       }
     }
+    if (processed < pending.length && getAuthToken()) reportProgress('Synchronisation interrompue avant la fin.');
   } finally {
     isSyncing = false;
   }

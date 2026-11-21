@@ -13,13 +13,24 @@ export interface VictimDocument {
 const getBaseUrl = () => (process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006').replace(/\/$/, '');
 export type VictimDocumentCategory = 'document' | 'medical' | 'consent' | 'proof' | 'signature';
 
+export class VictimDocumentApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'VictimDocumentApiError';
+    this.status = status;
+  }
+}
+
 const readPayload = async (response: Response, action: string): Promise<any> => {
   const text = await response.text().catch(() => '');
   let payload: any = null;
   try { payload = text ? JSON.parse(text) : null; } catch { payload = null; }
   if (!response.ok) {
     const message = payload?.message || payload?.error || text;
-    throw new Error(`${action} (${response.status})${message ? `: ${message}` : ''}`);
+    const detail = Array.isArray(message) ? message.join('; ') : message;
+    throw new VictimDocumentApiError(`${action} (${response.status})${detail ? `: ${detail}` : ''}`, response.status);
   }
   return payload;
 };

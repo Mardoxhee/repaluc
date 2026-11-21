@@ -3,6 +3,7 @@ import { getAllPendingContracts, deletePendingContract, PendingContract } from '
 import { isOnline } from './victimsCache';
 import { authenticatedFetch, getAuthToken } from './authFetch';
 import { getConnectedAgentFullName } from './currentUser';
+import type { SyncProgressCallback } from './syncProgress';
 
 let isSyncing = false;
 let syncInterval: NodeJS.Timeout | null = null;
@@ -104,7 +105,10 @@ const buildPendingPayload = (
     };
 };
 
-export const syncPendingContracts = async (opts?: { targetType?: 'contrat' | 'consentement-mpu' }): Promise<{ synced: number; failed: number; skipped: number }> => {
+export const syncPendingContracts = async (opts?: {
+    targetType?: 'contrat' | 'consentement-mpu';
+    onProgress?: SyncProgressCallback;
+}): Promise<{ synced: number; failed: number; skipped: number }> => {
     if (isSyncing) {
         console.log('[ContractsSyncService] Synchronisation déjà en cours...');
         return { synced: 0, failed: 0, skipped: 0 };
@@ -125,6 +129,9 @@ export const syncPendingContracts = async (opts?: { targetType?: 'contrat' | 'co
         const pending = opts?.targetType
             ? allPending.filter((item) => getPendingTargetType(item) === opts.targetType)
             : allPending;
+        let processed = 0;
+        const reportProgress = (message?: string) => opts?.onProgress?.({ total: pending.length, processed, synced, failed, skipped, message });
+        reportProgress(pending.length ? 'Préparation des contrats et actes…' : 'Aucun contrat ou acte à envoyer.');
 
         if (pending.length === 0) {
             console.log('[ContractsSyncService] Aucun document en attente');
@@ -134,7 +141,7 @@ export const syncPendingContracts = async (opts?: { targetType?: 'contrat' | 'co
         console.log(`[ContractsSyncService] ${pending.length} document(s) en attente de synchronisation`);
 
         for (const item of pending) {
-            if (!getAuthToken()) break;
+            if (!getAuthToken()) { reportProgress('Envoi interrompu : reconnectez-vous pour continuer.'); break; }
             try {
                 const targetType = getPendingTargetType(item);
                 const isUpdate = item.action === 'update' && Number.isFinite(item.targetId);
@@ -147,6 +154,8 @@ export const syncPendingContracts = async (opts?: { targetType?: 'contrat' | 'co
                     console.log(`[ContractsSyncService] Document déjà existant pour victime ${item.victimId}, suppression de la file d'attente`);
                     await deletePendingContract(item.id as number);
                     skipped++;
+                    processed++;
+                    reportProgress(`Élément ${processed}/${pending.length} déjà présent sur le serveur.`);
                     continue;
                 }
 
@@ -184,20 +193,31 @@ export const syncPendingContracts = async (opts?: { targetType?: 'contrat' | 'co
                         console.log(`[ContractsSyncService] Document déjà existant (erreur API), suppression de la file`);
                         await deletePendingContract(item.id as number);
                         skipped++;
+                        processed++;
+                        reportProgress(`Élément ${processed}/${pending.length} déjà présent sur le serveur.`);
                     } else {
                         failed++;
+                        processed++;
+                        reportProgress(`Blocage sur l’élément ${processed}/${pending.length}: ${errorText || `HTTP ${resp.status}`}`);
                     }
                     continue;
                 }
 
                 await deletePendingContract(item.id as number);
                 synced++;
+                processed++;
+                reportProgress(`Élément ${processed}/${pending.length} synchronisé.`);
                 console.log(`[ContractsSyncService] ✓ ${label} synchronisé pour victime ${item.victimId}`);
             } catch (err) {
                 console.log('[ContractsSyncService] Erreur lors de la synchro d\'un document:', err);
                 failed++;
+                processed++;
+                const message = err instanceof Error ? err.message : String(err);
+                reportProgress(`Blocage sur l’élément ${processed}/${pending.length}: ${message}`);
             }
         }
+
+        if (processed < pending.length && getAuthToken()) reportProgress('Synchronisation interrompue avant la fin.');
 
         console.log(`[ContractsSyncService] Synchronisation terminée: ${synced} créé(s), ${skipped} déjà existant(s), ${failed} échec(s)`);
     } catch (err) {

@@ -1,9 +1,10 @@
 'use client';
 
-import { getAllPendingVictimDocs, getPendingVictimDocsToSyncForVictim, markVictimDocSynced, PendingVictimDoc } from './victimDocsCache';
+import { getAllPendingVictimDocs, getPendingVictimDocsToSyncForVictim, markVictimDocSynced, markVictimDocSyncFailed, PendingVictimDoc } from './victimDocsCache';
 import { isOnline } from './victimsCache';
-import { uploadVictimDocument } from './victimDocumentApi';
+import { uploadVictimDocument, VictimDocumentApiError } from './victimDocumentApi';
 import { getAuthToken } from './authFetch';
+import type { SyncProgressCallback } from './syncProgress';
 
 let isSyncing = false;
 let syncInterval: NodeJS.Timeout | null = null;
@@ -17,7 +18,7 @@ const uploadDoc = async (doc: PendingVictimDoc): Promise<string> => {
 
 export const syncPendingVictimDocsForVictim = async (
   victimId: number,
-  opts?: { limit?: number }
+  opts?: { limit?: number; retryRejected?: boolean; onProgress?: SyncProgressCallback }
 ): Promise<{ synced: number; failed: number; skipped: number }> => {
   if (isSyncing) return { synced: 0, failed: 0, skipped: 0 };
   if (!isOnline() || !getAuthToken()) return { synced: 0, failed: 0, skipped: 0 };
@@ -32,15 +33,28 @@ export const syncPendingVictimDocsForVictim = async (
 
     const limit = typeof opts?.limit === 'number' && opts.limit > 0 ? opts.limit : undefined;
     const toSync = typeof limit === 'number' ? filtered.slice(0, limit) : filtered;
+    let processed = 0;
+    const reportProgress = (message?: string) => opts?.onProgress?.({ total: toSync.length, processed, synced, failed, skipped, message });
+    reportProgress(toSync.length ? 'Préparation des documents…' : 'Aucun document à envoyer.');
 
     for (const item of toSync) {
-      if (!getAuthToken()) break;
+      if (!getAuthToken()) { reportProgress('Envoi interrompu : reconnectez-vous pour continuer.'); break; }
+      if (!opts?.retryRejected && item.lastSyncStatus && item.lastSyncStatus >= 400 && item.lastSyncStatus < 500) {
+        skipped++;
+        processed++;
+        reportProgress(`Élément ${processed}/${toSync.length} en attente d’une nouvelle tentative manuelle.`);
+        continue;
+      }
       if (item.synced) {
         skipped++;
+        processed++;
+        reportProgress();
         continue;
       }
       if (!item.id) {
         failed++;
+        processed++;
+        reportProgress('Document local sans identifiant.');
         continue;
       }
 
@@ -48,11 +62,19 @@ export const syncPendingVictimDocsForVictim = async (
         const reference = await uploadDoc(item);
         await markVictimDocSynced(item.id, reference);
         synced++;
+        processed++;
+        reportProgress(`Document ${processed}/${toSync.length} synchronisé.`);
       } catch (e) {
-        console.error('[VictimDocsSync] Failed to sync doc (per victim)', { itemId: item.id, victimId: item.victimId, error: e });
+        const status = e instanceof VictimDocumentApiError ? e.status : undefined;
+        const message = e instanceof Error ? e.message : String(e);
+        await markVictimDocSyncFailed(item.id, status, message).catch(() => undefined);
+        console.warn('[VictimDocsSync] Document conservé en attente', { itemId: item.id, victimId: item.victimId, status, message });
         failed++;
+        processed++;
+        reportProgress(`Blocage sur le document ${item.fileName}: ${message}`);
       }
     }
+    if (processed < toSync.length && getAuthToken()) reportProgress('Synchronisation interrompue avant la fin.');
   } finally {
     isSyncing = false;
   }
@@ -60,7 +82,9 @@ export const syncPendingVictimDocsForVictim = async (
   return { synced, failed, skipped };
 };
 
-export const syncPendingVictimDocs = async (): Promise<{ synced: number; failed: number; skipped: number }> => {
+export const syncPendingVictimDocs = async (
+  opts?: { retryRejected?: boolean; onProgress?: SyncProgressCallback }
+): Promise<{ synced: number; failed: number; skipped: number }> => {
   if (isSyncing) return { synced: 0, failed: 0, skipped: 0 };
   if (!isOnline() || !getAuthToken()) return { synced: 0, failed: 0, skipped: 0 };
 
@@ -71,15 +95,27 @@ export const syncPendingVictimDocs = async (): Promise<{ synced: number; failed:
 
   try {
     const pending = await getAllPendingVictimDocs();
+    const toSync = pending.filter((item) => item.synced !== true);
+    let processed = 0;
+    const reportProgress = (message?: string) => opts?.onProgress?.({ total: toSync.length, processed, synced, failed, skipped, message });
+    reportProgress(toSync.length ? 'Préparation des documents…' : 'Aucun document à envoyer.');
 
-    for (const item of pending) {
-      if (!getAuthToken()) break;
+    for (const item of toSync) {
+      if (!getAuthToken()) { reportProgress('Envoi interrompu : reconnectez-vous pour continuer.'); break; }
+      if (!opts?.retryRejected && item.lastSyncStatus && item.lastSyncStatus >= 400 && item.lastSyncStatus < 500) {
+        skipped++;
+        processed++;
+        reportProgress(`Élément ${processed}/${toSync.length} en attente d’une nouvelle tentative manuelle.`);
+        continue;
+      }
       if (item.synced) {
         skipped++;
         continue;
       }
       if (!item.id) {
         failed++;
+        processed++;
+        reportProgress('Document local sans identifiant.');
         continue;
       }
 
@@ -87,11 +123,19 @@ export const syncPendingVictimDocs = async (): Promise<{ synced: number; failed:
         const reference = await uploadDoc(item);
         await markVictimDocSynced(item.id, reference);
         synced++;
+        processed++;
+        reportProgress(`Document ${processed}/${toSync.length} synchronisé.`);
       } catch (e) {
-        console.error('[VictimDocsSync] Failed to sync doc', { itemId: item.id, victimId: item.victimId, error: e });
+        const status = e instanceof VictimDocumentApiError ? e.status : undefined;
+        const message = e instanceof Error ? e.message : String(e);
+        await markVictimDocSyncFailed(item.id, status, message).catch(() => undefined);
+        console.warn('[VictimDocsSync] Document conservé en attente', { itemId: item.id, victimId: item.victimId, status, message });
         failed++;
+        processed++;
+        reportProgress(`Blocage sur le document ${item.fileName}: ${message}`);
       }
     }
+    if (processed < toSync.length && getAuthToken()) reportProgress('Synchronisation interrompue avant la fin.');
   } finally {
     isSyncing = false;
   }

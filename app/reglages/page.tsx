@@ -28,6 +28,7 @@ import { authenticatedFetch, getAuthToken } from '@/app/utils/authFetch';
 import { getAllPendingVictimUpdates } from '@/app/utils/victimUpdatesCache';
 import { syncPendingVictimUpdates } from '@/app/utils/victimUpdatesSyncService';
 import { syncPendingPlanVieForms } from '@/app/utils/planVieSyncService';
+import type { SyncProgress } from '@/app/utils/syncProgress';
 import {
   refreshVictimsCacheInBackground,
   type VictimsCacheSyncProgress
@@ -59,6 +60,13 @@ type PendingVictimRow = {
 type PendingVictimCacheInfo = {
   docsPending: number;
   photosPending: number;
+};
+
+type QueueSyncProgress = SyncProgress & {
+  type: string;
+  label: string;
+  status: 'running' | 'done' | 'blocked';
+  blockage?: string;
 };
 
 const ReglagesPage = () => {
@@ -95,8 +103,10 @@ const ReglagesPage = () => {
   const [pendingContracts, setPendingContracts] = useState<PendingContract[]>([]);
   const [loadingContracts, setLoadingContracts] = useState(false);
   const [contractsSyncing, setContractsSyncing] = useState(false);
+  const [contractsSyncProgress, setContractsSyncProgress] = useState<SyncProgress | null>(null);
   const [syncingQueueType, setSyncingQueueType] = useState<string | null>(null);
   const [queueCounts, setQueueCounts] = useState({ updates: 0, photos: 0, documents: 0, contracts: 0, consents: 0 });
+  const [queueSyncProgress, setQueueSyncProgress] = useState<QueueSyncProgress | null>(null);
   const [contractsSyncResult, setContractsSyncResult] = useState<{
     total: number;
     synced: number;
@@ -337,17 +347,92 @@ const ReglagesPage = () => {
       return;
     }
 
+    const labels: Record<typeof type, string> = {
+      updates: 'Informations et détails du camp',
+      photos: 'Photos',
+      documents: 'Pièces d’identité et documents',
+      contracts: 'Contrats',
+      consents: 'Actes de consentement',
+      forms: 'Formulaires et plans de vie',
+    };
+    const counts: Record<typeof type, number> = {
+      ...queueCounts,
+      forms: pendingForms.length,
+    };
+    const label = labels[type];
+    const onProgress = (progress: SyncProgress) => {
+      setQueueSyncProgress((previous) => ({
+        ...progress,
+        type,
+        label,
+        status: 'running',
+        blockage: progress.failed > (previous?.type === type ? previous.failed : 0)
+          ? (progress.message || 'Un élément a été refusé.')
+          : previous?.type === type ? previous.blockage : undefined,
+      }));
+    };
+
     setSyncingQueueType(type);
+    setQueueSyncProgress({
+      type,
+      label,
+      total: counts[type],
+      processed: 0,
+      synced: 0,
+      failed: 0,
+      skipped: 0,
+      status: 'running',
+      message: counts[type] ? 'Démarrage de la synchronisation…' : 'Aucun élément en attente.',
+    });
     try {
-      if (type === 'updates') await syncPendingVictimUpdates();
-      if (type === 'photos') await syncPendingVictimPhotos();
-      if (type === 'documents') await syncPendingVictimDocs();
-      if (type === 'contracts') await syncPendingContracts({ targetType: 'contrat' });
-      if (type === 'consents') await syncPendingContracts({ targetType: 'consentement-mpu' });
-      if (type === 'forms') await syncPendingPlanVieForms();
+      let result: { synced: number; failed: number; skipped: number };
+      if (type === 'updates') result = await syncPendingVictimUpdates({ onProgress });
+      else if (type === 'photos') result = await syncPendingVictimPhotos({ onProgress });
+      else if (type === 'documents') result = await syncPendingVictimDocs({ retryRejected: true, onProgress });
+      else if (type === 'contracts') result = await syncPendingContracts({ targetType: 'contrat', onProgress });
+      else if (type === 'consents') result = await syncPendingContracts({ targetType: 'consentement-mpu', onProgress });
+      else {
+        const formsResult = await syncPendingPlanVieForms({ onProgress });
+        result = { ...formsResult, skipped: 0 };
+      }
+
+      setQueueSyncProgress((previous) => {
+        const progress = previous?.type === type ? previous : {
+          type, label, total: counts[type], processed: 0, synced: 0, failed: 0, skipped: 0, status: 'running' as const,
+        };
+        const processed = result.synced + result.failed + result.skipped;
+        const alreadyInProgress = counts[type] > 0 && processed === 0;
+        const blocked = result.failed > 0 || alreadyInProgress;
+        return {
+          ...progress,
+          total: Math.max(progress.total, processed),
+          processed: Math.max(progress.processed, processed),
+          ...result,
+          status: blocked ? 'blocked' : 'done',
+          message: blocked
+            ? progress.blockage || (alreadyInProgress
+              ? 'Aucun élément n’a été traité. Une autre synchronisation est peut-être déjà en cours; réessayez dans quelques instants.'
+              : progress.message || `${result.failed} élément(s) n’ont pas pu être synchronisé(s).`)
+            : result.synced > 0
+              ? `${result.synced} élément(s) synchronisé(s) avec succès.`
+              : result.skipped > 0
+                ? `${result.skipped} élément(s) restent en attente d’une nouvelle tentative.`
+                : progress.message || 'Aucun élément traité.',
+        };
+      });
 
       await Promise.all([loadQueueCounts(), loadPendingForms(), loadPendingContracts()]);
       await loadPendingVictimMedia(pendingVictimPage);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setQueueSyncProgress((previous) => ({
+        ...(previous?.type === type ? previous : { total: counts[type], processed: 0, synced: 0, failed: 0, skipped: 0 }),
+        type,
+        label,
+        status: 'blocked',
+        message: `Synchronisation bloquée : ${message}`,
+        blockage: message,
+      }));
     } finally {
       setSyncingQueueType(null);
     }
@@ -475,7 +560,7 @@ const ReglagesPage = () => {
     try {
       await Promise.allSettled([
         syncPendingVictimPhotosForVictim(victimId),
-        syncPendingVictimDocsForVictim(victimId),
+        syncPendingVictimDocsForVictim(victimId, { retryRejected: true }),
       ]);
     } finally {
       await loadPendingVictimMedia(pendingVictimPage);
@@ -522,7 +607,7 @@ const ReglagesPage = () => {
         setSyncingVictimId(victimId);
         await Promise.allSettled([
           syncPendingVictimPhotosForVictim(victimId),
-          syncPendingVictimDocsForVictim(victimId),
+          syncPendingVictimDocsForVictim(victimId, { retryRejected: true }),
         ]);
         await loadPendingVictimMedia(pendingVictimPage);
       }
@@ -747,10 +832,11 @@ const ReglagesPage = () => {
 
     setContractsSyncing(true);
     setContractsSyncResult(null);
+    setContractsSyncProgress({ total: pendingContracts.length, processed: 0, synced: 0, failed: 0, skipped: 0, message: 'Démarrage de la resoumission…' });
 
     try {
       const total = pendingContracts.length;
-      const syncResult = await syncPendingContracts();
+      const syncResult = await syncPendingContracts({ onProgress: setContractsSyncProgress });
       setContractsSyncResult({ total, ...syncResult });
       await loadPendingContracts();
       await loadCacheInventory();
@@ -1018,6 +1104,43 @@ const ReglagesPage = () => {
                   </div>
                 ))}
               </div>
+              {queueSyncProgress && (
+                <div
+                  className={`mt-4 rounded-lg border p-4 ${queueSyncProgress.status === 'blocked' ? 'border-amber-300 bg-amber-50' : queueSyncProgress.status === 'done' ? 'border-green-200 bg-green-50' : 'border-blue-200 bg-blue-50'}`}
+                  role={queueSyncProgress.status === 'blocked' ? 'alert' : 'status'}
+                  aria-live="polite"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="font-semibold text-sm text-gray-900">
+                      {queueSyncProgress.status === 'running'
+                        ? `Synchronisation : ${queueSyncProgress.label}`
+                        : queueSyncProgress.status === 'blocked'
+                          ? `Blocage : ${queueSyncProgress.label}`
+                          : `Synchronisation terminée : ${queueSyncProgress.label}`}
+                    </div>
+                    <div className="text-xs font-medium text-gray-700">
+                      {queueSyncProgress.processed} / {queueSyncProgress.total} traité(s)
+                    </div>
+                  </div>
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/80" role="progressbar" aria-valuemin={0} aria-valuemax={queueSyncProgress.total || 1} aria-valuenow={queueSyncProgress.processed}>
+                    <div
+                      className={`h-full transition-all duration-300 ${queueSyncProgress.status === 'blocked' ? 'bg-amber-500' : queueSyncProgress.status === 'done' ? 'bg-green-600' : 'bg-blue-600'}`}
+                      style={{ width: `${queueSyncProgress.total ? Math.min(100, Math.round((queueSyncProgress.processed / queueSyncProgress.total) * 100)) : queueSyncProgress.status === 'running' ? 8 : 100}%` }}
+                    />
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-700">
+                    <span>{queueSyncProgress.synced} synchronisé(s)</span>
+                    <span>{queueSyncProgress.failed} blocage(s)</span>
+                    <span>{queueSyncProgress.skipped} en attente / ignoré(s)</span>
+                  </div>
+                  {queueSyncProgress.message && (
+                    <p className={`mt-2 text-sm ${queueSyncProgress.status === 'blocked' ? 'text-amber-900' : 'text-gray-700'}`}>
+                      {queueSyncProgress.message}
+                      {queueSyncProgress.status === 'blocked' && ' Les éléments refusés restent dans la file; corrigez le problème puis relancez la synchronisation.'}
+                    </p>
+                  )}
+                </div>
+              )}
             </section>
 
             {/* Actions Bar */}
@@ -1389,6 +1512,21 @@ const ReglagesPage = () => {
                       {contractsSyncResult.failed > 0 ? ` · ${contractsSyncResult.failed} échec(s)` : ''}
                     </div>
                   </div>
+                </div>
+              )}
+              {contractsSyncProgress && (
+                <div className={`mt-4 rounded-lg border p-4 ${contractsSyncProgress.failed > 0 ? 'border-amber-300 bg-amber-50' : 'border-blue-200 bg-blue-50'}`} role={contractsSyncProgress.failed > 0 ? 'alert' : 'status'} aria-live="polite">
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <strong>{contractsSyncing ? 'Resoumission des contrats et actes…' : 'Évolution de la synchronisation'}</strong>
+                    <span>{contractsSyncProgress.processed} / {contractsSyncProgress.total}</span>
+                  </div>
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-white">
+                    <div className={`h-full transition-all ${contractsSyncProgress.failed > 0 ? 'bg-amber-500' : 'bg-blue-600'}`} style={{ width: `${contractsSyncProgress.total ? Math.min(100, Math.round(contractsSyncProgress.processed / contractsSyncProgress.total * 100)) : 100}%` }} />
+                  </div>
+                  <p className="mt-2 text-sm text-gray-700">
+                    {contractsSyncProgress.synced} synchronisé(s) · {contractsSyncProgress.failed} blocage(s) · {contractsSyncProgress.skipped} déjà présent(s)
+                  </p>
+                  {contractsSyncProgress.message && <p className={`mt-1 text-sm ${contractsSyncProgress.failed > 0 ? 'text-amber-900' : 'text-gray-700'}`}>{contractsSyncProgress.message}{contractsSyncProgress.failed > 0 ? ' Les éléments refusés restent dans la file et peuvent être relancés après correction.' : ''}</p>}
                 </div>
               )}
             </div>
