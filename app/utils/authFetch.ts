@@ -47,6 +47,19 @@ const isAuthRequest = (input: RequestInfo | URL): boolean => {
   return url.includes('/auth/login') || url.includes('/auth/verify-token');
 };
 
+const isDocumentDisplayRequest = (input: RequestInfo | URL, init: RequestInit): boolean => {
+  const method = (init.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
+  if (method !== 'GET') return false;
+
+  try {
+    const url = new URL(getRequestUrl(input), typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+    return /\/document-victime\/\d+\/(download-url|content)\/?$/i.test(url.pathname)
+      || /\/minio\/files\/[^/]+\/?$/i.test(url.pathname);
+  } catch {
+    return false;
+  }
+};
+
 const clearAuthSession = () => {
   try {
     AUTH_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
@@ -82,7 +95,7 @@ export const authenticatedFetch = async (
     headers: withAuthHeaders(baseHeaders),
   });
 
-  if ((response.status === 401 || response.status === 403) && !isAuthRequest(input)) {
+  if ((response.status === 401 || response.status === 403) && !isAuthRequest(input) && !isDocumentDisplayRequest(input, init)) {
     // Toute réponse d'authentification invalide sur une route protégée invalide la session.
     clearAuthSession();
   }
