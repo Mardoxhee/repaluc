@@ -1,6 +1,9 @@
 "use client";
 
 import { rdcProvinces } from '../constants/provinces';
+import { healthZonesByProvince } from '../constants/healthZonesByProvince';
+import { allBodyParts, bodyPartGroups } from '../constants/bodyParts';
+import { spreadsheetPartners } from '../constants/spreadsheetPartners';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ChevronLeft,
@@ -16,7 +19,7 @@ import { Modal, ModalBody } from 'flowbite-react';
 import Swal from 'sweetalert2';
 import { pecmuRequest, PecmuApiError, statusLabels } from '../services/pecmuWorkflowApi';
 import { getVictimsFromCache, isOnline } from '../../utils/victimsCache';
-import { normalizeText } from '../utils/mentionStats';
+import { normalizeApiList, normalizeText } from '../utils/mentionStats';
 import {
   createFichePecmu,
   listActesMedicauxByFiche,
@@ -57,6 +60,11 @@ type Victim = {
   variablesSpecifiques?: Record<string, string | null | undefined>;
   [key: string]: any;
 };
+
+type CarePartner = { id: number; nom?: string; structure?: string; province?: string; territoire?: string; zoneSante?: string; healthZone?: string };
+const normalizePartnerText = (value: unknown) => normalizeText(value).replace(/[^a-z0-9]/g, '');
+const partnerLookupKey = (partner: CarePartner) => [partner.nom || partner.structure, partner.province, partner.territoire, partner.zoneSante || partner.healthZone]
+  .map(normalizePartnerText).join('|');
 
 type PageMeta = {
   page: number;
@@ -152,8 +160,8 @@ const f2Sections: Array<{ title: string; fields: FormField[] }> = [
   {
     title: 'Structure de prise en charge',
     fields: [
-      { key: 'structureNom', label: 'Nom de la structure qui prend en charge' },
       { key: 'zoneSante', label: 'Zone de santé' },
+      { key: 'structureNom', label: 'Nom de la structure qui prend en charge', type: 'select', required: true },
       { key: 'aireSante', label: 'Aire de santé' },
       { key: 'adresseStructure', label: 'Adresse de la structure où elle est suivie', type: 'textarea' },
       { key: 'contactMedecin', label: 'Contact du médecin ou infirmier' },
@@ -359,6 +367,12 @@ const PecmuModulePage: React.FC = () => {
   const [loadingVictimAlerts, setLoadingVictimAlerts] = useState(false);
   const [showVictimAlerts, setShowVictimAlerts] = useState(false);
   const [alertValues, setAlertValues] = useState<Record<string, string>>(() => buildF2Values(null));
+  const [carePartners, setCarePartners] = useState<CarePartner[]>(() => spreadsheetPartners.map((partner, index) => ({ ...partner, id: -(index + 1) })));
+  const [loadingCarePartners, setLoadingCarePartners] = useState(false);
+  const [incidentDateMode, setIncidentDateMode] = useState<'date' | 'period'>('date');
+  const [incidentDate, setIncidentDate] = useState('');
+  const [incidentStartDate, setIncidentStartDate] = useState('');
+  const [incidentEndDate, setIncidentEndDate] = useState('');
   const [submittingAlert, setSubmittingAlert] = useState(false);
   const [otherViolation, setOtherViolation] = useState(false);
   const [selectedViolations, setSelectedViolations] = useState<string[]>([]);
@@ -382,6 +396,27 @@ const PecmuModulePage: React.FC = () => {
     setAlerts(readStorage<PecmuAlert[]>(ALERTS_STORAGE_KEY, []));
     setMedicalActs(readStorage<MedicalAct[]>(ACTS_STORAGE_KEY, []));
   }, []);
+
+  useEffect(() => {
+    if (!showAlertModal) return;
+    let active = true;
+    setLoadingCarePartners(true);
+    void pecmuRequest('/partenaires').then(result => {
+      if (!active) return;
+      const merged = normalizeApiList(result) as CarePartner[];
+      const known = new Set(merged.map(partnerLookupKey));
+      spreadsheetPartners.forEach((partner, index) => {
+        const fallback: CarePartner = { ...partner, id: -(index + 1) };
+        if (!known.has(partnerLookupKey(fallback))) merged.push(fallback);
+      });
+      setCarePartners(merged);
+    }).catch(() => {
+      if (active) setCarePartners(spreadsheetPartners.map((partner, index) => ({ ...partner, id: -(index + 1) })));
+    }).finally(() => {
+      if (active) setLoadingCarePartners(false);
+    });
+    return () => { active = false; };
+  }, [showAlertModal]);
 
   const loadVictims = useCallback(async () => {
     setLoadingVictims(true);
@@ -552,6 +587,15 @@ const PecmuModulePage: React.FC = () => {
     setQuery('');
   }, []);
 
+  const hydrateIncidentDates = (value?: string) => {
+    const dates = String(value || '').match(/\d{4}-\d{2}-\d{2}/g) || [];
+    if (dates.length >= 2) {
+      setIncidentDateMode('period'); setIncidentStartDate(dates[0] || ''); setIncidentEndDate(dates[1] || ''); setIncidentDate('');
+    } else {
+      setIncidentDateMode('date'); setIncidentDate(dates[0] || ''); setIncidentStartDate(''); setIncidentEndDate('');
+    }
+  };
+
   const openAlertModal = (victim?: Victim | null) => {
     const selected = victim || selectedVictim;
     const linked = selected?.masterVictimId ? ({
@@ -568,6 +612,7 @@ const PecmuModulePage: React.FC = () => {
     setCustomViolation(violations.custom);
     setOtherViolation(violations.other);
     setAlertValues(values);
+    hydrateIncidentDates(values.periodeIncident);
     setShowAlertModal(true);
   };
 
@@ -583,6 +628,7 @@ const PecmuModulePage: React.FC = () => {
     setCustomViolation(violations.custom);
     setOtherViolation(violations.other);
     setAlertValues(previous => ({ ...previous, ...values }));
+    hydrateIncidentDates(values.periodeIncident);
     setLoadingVictimAlerts(true);
     try { setExistingVictimAlerts(await listFichesPecmuByVictim(fetcher, victim.id)); }
     catch (error: any) { setListError(error?.message || 'Impossible de charger les alertes précédentes.'); }
@@ -644,10 +690,24 @@ const PecmuModulePage: React.FC = () => {
       return;
     }
 
+    if (incidentDateMode === 'date' && !incidentDate) {
+      await Swal.fire({ icon: 'warning', title: 'Date des faits manquante', text: 'Sélectionnez la date des faits.' });
+      return;
+    }
+    if (incidentDateMode === 'period' && (!incidentStartDate || !incidentEndDate)) {
+      await Swal.fire({ icon: 'warning', title: 'Période incomplète', text: 'Sélectionnez les deux dates de la période des faits.' });
+      return;
+    }
+    if (incidentDateMode === 'period' && incidentEndDate < incidentStartDate) {
+      await Swal.fire({ icon: 'warning', title: 'Période invalide', text: 'La fin de période doit être égale ou postérieure au début.' });
+      return;
+    }
+
     setSubmittingAlert(true);
     try {
       const violationType = [...selectedViolations, ...(otherViolation && customViolation.trim() ? [customViolation.trim()] : [])].join(' ; ');
-      const created = await createFichePecmu(fetcher, { ...alertValues, typeViolation: violationType }, alertMasterVictim?.id);
+      const incidentPeriod = incidentDateMode === 'date' ? incidentDate : `${incidentStartDate} au ${incidentEndDate}`;
+      const created = await createFichePecmu(fetcher, { ...alertValues, periodeIncident: incidentPeriod, typeViolation: violationType }, alertMasterVictim?.id);
       setShowAlertModal(false);
       if (created.id) setOpenDossierId(created.id);
       await loadVictims();
@@ -677,6 +737,59 @@ const PecmuModulePage: React.FC = () => {
     const options = field.key === 'typeViolation' ? violationOptions : field.options;
     const value = alertValues[field.key] || '';
     const update = (nextValue: string) => setAlertValues((prev) => ({ ...prev, [field.key]: nextValue }));
+
+    if (field.key === 'periodeIncident') {
+      return <div key={field.key} className="space-y-2">
+        <span className="block text-xs font-bold uppercase tracking-wide text-slate-600">Date ou période des faits</span>
+        <div className="mt-2 inline-flex rounded-md border border-slate-300 bg-slate-50 p-1" role="group" aria-label="Type de date des faits">
+          <button type="button" aria-pressed={incidentDateMode === 'date'} onClick={() => setIncidentDateMode('date')} className={`rounded px-3 py-1.5 text-sm font-medium ${incidentDateMode === 'date' ? 'bg-white text-primary shadow-sm' : 'text-slate-600'}`}>Une date</button>
+          <button type="button" aria-pressed={incidentDateMode === 'period'} onClick={() => setIncidentDateMode('period')} className={`rounded px-3 py-1.5 text-sm font-medium ${incidentDateMode === 'period' ? 'bg-white text-primary shadow-sm' : 'text-slate-600'}`}>Une période</button>
+        </div>
+        {incidentDateMode === 'date' ? <label className="block text-sm text-slate-700"><span className="sr-only">Date des faits</span><input required type="date" value={incidentDate} onChange={event => setIncidentDate(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary-500" /></label> : <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="block text-sm text-slate-700"><span className="mb-1 block">Du</span><input required type="date" value={incidentStartDate} max={incidentEndDate || undefined} onChange={event => setIncidentStartDate(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary-500" /></label>
+          <label className="block text-sm text-slate-700"><span className="mb-1 block">Au</span><input required type="date" value={incidentEndDate} min={incidentStartDate || undefined} onChange={event => setIncidentEndDate(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary-500" /></label>
+        </div>}
+      </div>;
+    }
+
+    if (field.key === 'structureNom') {
+      const partnersForLocation = alertValues.province && alertValues.zoneSante ? carePartners.filter(partner =>
+        normalizePartnerText(partner.province) === normalizePartnerText(alertValues.province) &&
+        normalizePartnerText(partner.zoneSante || partner.healthZone) === normalizePartnerText(alertValues.zoneSante)
+      ) : [];
+      const selected = partnersForLocation.find(partner => (partner.nom || partner.structure || '') === value);
+      const placeholder = !alertValues.province ? 'Sélectionner d’abord une province' : !alertValues.zoneSante ? 'Sélectionner d’abord une zone de santé' : 'Sélectionner une structure partenaire';
+      return <label key={field.key} className="block"><span className="text-xs font-bold uppercase tracking-wide text-slate-600">{field.label} *</span><select required disabled={!alertValues.province || !alertValues.zoneSante} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary-500 disabled:bg-slate-50" value={value} onChange={event => update(event.target.value)}><option value="">{placeholder}</option>{value && !selected && <option value={value}>{value}</option>}{partnersForLocation.map(partner => {
+        const name = partner.nom || partner.structure || '';
+        if (!name) return null;
+        return <option key={`${partner.id}-${name}`} value={name}>{name}</option>;
+      })}</select>{!loadingCarePartners && alertValues.province && alertValues.zoneSante && partnersForLocation.length === 0 && <span className="mt-1 block text-xs text-slate-500">Aucune structure partenaire n’est référencée pour cette province et cette zone de santé.</span>}</label>;
+    }
+
+    if (field.key === 'zoneSante') {
+      const province = rdcProvinces.find(item => normalizePartnerText(item) === normalizePartnerText(alertValues.province));
+      const officialZones = province ? healthZonesByProvince[province] || [] : [];
+      const partnerZones = carePartners.filter(partner => normalizePartnerText(partner.province) === normalizePartnerText(alertValues.province)).map(partner => partner.zoneSante || partner.healthZone || '').filter(Boolean);
+      const zones = [...new Set([...officialZones, ...partnerZones])].sort((a, b) => a.localeCompare(b, 'fr'));
+      return <label key={field.key} className="block"><span className="text-xs font-bold uppercase tracking-wide text-slate-600">{field.label}</span><select disabled={!alertValues.province} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary-500 disabled:bg-slate-50" value={value} onChange={event => { setAlertValues(previous => ({ ...previous, zoneSante: event.target.value, structureNom: '' })); }}><option value="">{alertValues.province ? 'Sélectionner une zone de santé' : 'Sélectionner d’abord une province'}</option>{value && !zones.includes(value) && <option value={value}>{value}</option>}{zones.map(zone => <option key={zone} value={zone}>{zone}</option>)}</select></label>;
+    }
+
+    if (field.key === 'province' && field.type === 'select') {
+      return <label key={field.key} className="block"><span className="text-xs font-bold uppercase tracking-wide text-slate-600">{field.label}</span><select className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary-500" value={value} onChange={event => setAlertValues(previous => ({ ...previous, province: event.target.value, zoneSante: '', structureNom: '' }))}><option value="">Sélectionner</option>{field.options?.map(option => <option key={option} value={option}>{option}</option>)}</select></label>;
+    }
+
+    if (field.key === 'partiesCorps') {
+      const selectedParts = value.split(/\s*;\s*/).map(part => part.trim()).filter(Boolean);
+      const togglePart = (part: string) => update(selectedParts.includes(part)
+        ? selectedParts.filter(item => item !== part).join(' ; ')
+        : [...selectedParts, part].join(' ; '));
+      return <div key={field.key} className="space-y-3 md:col-span-2">
+        <span className="text-xs font-bold uppercase tracking-wide text-slate-600">{field.label}</span>
+        {selectedParts.length > 0 ? <div className="flex flex-wrap gap-2" aria-label="Parties sélectionnées">{selectedParts.map(part => <span key={part} className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/5 py-1 pl-3 pr-1 text-xs font-medium text-slate-700"><span>{part}</span><button type="button" onClick={() => togglePart(part)} aria-label={`Retirer ${part}`} className="rounded-full p-1 text-slate-500 hover:bg-red-50 hover:text-red-600"><X size={14} /></button></span>)}</div> : <p className="text-sm text-slate-500">Choisissez une ou plusieurs parties du corps.</p>}
+        <div className="grid max-h-72 gap-3 overflow-y-auto rounded-md border border-slate-200 bg-white p-3 sm:grid-cols-2" role="group" aria-label="Choisir les parties du corps atteintes">{bodyPartGroups.map(group => <fieldset key={group.label} className="min-w-0"><legend className="mb-2 text-sm font-semibold text-slate-800">{group.label}</legend><div className="space-y-1">{group.parts.map(part => <label key={part} className={`flex cursor-pointer items-start gap-2 rounded px-2 py-1.5 text-sm ${selectedParts.includes(part) ? 'bg-primary/5 text-primary' : 'text-slate-700 hover:bg-slate-50'}`}><input type="checkbox" checked={selectedParts.includes(part)} onChange={() => togglePart(part)} className="mt-0.5 accent-primary" /><span>{part}</span></label>)}</div></fieldset>)}</div>
+        {selectedParts.some(part => !allBodyParts.includes(part)) && <p className="text-xs text-slate-500">Une valeur déjà enregistrée n’appartenant pas à la liste est conservée ; vous pouvez la retirer ci-dessus.</p>}
+      </div>;
+    }
 
     if (field.key === 'alertSourceStructureType') {
       const labels: Record<string, string> = { STRUCTURE_MEDICALE: 'Structure médicale', ONG: 'ONG', RELAIS_COMMUNAUTAIRE: 'Relais communautaire', SERVICE_PUBLIC: 'Service public', AUTRE: 'Autre' };

@@ -6,6 +6,7 @@ import { Modal, ModalBody } from 'flowbite-react';
 import { Download, Eye, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { getConnectedAgentFullName, getConnectedAgentFunction } from '../../utils/currentUser';
+import { normalizeApiList } from '../utils/mentionStats';
 import type { PecmuFetcher } from '../services/pecmuApi';
 import {
   certifyPecmuAlert, uploadCertificationNote, activeWorkflowTab, consentTypes, getPecmuDocumentUrl, loadPecmuWorkflow,
@@ -38,7 +39,7 @@ const careFields: WorkflowField[] = [
   { key: 'careDate', label: 'Date des soins', type: 'date', required: true, when: values => values.careMode === 'OUTPATIENT' },
   { key: 'hospitalizationStartDate', label: 'Début d’hospitalisation', type: 'date', required: true, when: values => values.careMode === 'HOSPITALIZATION' },
   { key: 'hospitalizationEndDate', label: 'Fin d’hospitalisation', type: 'date', when: values => values.careMode === 'HOSPITALIZATION' },
-  { key: 'careStructureName', label: 'Structure de prise en charge', required: true }, { key: 'careProvince', label: 'Province', type: 'select', options: provinceOptions, required: true },
+  { key: 'careStructureName', label: 'Structure de prise en charge', type: 'select', options: {}, required: true }, { key: 'careProvince', label: 'Province', type: 'select', options: provinceOptions, required: true },
   { key: 'treatingDoctorName', label: 'Médecin traitant' }, { key: 'treatingDoctorPhone', label: 'Téléphone du médecin' },
   { key: 'complaints', label: 'Plaintes', type: 'list', itemLabel: 'Plainte', addLabel: 'Ajouter une plainte' }, { key: 'diagnosis', label: 'Diagnostics', type: 'list', itemLabel: 'Diagnostic', addLabel: 'Ajouter un diagnostic' },
   { key: 'treatmentReceived', label: 'Traitements reçus', type: 'list', itemLabel: 'Traitement', addLabel: 'Ajouter un traitement' },
@@ -101,6 +102,7 @@ export default function PecmuDossierModal({ ficheId, fetcher, onClose, onChanged
   const [supervisors, setSupervisors] = useState<SupervisorOption[]>([]);
   const [otherSupervisor, setOtherSupervisor] = useState<SupervisorOption & { requiresSpecification?: boolean }>({ value: 'OTHER', label: 'Autre à préciser', requiresSpecification: true });
   const [supervisorLookupFailed, setSupervisorLookupFailed] = useState(false);
+  const [carePartners, setCarePartners] = useState<Array<{ id: number; nom?: string; structure?: string }>>([]);
   const [linkedVictim, setLinkedVictim] = useState<MasterVictim | null>(null);
   const [selectedOrientations, setSelectedOrientations] = useState<string[]>([]);
   const [orientationNotes, setOrientationNotes] = useState('');
@@ -124,6 +126,13 @@ export default function PecmuDossierModal({ ficheId, fetcher, onClose, onChanged
       if (!active) return;
       setSupervisors(result.data); setOtherSupervisor(result.other); setSupervisorLookupFailed(false);
     }).catch(() => { if (active) { setSupervisors([]); setSupervisorLookupFailed(true); } });
+    return () => { active = false; };
+  }, [fetcher]);
+  useEffect(() => {
+    let active = true;
+    void fetcher('/partenaires').then(result => {
+      if (active) setCarePartners(normalizeApiList(result));
+    }).catch(() => { if (active) setCarePartners([]); });
     return () => { active = false; };
   }, [fetcher]);
   // Authorization and workflow transition rules are enforced by the API.
@@ -154,7 +163,17 @@ export default function PecmuDossierModal({ ficheId, fetcher, onClose, onChanged
   const careFormFields: WorkflowField[] = [
     supervisorField,
     { key: 'supervisorOtherName', label: 'Nom du superviseur', required: true, when: values => !supervisorLookupFailed && values.supervisorName === otherSupervisor.value },
-    ...careFields,
+    ...careFields.map(field => {
+      if (field.key !== 'careStructureName') return field;
+      const options: Record<string, string> = {};
+      carePartners.forEach(partner => {
+        const name = partner.nom || partner.structure || '';
+        if (name) options[name] = name;
+      });
+      const current = String(latest?.careStructureName || state?.fiche.careStructureName || '');
+      if (current && !(current in options)) options[current] = current;
+      return { ...field, options };
+    }),
   ];
   const normalizeSupervisorValues = (values: Record<string, any>) => {
     const result = { ...values };
