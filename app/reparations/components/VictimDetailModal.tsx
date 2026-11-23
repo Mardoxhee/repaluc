@@ -33,31 +33,9 @@ import Swal from 'sweetalert2';
 import { isOnline } from '@/app/utils/victimsCache';
 import { deletePendingVictimDocById, getPendingDocsForVictim, getPendingVictimDocById, savePendingVictimDoc } from '@/app/utils/victimDocsCache';
 import { authenticatedFetch } from '@/app/utils/authFetch';
-import { getVictimDocumentDownloadUrl, listVictimDocuments } from '@/app/utils/victimDocumentApi';
+import { getVictimFileUrl, listVictimDocuments } from '@/app/utils/victimDocumentApi';
 import { savePendingVictimUpdate } from '@/app/utils/victimUpdatesCache';
 import { syncPendingVictimUpdates } from '@/app/utils/victimUpdatesSyncService';
-
-// Fonction pour obtenir le lien réel du fichier
-const getFileLink = async (lien: string): Promise<string> => {
-  try {
-    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
-    const response = await authenticatedFetch(`${baseUrl}/minio/files/${lien}`);
-
-    if (!response.ok) {
-      throw new Error('Erreur lors de la récupération du lien du fichier');
-    }
-
-    const resData = await response.json();
-    // Le vrai lien est dans resData.data.src
-    if (resData && resData.data && resData.data.src) {
-      return resData.data.src;
-    }
-    throw new Error('Lien du fichier non trouvé dans la réponse');
-  } catch (error) {
-    console.log('Erreur getFileLink:', error);
-    throw error;
-  }
-};
 
 const downloadBlob = async (blob: Blob, filename: string) => {
   const url = URL.createObjectURL(blob);
@@ -82,6 +60,13 @@ const downloadFromUrl = async (url: string, filename: string) => {
   }
   const blob = await resp.blob();
   await downloadBlob(blob, filename);
+};
+
+const isImageDocument = (url: string, name: string) => {
+  if (url.startsWith('data:image/')) return true;
+  let path = url;
+  try { if (/^https?:\/\//i.test(url)) path = new URL(url).pathname; } catch { /* use the original value */ }
+  return /\.(png|jpe?g|webp)$/i.test(path) || /\.(png|jpe?g|webp)$/i.test(name);
 };
 
 interface Victim {
@@ -350,21 +335,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
     }
   };
 
-  const resolveDownloadUrl = async (documentId: number, lien?: string) => {
-    if (documentId) return getVictimDocumentDownloadUrl(documentId);
-    if (!lien) return '';
-    if (/^https?:\/\//i.test(lien)) return lien;
-    const realUrl = await getFileLink(lien);
-    return realUrl;
-  };
-
-  const resolveDocUrl = async (docUrl: string) => {
-    let realUrl = docUrl;
-    if (!docUrl.startsWith('http')) {
-      realUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006'}${docUrl}`;
-    }
-    return realUrl;
-  };
+  const resolveDownloadUrl = async (_documentId: number, lien?: string, name?: string) => getVictimFileUrl(lien || name || '');
 
   const openFilePicker = async (ref: React.RefObject<HTMLInputElement | null>) => {
     const input = ref.current;
@@ -408,7 +379,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
         return;
       }
 
-      const url = await resolveDownloadUrl(file.id, file.lien);
+      const url = await resolveDownloadUrl(file.id, file.lien, file.name);
       if (!url) throw new Error('Lien du fichier indisponible');
 
       const filename = file.name || file.lien || (file.label ? `${file.label}.pdf` : 'fichier');
@@ -805,7 +776,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
     }
 
     try {
-      const fileUrl = file.id ? await getVictimDocumentDownloadUrl(file.id) : await getFileLink(file.lien!);
+      const fileUrl = await getVictimFileUrl(file.lien || file.name || '');
       setDocPreviewTitle(file.label || 'Document');
       setDocPreviewUrl(fileUrl);
       setDocPreviewIsObjectUrl(false);
@@ -1184,7 +1155,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, mention, 
 
                   <div className="w-full h-[70vh] border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
                     {docPreviewUrl ? (
-                      docPreviewUrl.includes('data:image') || docPreviewUrl.match(/\.(png|jpe?g|webp)$/i) ? (
+                      isImageDocument(docPreviewUrl, docPreviewTitle) ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={docPreviewUrl} alt={docPreviewTitle} className="w-full h-full object-contain" />
                       ) : (

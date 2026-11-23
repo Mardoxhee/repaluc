@@ -19,29 +19,7 @@ import { Modal } from 'flowbite-react';
 import InfosVictim from './infosVictim';
 import Swal from 'sweetalert2';
 import { authenticatedFetch } from '@/app/utils/authFetch';
-import { getVictimDocumentDownloadUrl, listVictimDocuments, uploadVictimDocument } from '@/app/utils/victimDocumentApi';
-
-// Fonction pour obtenir le lien réel du fichier
-const getFileLink = async (lien: string): Promise<string> => {
-  try {
-    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
-    const response = await authenticatedFetch(`${baseUrl}/minio/files/${lien}`);
-
-    if (!response.ok) {
-      throw new Error('Erreur lors de la récupération du lien du fichier');
-    }
-
-    const resData = await response.json();
-    // Le vrai lien est dans resData.data.src
-    if (resData && resData.data && resData.data.src) {
-      return resData.data.src;
-    }
-    throw new Error('Lien du fichier non trouvé dans la réponse');
-  } catch (error) {
-    console.log('Erreur getFileLink:', error);
-    throw error;
-  }
-};
+import { getVictimFileUrl, listVictimDocuments, uploadVictimDocument } from '@/app/utils/victimDocumentApi';
 
 interface Victim {
   id: number;
@@ -146,7 +124,7 @@ const VictimDetailModal: React.FC<VictimDetailModalProps> = ({ victim, onClose, 
     }
 
     try {
-      const fileUrl = file.id ? await getVictimDocumentDownloadUrl(file.id) : await getFileLink(file.lien);
+      const fileUrl = await getVictimFileUrl(file.lien || file.name || '');
       window.open(fileUrl, '_blank');
     } catch (error) {
       await Swal.fire({

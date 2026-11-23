@@ -42,13 +42,16 @@ const asDocumentArray = (payload: any): any[] => {
 };
 
 export const normalizeVictimDocuments = (payload: any): VictimDocument[] => asDocumentArray(payload)
-  .map((doc: any) => ({
-    ...doc,
-    id: Number(doc?.id ?? doc?.documentId),
-    label: String(doc?.label ?? doc?.originalName ?? doc?.fileName ?? doc?.filename ?? 'Document'),
-    name: String(doc?.fileName ?? doc?.filename ?? doc?.originalName ?? doc?.name ?? doc?.lien ?? ''),
-    lien: typeof (doc?.lien ?? doc?.key ?? doc?.path) === 'string' ? (doc.lien ?? doc.key ?? doc.path) : undefined,
-  }))
+  .map((doc: any) => {
+    const reference = doc?.lien ?? doc?.key ?? doc?.path ?? doc?.url ?? doc?.src ?? (typeof doc?.file === 'string' ? doc.file : doc?.file?.url);
+    return {
+      ...doc,
+      id: Number(doc?.id ?? doc?.documentId),
+      label: String(doc?.label ?? doc?.originalName ?? doc?.fileName ?? doc?.filename ?? 'Document'),
+      name: String(doc?.fileName ?? doc?.filename ?? doc?.originalName ?? doc?.name ?? reference ?? ''),
+      lien: typeof reference === 'string' ? reference : undefined,
+    };
+  })
   .filter((doc: VictimDocument) => Number.isFinite(doc.id) && doc.id > 0);
 
 export const listVictimDocuments = async (victimId: number): Promise<VictimDocument[]> => {
@@ -77,15 +80,29 @@ export const uploadVictimDocument = async (
   return readPayload(response, 'Upload du document impossible');
 };
 
-export const getVictimDocumentDownloadUrl = async (documentId: number): Promise<string> => {
-  const response = await authenticatedFetch(`${getBaseUrl()}/document-victime/${documentId}/download-url`, {
+export const getVictimFileUrl = async (reference: string): Promise<string> => {
+  const value = reference.trim();
+  if (!value) throw new Error('Référence du document indisponible.');
+  let endpoint: string;
+  if (/^https?:\/\//i.test(value)) {
+    const parsed = new URL(value);
+    if (!parsed.pathname.includes('/minio/files/')) return value;
+    endpoint = value;
+  } else if (value.startsWith('/minio/files/')) {
+    endpoint = `${getBaseUrl()}${value}`;
+  } else if (value.startsWith('minio/files/')) {
+    endpoint = `${getBaseUrl()}/${value}`;
+  } else {
+    endpoint = `${getBaseUrl()}/minio/files/${value.split('/').map(encodeURIComponent).join('/')}`;
+  }
+
+  const response = await authenticatedFetch(endpoint, {
     headers: { Accept: 'application/json' },
     cache: 'no-store',
   });
-  const payload = await readPayload(response, 'Lien de téléchargement indisponible');
-  const candidates = [payload, payload?.url, payload?.src, payload?.downloadUrl, payload?.signedUrl, payload?.link,
-    payload?.data, payload?.data?.url, payload?.data?.src, payload?.data?.downloadUrl, payload?.data?.signedUrl, payload?.data?.link];
-  const url = candidates.find((value) => typeof value === 'string' && /^https?:\/\//i.test(value));
-  if (!url) throw new Error('Le serveur n’a pas renvoyé de lien de téléchargement valide.');
+  const payload = await readPayload(response, 'Récupération du lien du document impossible');
+  const candidates = [payload?.url, payload?.data?.url, payload?.data?.src, payload?.src, payload?.data?.data?.url];
+  const url = candidates.find((candidate) => typeof candidate === 'string' && /^https?:\/\//i.test(candidate));
+  if (!url) throw new Error('Le serveur n’a pas renvoyé l’URL directe du document.');
   return url;
 };
