@@ -2,12 +2,13 @@
 
 import { rdcProvinces } from '../constants/provinces';
 import { healthZonesByProvince } from '../constants/healthZonesByProvince';
-import { allBodyParts, bodyPartGroups } from '../constants/bodyParts';
+import { allBodyParts } from '../constants/bodyParts';
 import { spreadsheetPartners } from '../constants/spreadsheetPartners';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Filter,
   Plus,
   Save,
@@ -62,6 +63,7 @@ type Victim = {
 };
 
 type CarePartner = { id: number; nom?: string; structure?: string; province?: string; territoire?: string; zoneSante?: string; healthZone?: string };
+const alphabeticBodyParts = [...allBodyParts].sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }));
 const normalizePartnerText = (value: unknown) => normalizeText(value).replace(/[^a-z0-9]/g, '');
 const partnerLookupKey = (partner: CarePartner) => [partner.nom || partner.structure, partner.province, partner.territoire, partner.zoneSante || partner.healthZone]
   .map(normalizePartnerText).join('|');
@@ -144,7 +146,7 @@ const f2Sections: Array<{ title: string; fields: FormField[] }> = [
       { key: 'age', label: 'Age', type: 'number' },
       { key: 'sexe', label: 'Sexe', type: 'select', options: ['Féminin', 'Masculin', 'Autre'] },
       { key: 'province', label: 'Province', type: 'select', options: rdcProvinces },
-      { key: 'localite', label: 'Localité' },
+      { key: 'localite', label: 'Localité / ville' },
       { key: 'adresseVictime', label: 'Adresse de la victime', type: 'textarea' },
       { key: 'telephoneVictime', label: 'Contacts de la victime (si existant)' },
     ],
@@ -655,6 +657,26 @@ const PecmuModulePage: React.FC = () => {
   const handleAlertSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (submittingAlert) return;
+    const saveAsDraft = (event.nativeEvent as SubmitEvent).submitter instanceof HTMLElement && (event.nativeEvent as SubmitEvent).submitter?.hasAttribute('data-save-draft');
+    if (saveAsDraft) {
+      setSubmittingAlert(true);
+      try {
+        const incidentPeriod = incidentDateMode === 'date' ? incidentDate : [incidentStartDate, incidentEndDate].filter(Boolean).join(' au ');
+        const violationType = [...selectedViolations, ...(otherViolation && customViolation.trim() ? [customViolation.trim()] : [])].join(' ; ');
+        await createFichePecmu(fetcher, { ...alertValues, periodeIncident: incidentPeriod, typeViolation: violationType }, alertMasterVictim?.id, 'BROUILLON');
+        setShowAlertModal(false);
+        await loadVictims();
+        await Swal.fire({ icon: 'success', title: 'Brouillon enregistré', text: 'Le dossier a été enregistré avec le statut Brouillon. Vous pourrez le compléter et le soumettre ensuite.', confirmButtonColor: '#901c67' });
+      } catch (error: any) {
+        const backendResponse = error instanceof PecmuApiError
+          ? `Réponse du backend (HTTP ${error.statusCode}, code ${error.code}) :\n${error.responseBody !== undefined ? JSON.stringify(error.responseBody, null, 2) : error.responseText || error.message}`
+          : 'Aucune réponse structurée du backend n’a été reçue.';
+        await Swal.fire({ icon: 'error', title: 'Brouillon non enregistré', text: `${error?.message || 'Le brouillon n’a pas pu être enregistré.'}\n\n${backendResponse}`, confirmButtonColor: '#901c67' });
+      } finally {
+        setSubmittingAlert(false);
+      }
+      return;
+    }
     if (otherViolation && !customViolation.trim()) {
       await Swal.fire({ icon: 'warning', title: 'Type de violation manquant', text: 'Précisez le type de violation pour l’option Autre.' });
       return;
@@ -786,7 +808,10 @@ const PecmuModulePage: React.FC = () => {
       return <div key={field.key} className="space-y-3 md:col-span-2">
         <span className="text-xs font-bold uppercase tracking-wide text-slate-600">{field.label}</span>
         {selectedParts.length > 0 ? <div className="flex flex-wrap gap-2" aria-label="Parties sélectionnées">{selectedParts.map(part => <span key={part} className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/5 py-1 pl-3 pr-1 text-xs font-medium text-slate-700"><span>{part}</span><button type="button" onClick={() => togglePart(part)} aria-label={`Retirer ${part}`} className="rounded-full p-1 text-slate-500 hover:bg-red-50 hover:text-red-600"><X size={14} /></button></span>)}</div> : <p className="text-sm text-slate-500">Choisissez une ou plusieurs parties du corps.</p>}
-        <div className="grid max-h-72 gap-3 overflow-y-auto rounded-md border border-slate-200 bg-white p-3 sm:grid-cols-2" role="group" aria-label="Choisir les parties du corps atteintes">{bodyPartGroups.map(group => <fieldset key={group.label} className="min-w-0"><legend className="mb-2 text-sm font-semibold text-slate-800">{group.label}</legend><div className="space-y-1">{group.parts.map(part => <label key={part} className={`flex cursor-pointer items-start gap-2 rounded px-2 py-1.5 text-sm ${selectedParts.includes(part) ? 'bg-primary/5 text-primary' : 'text-slate-700 hover:bg-slate-50'}`}><input type="checkbox" checked={selectedParts.includes(part)} onChange={() => togglePart(part)} className="mt-0.5 accent-primary" /><span>{part}</span></label>)}</div></fieldset>)}</div>
+        <details className="group relative">
+          <summary className="flex cursor-pointer list-none items-center justify-between rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50 [&::-webkit-details-marker]:hidden"><span>{selectedParts.length ? `${selectedParts.length} partie(s) sélectionnée(s)` : 'Choisir les parties du corps'}</span><ChevronDown size={17} className="text-slate-500 transition-transform group-open:rotate-180" /></summary>
+          <div className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-md border border-slate-200 bg-white p-2 shadow-lg" role="group" aria-label="Choisir les parties du corps atteintes">{alphabeticBodyParts.map(part => <label key={part} className={`flex cursor-pointer items-start gap-2 rounded px-2 py-1.5 text-sm ${selectedParts.includes(part) ? 'bg-primary/5 text-primary' : 'text-slate-700 hover:bg-slate-50'}`}><input type="checkbox" checked={selectedParts.includes(part)} onChange={() => togglePart(part)} className="mt-0.5 accent-primary" /><span>{part}</span></label>)}</div>
+        </details>
         {selectedParts.some(part => !allBodyParts.includes(part)) && <p className="text-xs text-slate-500">Une valeur déjà enregistrée n’appartenant pas à la liste est conservée ; vous pouvez la retirer ci-dessus.</p>}
       </div>;
     }
@@ -1210,6 +1235,9 @@ const PecmuModulePage: React.FC = () => {
 
             <div className="flex justify-end gap-3 border-t !border-gray-200 bg-white px-4 py-4 md:px-7">
               <button type="button" onClick={() => setShowAlertModal(false)} className="border !border-gray-300 px-4 py-2 text-sm font-bold !text-gray-700 hover:!bg-gray-50">Annuler</button>
+              <button type="submit" data-save-draft disabled={submittingAlert} className="inline-flex items-center gap-2 border border-primary px-4 py-2 text-sm font-bold text-primary hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60">
+                <Save size={16} />{submittingAlert ? 'Enregistrement…' : 'Enregistrer le brouillon'}
+              </button>
               <button type="submit" disabled={submittingAlert} className="inline-flex items-center gap-2 !bg-red-600 px-4 py-2 text-sm font-bold text-white hover:!bg-red-700 disabled:cursor-not-allowed disabled:opacity-60">
                 <Save size={16} />
                 {submittingAlert ? 'Enregistrement...' : 'Enregistrer l’alerte F2'}

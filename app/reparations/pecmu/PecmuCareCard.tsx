@@ -18,7 +18,7 @@ export default function PecmuCareCard({ care, children }: { care: MedicalCare; c
         const value = String(care[key]);
         return <div key={key} className={key === 'observation' || key === 'transferNotes' ? 'sm:col-span-2 lg:col-span-3' : ''}>
           <dt className="text-xs font-medium text-slate-500">{label}</dt>
-          <dd className="mt-1 break-words text-sm text-slate-900">
+          <dd className={`mt-1 break-words text-sm text-slate-900 ${format === 'cost' ? 'font-bold' : ''}`}>
             {format === 'list' ? <ul className="list-disc space-y-1 pl-4">{value.split(/\r?\n/).filter(line => line.trim()).map((line, index) => <li key={index}>{line}</li>)}</ul>
               : format === 'date' ? date(value)
                 : format === 'cost' ? `${Number(value).toLocaleString('fr-FR')} USD`
@@ -34,7 +34,7 @@ export default function PecmuCareCard({ care, children }: { care: MedicalCare; c
       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-sm font-bold text-primary">{care.sequenceNumber}</span>
       <div className="min-w-0 flex-1">
         <h3 className="break-words font-semibold text-slate-900">{care.careStructureName || `Prise en charge ${care.sequenceNumber}`}</h3>
-        <p className="mt-1 text-sm text-slate-500">{[mode, care.careProvince].filter(Boolean).join(' · ')}</p>
+        <p className="mt-1 text-sm text-slate-500">{[mode, care.careProvince, care.careHealthZone].filter(Boolean).join(' · ')}</p>
         <span className="mt-2 inline-block rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">{care.outcome ? outcomeLabels[care.outcome] : 'En cours'}</span>
       </div>
       <ChevronDown size={20} aria-hidden="true" className="shrink-0 text-primary transition-transform group-open:rotate-180 motion-reduce:transition-none" />
@@ -46,9 +46,10 @@ export default function PecmuCareCard({ care, children }: { care: MedicalCare; c
           : care.careMode === 'OUTPATIENT' ? [['careDate', 'Date des soins', 'date']] as Field[] : []),
       ])}
       {section('Situation médicale', [['complaints', 'Plaintes', 'list'], ['diagnosis', 'Diagnostics', 'list'], ['treatmentReceived', 'Traitements reçus', 'list']])}
-      {section('Rendez-vous', [['appointmentDate1', 'Premier rendez-vous', 'date'], ['appointmentDate2', 'Deuxième rendez-vous', 'date'], ['appointmentDate3', 'Troisième rendez-vous', 'date']])}
-      {section('Prise en charge et observations', [['cout', 'Coût', 'cost'], ['partenaireNom', 'Partenaire médical'], ['partenaireTitre', 'Titre / convention'], ['observation', 'Observation']])}
-      {care.outcome === 'TRANSFERRED' && section('Transfert vers la structure receveuse', [['transferStructureName', 'Structure receveuse'], ['transferProvince', 'Province'], ['transferNotes', 'Informations de suivi']])}
+      {section('Bilan paraclinique', [['bilanParaclinique', 'Résultats']])}
+      {section('Rendez-vous', [['appointmentDate1', 'Premier rendez-vous', 'date'], ['appointmentComment1', 'Commentaires du premier rendez-vous'], ['appointmentDate2', 'Deuxième rendez-vous', 'date'], ['appointmentComment2', 'Commentaires du deuxième rendez-vous'], ['appointmentDate3', 'Troisième rendez-vous', 'date'], ['appointmentComment3', 'Commentaires du troisième rendez-vous']])}
+      {section('Prise en charge et observations', [['cout', 'Coût global', 'cost'], ['observation', 'Observation']])}
+      {care.outcome === 'TRANSFERRED' && section('Transfert vers la structure receveuse', [['transferStructureName', 'Structure receveuse'], ['transferProvince', 'Province'], ['transferHealthZone', 'Zone de santé'], ['transferNotes', 'Motif de transfert']])}
       {children}
     </div>
   </details>;

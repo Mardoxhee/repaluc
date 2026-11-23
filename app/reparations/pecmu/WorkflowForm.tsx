@@ -5,7 +5,7 @@ import YesNoToggle from './YesNoToggle';
 
 export const fieldClass = 'mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-1 focus:ring-primary';
 export const buttonClass = 'rounded-md border border-primary bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40';
-export type WorkflowField = { key: string; label: string; type?: 'text' | 'textarea' | 'date' | 'number' | 'select' | 'boolean' | 'list' | 'heading'; itemLabel?: string; addLabel?: string; options?: Record<string, string>; required?: boolean; when?: (values: Record<string, any>) => boolean };
+export type WorkflowField = { key: string; label: string; type?: 'text' | 'textarea' | 'date' | 'number' | 'select' | 'boolean' | 'list' | 'heading'; itemLabel?: string; addLabel?: string; options?: Record<string, string> | ((values: Record<string, any>) => Record<string, string>); resetOnChange?: string[]; required?: boolean; when?: (values: Record<string, any>) => boolean };
 export function WorkflowForm({ fields, initial = {}, submitLabel, busy, onSubmit, children }: {
   fields: WorkflowField[]; initial?: Record<string, any>; submitLabel: string; busy: boolean;
   onSubmit: (values: Record<string, any>) => Promise<boolean>; children?: React.ReactNode | ((values: Record<string, any>) => React.ReactNode);
@@ -47,7 +47,7 @@ export function WorkflowForm({ fields, initial = {}, submitLabel, busy, onSubmit
         : field.type === 'boolean'
         ? <YesNoToggle key={field.key} label={field.label} checked={Boolean(values[field.key])} onChange={checked => setValues(previous => ({ ...previous, [field.key]: checked }))} />
         : <label key={field.key} className={`block text-sm font-medium ${field.type === 'textarea' ? 'md:col-span-2' : ''}`}>{field.label}{field.required ? ' *' : ''}
-          {field.type === 'select' ? <select required={field.required} className={fieldClass} value={values[field.key]} onChange={event => setValues(previous => ({ ...previous, [field.key]: event.target.value }))}><option value="">Sélectionner</option>{Object.entries(field.options || {}).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+          {field.type === 'select' ? <select required={field.required} className={fieldClass} value={values[field.key]} onChange={event => setValues(previous => ({ ...previous, [field.key]: event.target.value, ...Object.fromEntries((field.resetOnChange || []).map(key => [key, ''])) }))}><option value="">Sélectionner</option>{Object.entries(typeof field.options === 'function' ? field.options(values) : field.options || {}).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
             : field.type === 'textarea' ? <textarea required={field.required} className={`${fieldClass} min-h-24`} value={values[field.key]} onChange={event => setValues(previous => ({ ...previous, [field.key]: event.target.value }))} />
             : <input required={field.required} type={field.type || 'text'} min={field.key === 'hospitalizationEndDate' ? values.hospitalizationStartDate || undefined : field.type === 'number' ? 0 : undefined} step={field.type === 'number' ? '0.01' : undefined} className={fieldClass} value={values[field.key]} onChange={event => setValues(previous => ({ ...previous, [field.key]: event.target.value }))} />}
         </label>)}

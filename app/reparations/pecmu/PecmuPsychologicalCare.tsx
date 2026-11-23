@@ -6,10 +6,11 @@ import type { PecmuFetcher } from '../services/pecmuApi';
 import {
   addPsychologicalHomeVisit, addPsychologicalTherapySession, closePsychologicalCare,
   createPsychologicalCare, getMedicalSupervisorOptions, getPsychologicalCare,
-  getPsychologicalReportUrl, PecmuApiError, updatePsychologicalCare, uploadPsychologicalReport,
+  PecmuApiError, updatePsychologicalCare, uploadPsychologicalReport,
   type PsychologicalCare, type SupervisorOption,
 } from '../services/pecmuWorkflowApi';
 import { buttonClass, fieldClass } from './WorkflowForm';
+import PecmuDocumentViewer, { type DocumentPreview } from './PecmuDocumentViewer';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const errorMessages: Record<string, string> = {
@@ -47,6 +48,7 @@ export default function PecmuPsychologicalCare({ ficheId, fetcher, onChanged }: 
   const [closureDate, setClosureDate] = useState(today());
   const [closureNotes, setClosureNotes] = useState('');
   const [reload, setReload] = useState(0);
+  const [reportPreview, setReportPreview] = useState<DocumentPreview | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError(''); setNotFound(false);
@@ -101,8 +103,11 @@ export default function PecmuPsychologicalCare({ ficheId, fetcher, onChanged }: 
     else if (createAllowed) await run(() => createPsychologicalCare(fetcher, { fichePecmuId: ficheId, ...payload }));
   };
   const openReport = async () => {
-    try { const url = await getPsychologicalReportUrl(fetcher, care!.id); window.open(url, '_blank', 'noopener,noreferrer'); }
-    catch (e: any) { setError(messageFor(e)); }
+    const report: any = care?.report;
+    const url = typeof report === 'string' ? report : report?.url || report?.src || report?.file || report?.path || care?.reportFile;
+    if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) { setError('L’URL directe du rapport psychologique est indisponible.'); return; }
+    setError('');
+    setReportPreview({ url, name: String(reportLabel || 'Rapport psychologique'), mimeType: typeof report === 'object' ? report?.mimeType : undefined });
   };
   const reportLabel = typeof care?.report === 'object' && care.report ? care.report.originalName || care.report.filename : care?.reportName || care?.reportFile;
 
@@ -152,7 +157,7 @@ export default function PecmuPsychologicalCare({ ficheId, fetcher, onChanged }: 
 
       <section className="space-y-3 rounded border border-slate-200 bg-white p-5">
         <h3 className="text-lg font-semibold">Rapport psychologique</h3>
-        {hasReport(care) ? <div className="flex flex-wrap items-center justify-between gap-3 rounded border border-slate-100 p-3"><span className="break-all text-sm">{String(reportLabel || 'Rapport psychologique enregistré')}</span><button type="button" onClick={openReport} className="inline-flex items-center gap-2 text-sm font-semibold text-primary"><ExternalLink size={16} />Ouvrir le rapport</button></div> : <p className="text-sm text-slate-500">Aucun rapport déposé.</p>}
+        {hasReport(care) ? <div className="flex flex-wrap items-center justify-between gap-3 rounded border border-slate-100 p-3"><span className="break-all text-sm">{String(reportLabel || 'Rapport psychologique enregistré')}</span><button type="button" onClick={openReport} className="inline-flex items-center gap-2 text-sm font-semibold text-primary"><ExternalLink size={16} />Visualiser le rapport</button></div> : <p className="text-sm text-slate-500">Aucun rapport déposé.</p>}
         {updateAllowed && <form onSubmit={event => { event.preventDefault(); if (reportFile) void run(() => uploadPsychologicalReport(fetcher, care.id, reportFile)).then(ok => { if (ok) setReportFile(null); }); }} className="flex flex-wrap items-end gap-3">
           <label className="min-w-0 flex-1 text-sm">Fichier PDF, PNG ou JPEG<input required type="file" accept=".pdf,.png,.jpg,.jpeg" className={fieldClass} onChange={event => setReportFile(event.target.files?.[0] || null)} /></label>
           <button disabled={busy || !reportFile} className={`${buttonClass} inline-flex items-center gap-2`}><Upload size={16} />Téléverser le rapport</button>
@@ -169,6 +174,7 @@ export default function PecmuPsychologicalCare({ ficheId, fetcher, onChanged }: 
         <button type="button" disabled={busy} onClick={() => void run(() => closePsychologicalCare(fetcher, care.id, { postTherapyEvaluation, closureDate, closureNotes }))} className={buttonClass}>Clôturer le suivi psychologique</button>
       </section>}
     </>}
+    {reportPreview && <PecmuDocumentViewer document={reportPreview} onClose={() => setReportPreview(null)} />}
   </section>;
 }
 

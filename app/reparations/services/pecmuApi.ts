@@ -22,6 +22,7 @@ export type PecmuFilterRule = {
 
 export type FichePecmu = {
   workflowStatus?: WorkflowStatus;
+  status?: string;
   id: number;
   victimeId?: number;
   victimId?: number;
@@ -246,7 +247,7 @@ export const mapFichePecmuToVictimRow = (fiche: FichePecmu) => ({
   province: fiche.province,
   territoire: fiche.locality,
   adresse: fiche.victimAddress,
-  status: fiche.workflowStatus ? statusLabels[fiche.workflowStatus] || fiche.workflowStatus : fiche.medicalStatus || '-',
+  status: fiche.status === 'BROUILLON' ? 'Brouillon' : fiche.workflowStatus ? statusLabels[fiche.workflowStatus] || fiche.workflowStatus : fiche.medicalStatus || '-',
   workflowStatus: fiche.workflowStatus,
   mention: 'PECMU',
   reference: `PECMU-${fiche.id}`,
@@ -330,8 +331,9 @@ export const listFichesPecmu = async (
   };
 };
 
-export const createFichePecmu = async (fetcher: PecmuFetcher, values: Record<string, string>, victimId?: number) => {
+export const createFichePecmu = async (fetcher: PecmuFetcher, values: Record<string, string>, victimId?: number, status?: 'BROUILLON') => {
   const payload = mapF2ValuesToFichePecmuPayload(values);
+  if (status) (payload as Record<string, unknown>).status = status;
   if (victimId) {
     for (const key of ['victimName', 'age', 'sex', 'province', 'locality', 'victimAddress', 'victimPhone'] as const) delete payload[key];
     (payload as Record<string, unknown>).victimeId = victimId;

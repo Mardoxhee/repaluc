@@ -18,15 +18,15 @@ export const consentTypes = {
 };
 export const outcomeLabels = { STABILIZED_OR_CURED: 'Stabilisé/guéri', DECEASED: 'Décédé', TRANSFERRED: 'Transféré à un niveau supérieur', LOST_TO_FOLLOW_UP: 'Perdu de vue' };
 export const medicalDocumentTypes = { MEDICAL_REPORT: 'Rapport médical', DEATH_CERTIFICATE: 'Certificat de décès', TRANSFER_NOTE: 'Note de transfert', OTHER: 'Autre document médical' };
-export type FileMetadata = { id?: number | string; type?: string; documentType?: string; originalName?: string; filename?: string; mimeType?: string; size?: number };
+export type FileMetadata = { id?: number | string; type?: string; documentType?: string; originalName?: string; filename?: string; mimeType?: string; size?: number; url?: string; src?: string; file?: string; path?: string };
 export type WorkflowConsent = FileMetadata & { id: number; agent: string; consentType: keyof typeof consentTypes; consentStatus: 'SIGNED' | 'REFUSED'; consentDate?: string; notes?: string; file?: unknown; isActive?: boolean };
 export type MedicalCare = {
   id: number; fichePecmuId: number; sequenceNumber: number; previousCareId?: number;
   careMode?: 'OUTPATIENT' | 'HOSPITALIZATION'; careDate?: string; hospitalizationStartDate?: string; hospitalizationEndDate?: string;
   supervisorName?: string; careStructureName?: string; careProvince?: string; treatingDoctorName?: string; treatingDoctorPhone?: string;
-  complaints?: string; diagnosis?: string; treatmentReceived?: string; appointmentDate1?: string; appointmentDate2?: string; appointmentDate3?: string;
+  careHealthZone?: string; complaints?: string; diagnosis?: string; treatmentReceived?: string; bilanParaclinique?: string; appointmentDate1?: string; appointmentComment1?: string; appointmentDate2?: string; appointmentComment2?: string; appointmentDate3?: string; appointmentComment3?: string;
   cout?: number; observation?: string; partenaireNom?: string; partenaireTitre?: string;
-  outcome?: keyof typeof outcomeLabels; outcomeDate?: string; transferStructureName?: string; transferProvince?: string; transferNotes?: string;
+  outcome?: keyof typeof outcomeLabels; outcomeDate?: string; transferStructureName?: string; transferProvince?: string; transferHealthZone?: string; transferNotes?: string;
   documents?: FileMetadata[]; examens?: FileMetadata[]; createdAt?: string;
 };
 export type WorkflowSnapshot = {
@@ -89,38 +89,15 @@ export async function uploadPecmuFile(fetcher: PecmuFetcher, path: string, file:
 }
 export async function uploadCertificationNote(fetcher: PecmuFetcher, file: File): Promise<string> {
   const response = await uploadPecmuFile(fetcher, '/minio/files/upload', file);
-  const filename = response?.filename ?? response?.data?.filename;
-  const reference = typeof filename === 'string' && filename.trim() ? filename.trim() : extractUploadedFileLink(response);
-  if (!reference) throw new Error('MinIO n’a pas retourné la référence de la note de certification.');
-  return reference;
+  const url = extractUploadedFileLink(response);
+  if (!url || !/^https?:\/\//i.test(url)) throw new Error('MinIO n’a pas retourné l’URL de la note de certification.');
+  return url;
 }
 export async function certifyPecmuAlert(fetcher: PecmuFetcher, id: number, certified: boolean, certificationFile?: string) {
   if (certified && !certificationFile?.trim()) throw new Error('Ajoutez la note de certification avant de certifier l’alerte.');
   return workflowJson(fetcher, `/fiche-pecmu/${id}/certification`, certified
     ? { certified: true, certificationFile }
     : { certified: false });
-}
-export async function getPecmuDocumentUrl(fetcher: PecmuFetcher, path: string): Promise<string> {
-  const response = await fetcher(path);
-  const url = response?.url ?? response?.data?.url;
-  if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) throw new Error('L’URL du document est indisponible.');
-  return url;
-}
-export async function getCertificationFileUrl(fetcher: PecmuFetcher, reference: string): Promise<string> {
-  if (/^https?:\/\//i.test(reference)) {
-    const storedUrl = new URL(reference);
-    // Older records may contain the temporary MinIO URL instead of its key.
-    // Path-style signed URLs contain /bucket/object-key.
-    if (!storedUrl.searchParams.has('X-Amz-Signature')) return reference;
-    const segments = storedUrl.pathname.split('/').filter(Boolean);
-    if (segments.length < 2) throw new Error('La référence de la note de certification est invalide.');
-    reference = segments.slice(1).map(segment => decodeURIComponent(segment)).join('/');
-  }
-  const key = reference.split('/').map(segment => encodeURIComponent(segment)).join('/');
-  const response = await fetcher(`/minio/files/${key}`);
-  const url = response?.data?.src ?? response?.url ?? response?.data?.url;
-  if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) throw new Error('Le lien de la note de certification est indisponible.');
-  return url;
 }
 export async function getMedicalSupervisorOptions(fetcher: PecmuFetcher): Promise<{ data: SupervisorOption[]; other: SupervisorOption & { requiresSpecification?: boolean } }> {
   const response = await fetcher('/acte-medical-pecmu/supervisors/options');
@@ -152,9 +129,6 @@ export async function addPsychologicalHomeVisit(fetcher: PecmuFetcher, id: numbe
 }
 export async function uploadPsychologicalReport(fetcher: PecmuFetcher, id: number, file: File) {
   return uploadPecmuFile(fetcher, `${psychologicalBase}/${id}/report`, file);
-}
-export async function getPsychologicalReportUrl(fetcher: PecmuFetcher, id: number) {
-  return getPecmuDocumentUrl(fetcher, `${psychologicalBase}/${id}/report/download-url`);
 }
 export async function closePsychologicalCare(fetcher: PecmuFetcher, id: number, payload: Record<string, unknown>) {
   return fetcher(`${psychologicalBase}/${id}/close`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
