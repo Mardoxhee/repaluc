@@ -76,6 +76,15 @@ const getSpecificValue = (
     return undefined;
 };
 
+const isMinioResolverUrl = (value?: string | null) => {
+    if (!value) return false;
+    try {
+        return new URL(value, typeof window === 'undefined' ? 'https://localhost' : window.location.origin).pathname.includes('/minio/files/');
+    } catch {
+        return value.includes('/minio/files/');
+    }
+};
+
 const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
     const {
         id,
@@ -190,7 +199,7 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
         }
     }, []);
 
-    const photoIsDirectUrl = !!photo && (photo.startsWith('http') || photo.startsWith('data:'));
+    const photoIsDirectUrl = !!photo && (photo.startsWith('data:') || (photo.startsWith('http') && !isMinioResolverUrl(photo)));
     const displayedPhoto =
         (photoIsDirectUrl ? photo : null) ||
         remoteResolvedSrc ||
@@ -384,22 +393,31 @@ const InfosVictim: React.FC<InfosVictimProps> = ({ victim, onDeletePhoto }) => {
 
         const resolveRemote = async () => {
             if (!photo) return;
-            if (photo.startsWith('data:') || photo.startsWith('http')) {
+            if (photo.startsWith('data:')) {
+                setRemoteResolvedSrc(photo);
+                return;
+            }
+
+            if (photo.startsWith('http') && !isMinioResolverUrl(photo)) {
                 setRemoteResolvedSrc(photo);
                 return;
             }
 
             if (!isOnline()) return;
-            const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+            const baseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL || '').replace(/\/$/, '');
             if (!baseUrl) return;
 
             try {
                 setIsResolvingRemote(true);
-                const response = await authenticatedFetch(`${baseUrl}/minio/files/${photo}`);
+                const endpoint = isMinioResolverUrl(photo)
+                    ? (photo.startsWith('http') ? photo : `${baseUrl}${photo.startsWith('/') ? '' : '/'}${photo}`)
+                    : `${baseUrl}/minio/files/${photo.split('/').map(encodeURIComponent).join('/')}`;
+                const response = await authenticatedFetch(endpoint);
                 if (!response.ok) return;
                 const data = await response.json();
-                const src = data?.data?.src;
-                if (!cancelled && typeof src === 'string' && src.length > 0) {
+                const candidates = [data?.url, data?.data?.url, data?.data?.src, data?.src, data?.data?.data?.url];
+                const src = candidates.find((candidate): candidate is string => typeof candidate === 'string' && /^https?:\/\//i.test(candidate));
+                if (!cancelled && src) {
                     setRemoteResolvedSrc(src);
                 }
             } catch {
