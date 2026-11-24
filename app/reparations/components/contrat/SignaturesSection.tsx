@@ -113,7 +113,7 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
                                         : 'Précédée de la mention « LU ET APPROUVÉ »'}
                                 </p>
 
-                                {existingContrat && signatureUrl ? (
+                                {existingContrat && signatureUrl && !pendingOfflineContrat ? (
                                     <div className="signature-box">
                                         <img
                                             src={signatureUrl}
@@ -138,6 +138,10 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
                                             <Wifi className="w-4 h-4" />
                                             <span>En attente de synchronisation avec le serveur...</span>
                                         </div>
+                                        {(pendingOfflineContrat.signatureDataUrl || signatureUrl) && <div className="signature-box mt-4 bg-white p-3">
+                                            <img src={pendingOfflineContrat.signatureDataUrl || signatureUrl} alt="Signature enregistrée sur cet appareil" className="h-auto max-h-32 max-w-full object-contain" />
+                                            <p className="mt-2 text-xs text-gray-500">Signature conservée sur cet appareil jusqu’à la synchronisation.</p>
+                                        </div>}
                                     </div>
                                 ) : (
                                     <button

@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { isOnline } from '../../../utils/victimsCache';
 import { savePendingContract, getAllPendingContracts, deletePendingContract } from '../../../utils/contractsCache';
+import { getVictimFileUrl } from '../../../utils/victimDocumentApi';
 import { authenticatedFetch, getAuthToken } from '../../../utils/authFetch';
 import { getConnectedAgentFullName } from '../../../utils/currentUser';
 import type { PendingContract } from '../../../utils/contractsCache';
@@ -205,6 +206,8 @@ export function useContrat(victim: Victim) {
     const [showContratDetail, setShowContratDetail] = useState(false);
     const [showSignatureModal, setShowSignatureModal] = useState(false);
     const [pendingOfflineContrat, setPendingOfflineContrat] = useState<PendingContract | null>(null);
+    const [reloadContrat, setReloadContrat] = useState(0);
+    const pendingContractIdRef = useRef<number | null>(null);
 
     const formattedSignatureDate = existingContrat
         ? new Date(existingContrat.dateSignature).toLocaleDateString('fr-FR')
@@ -278,6 +281,7 @@ export function useContrat(victim: Victim) {
                 if (response.ok) {
                     const rawData = await response.json();
                     const data = rawData?.data ?? rawData;
+                    if (reloadContrat > 0) setPendingOfflineContrat(null);
 
                     if (isMpuConsentement) {
                         const signature = data.signatureBeneficiaire || data.signatureRepresentant || '';
@@ -343,15 +347,7 @@ export function useContrat(victim: Victim) {
                             pieceIdentite: data.pieceIdentiteRepresentant || '',
                         });
 
-                        if (signature && signature !== 'SIG_ELEC') {
-                            const signResp = await authenticatedFetch(`${baseUrl}/minio/files/${signature}`);
-                            if (signResp.ok) {
-                                const signData = await signResp.json();
-                                if (signData?.data?.src) {
-                                    setSignatureUrl(signData.data.src);
-                                }
-                            }
-                        }
+                        if (signature && signature !== 'SIG_ELEC') setSignatureUrl(await getVictimFileUrl(signature));
                         return;
                     }
 
@@ -424,14 +420,7 @@ export function useContrat(victim: Victim) {
                     });
 
                     if (data.signature && data.signature !== 'SIG_ELEC') {
-                        const signUrl = `${baseUrl}/minio/files/${data.signature}`;
-                        const signResp = await authenticatedFetch(signUrl);
-                        if (signResp.ok) {
-                            const signData = await signResp.json();
-                            if (signData?.data?.src) {
-                                setSignatureUrl(signData.data.src);
-                            }
-                        }
+                        setSignatureUrl(await getVictimFileUrl(data.signature));
                     }
                 }
             } catch (error) {
@@ -442,7 +431,7 @@ export function useContrat(victim: Victim) {
         };
 
         fetchContrat();
-    }, [victim.id, isMpuConsentement]);
+    }, [victim.id, isMpuConsentement, reloadContrat]);
 
     // Vérifier s'il y a un contrat en attente offline pour cette victime
     useEffect(() => {
@@ -453,7 +442,15 @@ export function useContrat(victim: Victim) {
                     p.victimId === victim.id &&
                     (isMpuConsentement ? p.targetType === 'consentement-mpu' : p.targetType !== 'consentement-mpu')
                 ));
-                setPendingOfflineContrat(victimPending || null);
+                if (victimPending) {
+                    setPendingOfflineContrat(victimPending);
+                    pendingContractIdRef.current = victimPending.id ?? null;
+                } else if (pendingContractIdRef.current !== null) {
+                    // The sync service removed it only after a successful API response.
+                    // Reload the server copy before removing the local signed view.
+                    pendingContractIdRef.current = null;
+                    setReloadContrat(value => value + 1);
+                }
             } catch (error) {
                 console.log('Erreur lors de la vérification des contrats offline:', error);
             }
@@ -713,7 +710,7 @@ export function useContrat(victim: Victim) {
     };
 
     // Sauvegarde du contrat
-    const saveContract = async () => {
+    const saveContract = async (): Promise<boolean> => {
         setIsSaving(true);
         setSaveMessage(null);
 
@@ -781,7 +778,7 @@ export function useContrat(victim: Victim) {
 
                 if (existingContrat) {
                     if (!isOnline() || !getAuthToken()) {
-                        await savePendingContract({
+                        const queued = await savePendingContract({
                             victimId: victim.id,
                             contractData: mpuPayload,
                             signatureDataUrl,
@@ -789,10 +786,12 @@ export function useContrat(victim: Victim) {
                             action: 'update',
                             targetId: existingContrat.id,
                         });
+                        setPendingOfflineContrat(queued);
+                        pendingContractIdRef.current = queued.id ?? null;
                         setExistingContrat({ ...existingContrat, ...mpuPayload } as Contrat);
                         setSaveMessage({ type: 'success', text: 'Acte modifié sur cet appareil. Il sera synchronisé dès qu’Internet et une session valide seront disponibles.' });
                         setTimeout(() => setSaveMessage(null), 4000);
-                        return;
+                        return true;
                     }
 
                     const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
@@ -816,21 +815,23 @@ export function useContrat(victim: Victim) {
                     });
                     setSaveMessage({ type: 'success', text: 'Acte de consentement MPU enregistré.' });
                     setTimeout(() => setSaveMessage(null), 3000);
-                    return;
+                    return true;
                 }
 
-                await savePendingContract({
+                const queued = await savePendingContract({
                     victimId: victim.id,
                     contractData: mpuPayload,
                     signatureDataUrl,
                     targetType: 'consentement-mpu',
                 });
+                setPendingOfflineContrat(queued);
+                pendingContractIdRef.current = queued.id ?? null;
 
                 await syncPendingContracts();
 
                 setSaveMessage({ type: 'success', text: 'Acte de consentement MPU enregistré (hors ligne si nécessaire). La synchronisation se fera automatiquement.' });
                 setTimeout(() => setSaveMessage(null), 3000);
-                return;
+                return true;
             }
 
             const mesuresReparationAcceptees = usesLegacyContractText
@@ -908,17 +909,19 @@ export function useContrat(victim: Victim) {
 
             if (existingContrat) {
                 if (!isOnline() || !getAuthToken()) {
-                    await savePendingContract({
+                    const queued = await savePendingContract({
                         victimId: victim.id,
                         contractData,
                         signatureDataUrl,
                         action: 'update',
                         targetId: existingContrat.id,
                     });
+                    setPendingOfflineContrat(queued);
+                    pendingContractIdRef.current = queued.id ?? null;
                     setExistingContrat({ ...existingContrat, ...contractData } as unknown as Contrat);
                     setSaveMessage({ type: 'success', text: 'Contrat modifié sur cet appareil. Il sera synchronisé dès qu’Internet et une session valide seront disponibles.' });
                     setTimeout(() => setSaveMessage(null), 4000);
-                    return;
+                    return true;
                 }
 
                 const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
@@ -936,22 +939,26 @@ export function useContrat(victim: Victim) {
                 setExistingContrat(updated);
                 setSaveMessage({ type: 'success', text: 'Modifications du contrat enregistrées.' });
                 setTimeout(() => setSaveMessage(null), 3000);
-                return;
+                return true;
             }
 
-            await savePendingContract({
+            const queued = await savePendingContract({
                 victimId: victim.id,
                 contractData,
                 signatureDataUrl,
             });
+            setPendingOfflineContrat(queued);
+            pendingContractIdRef.current = queued.id ?? null;
 
             await syncPendingContracts();
 
             setSaveMessage({ type: 'success', text: 'Contrat enregistré (hors ligne si nécessaire). La synchronisation se fera automatiquement.' });
             setTimeout(() => setSaveMessage(null), 3000);
+            return true;
         } catch (error) {
             console.log('Erreur:', error);
             setSaveMessage({ type: 'error', text: 'Erreur lors de la sauvegarde du contrat' });
+            return false;
         } finally {
             setIsSaving(false);
         }

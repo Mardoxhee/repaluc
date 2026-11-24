@@ -11,7 +11,7 @@ interface SignatureModalProps {
     draw: (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => void;
     stopDrawing: () => void;
     clearSignature: () => void;
-    saveContract: () => Promise<void>;
+    saveContract: () => Promise<boolean>;
     onClose: () => void;
     documentLabel?: string;
     documentActionLabel?: string;
@@ -83,8 +83,8 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
                             <button
                                 type="button"
                                 onClick={async () => {
-                                    await saveContract();
-                                    onClose();
+                                    const saved = await saveContract();
+                                    if (saved) onClose();
                                 }}
                                 disabled={isSaving}
                                 className="px-4 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"

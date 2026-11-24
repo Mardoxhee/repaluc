@@ -33,7 +33,7 @@ const openContractsDB = (): Promise<IDBDatabase> => {
 
 export const savePendingContract = async (
     entry: Omit<PendingContract, 'id' | 'createdAt'>
-): Promise<void> => {
+): Promise<PendingContract> => {
     const db = await openContractsDB();
     const tx = db.transaction([STORE_NAME], 'readwrite');
     const store = tx.objectStore(STORE_NAME);
@@ -43,14 +43,16 @@ export const savePendingContract = async (
         createdAt: Date.now(),
     };
 
-    store.put(toSave);
-
     return new Promise((resolve, reject) => {
+        const request = store.add(toSave);
+        request.onsuccess = () => { toSave.id = Number(request.result); };
+        request.onerror = () => reject(request.error);
         tx.oncomplete = () => {
             console.log('[ContractsCache] Contrat en attente sauvegardé');
-            resolve();
+            resolve(toSave);
         };
         tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error || new Error('La sauvegarde locale a été annulée.'));
     });
 };
 
