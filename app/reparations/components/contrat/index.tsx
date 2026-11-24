@@ -224,14 +224,17 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                     </div>
                 )}
 
-                {/* Liste des contrats si un contrat existe et qu'on n'affiche pas le détail */}
-                {!loadingContrat && existingContrat && !showContratDetail && (
+                {/* Liste du document confirmé ou du document local en attente */}
+                {!loadingContrat && (existingContrat || pendingOfflineContrat) && !showContratDetail && (
                     <div className="w-full px-4 py-4">
                         <h2 className="text-lg font-semibold text-blue-600 mb-4">
                             {isMpuConsentement ? 'Acte de consentement' : 'Liste des contrats'}
                         </h2>
                         <div
                             onClick={() => setShowContratDetail(true)}
+                            onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setShowContratDetail(true); }}
+                            role="button"
+                            tabIndex={0}
                             className="bg-blue-50 border border-blue-200 rounded-lg p-4 hover:bg-blue-100 cursor-pointer transition-colors flex items-center justify-between"
                         >
                             <div className="flex items-center gap-3">
@@ -239,8 +242,9 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                                 <div>
                                     <p className="font-semibold text-gray-800">{documentLabel}</p>
                                     <p className="text-sm text-gray-600">
-                                        Signé le {new Date(existingContrat.dateSignature).toLocaleDateString('fr-FR')}
+                                        Signé le {new Date(existingContrat?.dateSignature || pendingOfflineContrat?.contractData?.dateConsentement || pendingOfflineContrat?.createdAt || Date.now()).toLocaleDateString('fr-FR')}
                                     </p>
+                                    {pendingOfflineContrat && <p className="mt-1 text-xs font-medium text-amber-700">En attente de synchronisation · signature conservée sur cet appareil</p>}
                                 </div>
                             </div>
                             <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -251,11 +255,11 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                 )}
 
                 {/* Affichage du détail du contrat ou formulaire de création */}
-                {!loadingContrat && (!existingContrat || showContratDetail) && (
+                {!loadingContrat && (showContratDetail || (!existingContrat && !pendingOfflineContrat)) && (
                     <div className="w-full p-3 sm:p-4">
                         {/* Boutons d'action */}
                         <div className="flex justify-between items-center mb-4 no-print">
-                            {existingContrat && (
+                            {(existingContrat || pendingOfflineContrat) && (
                                 <button
                                     onClick={() => setShowContratDetail(false)}
                                     className="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded hover:bg-gray-300 transition-colors"

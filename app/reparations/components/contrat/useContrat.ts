@@ -208,6 +208,7 @@ export function useContrat(victim: Victim) {
     const [pendingOfflineContrat, setPendingOfflineContrat] = useState<PendingContract | null>(null);
     const [reloadContrat, setReloadContrat] = useState(0);
     const pendingContractIdRef = useRef<number | null>(null);
+    const hydratedPendingContractIdRef = useRef<number | null>(null);
 
     const formattedSignatureDate = existingContrat
         ? new Date(existingContrat.dateSignature).toLocaleDateString('fr-FR')
@@ -284,7 +285,7 @@ export function useContrat(victim: Victim) {
                     if (reloadContrat > 0) setPendingOfflineContrat(null);
 
                     if (isMpuConsentement) {
-                        const signature = data.signatureBeneficiaire || data.signatureRepresentant || '';
+                        const signature = data.signature || data.signatureBeneficiaire || data.signatureRepresentant || '';
                         setExistingContrat({
                             ...data,
                             typeContrat: 'Acte de consentement MPU',
@@ -463,6 +464,47 @@ export function useContrat(victim: Victim) {
         return () => clearInterval(interval);
     }, [victim.id, isMpuConsentement]);
 
+    useEffect(() => {
+        if (!isMpuConsentement || !pendingOfflineContrat || pendingOfflineContrat.id == null || hydratedPendingContractIdRef.current === pendingOfflineContrat.id) return;
+        const data = pendingOfflineContrat.contractData || {};
+        hydratedPendingContractIdRef.current = pendingOfflineContrat.id;
+        setContractForm(previous => ({
+            ...previous,
+            dateSignature: String(data.dateConsentement || previous.dateSignature).slice(0, 10),
+            lieuSignature: data.lieuConsentement || previous.lieuSignature,
+            fonarevNom: data.nomAgentFonarev || previous.fonarevNom,
+            fonarevFonction: data.fonctionAgentFonarev || previous.fonarevFonction,
+        }));
+        setConsentements(previous => ({
+            ...previous,
+            faireMediateur: Boolean(data.mediateurFonarev),
+            avocat: Boolean(data.accompagnementPersonneConfiance),
+            exerceDroit: data.aExerceDroit === true,
+            comprisDroit: data.aExerceDroit === false,
+            accepteReparation: data.decisionConsentement !== 'refuse',
+            refuseReparation: data.decisionConsentement === 'refuse',
+            incapaciteConsentir: Boolean(data.incapableConsentir),
+            consentementRepresentant: Boolean(data.incapableConsentir || data.nomRepresentant),
+            etatVictimisation: data.etatVictimisation || '',
+            situationVulnerabiliteUrgente: Boolean(data.situationVulnerabiliteUrgente),
+            mesuresProposees: recordFromKeys(MPU_MESURES.map(mesure => mesure.key), data.mesuresProposees),
+            autresMesures: data.autresMesures || '',
+            vulnerabilites: recordFromKeys(MPU_VULNERABILITES.map(item => item.key), data.vulnerabilites),
+            autresVulnerabilites: data.autresVulnerabilites || '',
+            informeMpu: Boolean(data.informeMpu),
+            droitsExpliques: Boolean(data.droitsExpliques),
+            engagementsAcceptes: Boolean(data.engagementsAcceptes),
+            mediateurFonarev: Boolean(data.mediateurFonarev),
+            accompagnementPersonneConfiance: Boolean(data.accompagnementPersonneConfiance),
+        }));
+        setRepresentant({
+            nom: data.nomRepresentant || '',
+            qualite: data.qualiteRepresentant || '',
+            organisation: data.organisationRepresentant || '',
+            pieceIdentite: data.pieceIdentiteRepresentant || '',
+        });
+    }, [isMpuConsentement, pendingOfflineContrat, setContractForm]);
+
     const uploadSignature = async (dataUrl: string): Promise<string> => {
         const uploadEndpoint = process.env.NEXT_PUBLIC_UPLOAD_ENDPOINT || 'https://360.fonasite.app:5521/minio/files/upload';
 
@@ -492,7 +534,7 @@ export function useContrat(victim: Victim) {
 
         try {
             const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
-            const pending: PendingContract[] = await getAllPendingContracts();
+            const pending: PendingContract[] = (await getAllPendingContracts()).filter(item => item.targetType !== 'consentement-mpu');
 
             for (const item of pending) {
                 try {
@@ -506,17 +548,15 @@ export function useContrat(victim: Victim) {
                         finalSignature = await uploadSignature(item.signatureDataUrl);
                     }
 
-                    const isRepresentantSignature = Boolean(
-                        item.contractData?.incapableConsentir ||
-                        item.contractData?.nomRepresentant ||
-                        item.contractData?.signatureRepresentant
-                    );
                     const payload = targetType === 'consentement-mpu'
-                        ? {
-                            ...item.contractData,
-                            [isRepresentantSignature ? 'signatureRepresentant' : 'signatureBeneficiaire']: finalSignature,
-                            nomAgentFonarev: item.contractData?.nomAgentFonarev || getConnectedAgentFullName(),
-                        }
+                        ? (() => {
+                            const { signatureBeneficiaire: _beneficiarySignature, signatureRepresentant: _representativeSignature, ...consentData } = item.contractData || {};
+                            return {
+                                ...consentData,
+                                signature: finalSignature,
+                                nomAgentFonarev: item.contractData?.nomAgentFonarev || getConnectedAgentFullName(),
+                            };
+                        })()
                         : (() => {
                             const {
                                 nomAgentFonarev: pendingAgentName,
@@ -734,12 +774,7 @@ export function useContrat(victim: Victim) {
             const nomAgentFonarev = getConnectedAgentFullName();
 
             if (isMpuConsentement) {
-                const signatureField = consentements.incapaciteConsentir || consentements.consentementRepresentant
-                    ? 'signatureRepresentant'
-                    : 'signatureBeneficiaire';
-                let finalSignature = signatureField === 'signatureRepresentant'
-                    ? existingContrat?.signatureRepresentant || ''
-                    : existingContrat?.signatureBeneficiaire || '';
+                let finalSignature = existingContrat?.signature || existingContrat?.signatureBeneficiaire || existingContrat?.signatureRepresentant || '';
 
                 if (signatureDataUrl && existingContrat && isOnline() && getAuthToken()) {
                     finalSignature = await uploadSignature(signatureDataUrl);
@@ -773,7 +808,7 @@ export function useContrat(victim: Victim) {
                     lieuConsentement: contractForm.lieuSignature,
                     nomAgentFonarev,
                     fonctionAgentFonarev: contractForm.fonarevFonction || undefined,
-                    [signatureField]: finalSignature || 'SIG_ELEC',
+                    signature: finalSignature || 'SIG_ELEC',
                 };
 
                 if (existingContrat) {
@@ -811,7 +846,7 @@ export function useContrat(victim: Victim) {
                         ...existingContrat,
                         ...updatedData,
                         dateSignature: updatedData.dateConsentement || existingContrat.dateSignature,
-                        signature: updatedData.signatureBeneficiaire || updatedData.signatureRepresentant || existingContrat.signature,
+                        signature: updatedData.signature || updatedData.signatureBeneficiaire || updatedData.signatureRepresentant || existingContrat.signature,
                     });
                     setSaveMessage({ type: 'success', text: 'Acte de consentement MPU enregistré.' });
                     setTimeout(() => setSaveMessage(null), 3000);
@@ -827,9 +862,7 @@ export function useContrat(victim: Victim) {
                 setPendingOfflineContrat(queued);
                 pendingContractIdRef.current = queued.id ?? null;
 
-                await syncPendingContracts();
-
-                setSaveMessage({ type: 'success', text: 'Acte de consentement MPU enregistré (hors ligne si nécessaire). La synchronisation se fera automatiquement.' });
+                setSaveMessage({ type: 'success', text: 'Acte de consentement enregistré sur cet appareil. Il reste en attente; synchronisez-le dans Réglages lorsque vous serez en ligne.' });
                 setTimeout(() => setSaveMessage(null), 3000);
                 return true;
             }

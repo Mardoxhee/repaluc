@@ -44,19 +44,14 @@ const buildPendingPayload = (
     const targetType = getPendingTargetType(item);
 
     if (targetType === 'consentement-mpu') {
-        const isRepresentantSignature = Boolean(
-            item.contractData?.incapableConsentir ||
-            item.contractData?.nomRepresentant ||
-            item.contractData?.signatureRepresentant
-        );
-        const signatureField = isRepresentantSignature ? 'signatureRepresentant' : 'signatureBeneficiaire';
+        const { signatureBeneficiaire: _signatureBeneficiaire, signatureRepresentant: _signatureRepresentant, ...consentData } = item.contractData || {};
 
         return {
             endpoint: `${baseUrl}/consentements-mpu`,
             label: 'Acte de consentement MPU',
             payload: {
-                ...item.contractData,
-                [signatureField]: finalSignature,
+                ...consentData,
+                signature: finalSignature,
                 nomAgentFonarev: item.contractData?.nomAgentFonarev || getConnectedAgentFullName(),
             },
         };
@@ -201,13 +196,13 @@ export const startContractsSyncService = () => {
 
     // Synchroniser immédiatement si en ligne
     if (isOnline()) {
-        syncPendingContracts();
+        syncPendingContracts({ targetType: 'contrat' });
     }
 
     // Écouter l'événement online
     const handleOnline = () => {
         console.log('[ContractsSyncService] Connexion rétablie, synchronisation...');
-        syncPendingContracts();
+        syncPendingContracts({ targetType: 'contrat' });
     };
 
     window.addEventListener('online', handleOnline);
@@ -215,7 +210,7 @@ export const startContractsSyncService = () => {
     // Synchronisation périodique toutes les 30 secondes (si en ligne)
     syncInterval = setInterval(() => {
         if (isOnline()) {
-            syncPendingContracts();
+            syncPendingContracts({ targetType: 'contrat' });
         }
     }, 30000);
 
