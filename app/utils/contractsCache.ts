@@ -38,22 +38,66 @@ export const savePendingContract = async (
     const tx = db.transaction([STORE_NAME], 'readwrite');
     const store = tx.objectStore(STORE_NAME);
 
-    const toSave: PendingContract = {
+    let toSave: PendingContract = {
         ...entry,
         createdAt: Date.now(),
     };
 
-    return new Promise((resolve, reject) => {
-        const request = store.add(toSave);
-        request.onsuccess = () => { toSave.id = Number(request.result); };
-        request.onerror = () => reject(request.error);
-        tx.oncomplete = () => {
-            console.log('[ContractsCache] Contrat en attente sauvegardé');
-            resolve(toSave);
-        };
-        tx.onerror = () => reject(tx.error);
-        tx.onabort = () => reject(tx.error || new Error('La sauvegarde locale a été annulée.'));
-    });
+    let saved: PendingContract;
+    try {
+        saved = await new Promise<PendingContract>((resolve, reject) => {
+            const request = entry.targetType === 'consentement-mpu'
+                ? store.getAll()
+                : null;
+
+            const write = (existing?: PendingContract) => {
+                if (existing?.id !== undefined) {
+                    // Keep one pending consent per victim, updating its local copy on each save.
+                    toSave = {
+                        ...toSave,
+                        id: existing.id,
+                        action: existing.action || entry.action,
+                        targetId: existing.targetId ?? entry.targetId,
+                    };
+                }
+                const writeRequest = existing ? store.put(toSave) : store.add(toSave);
+                writeRequest.onsuccess = () => { toSave.id = Number(writeRequest.result); };
+                writeRequest.onerror = () => reject(writeRequest.error);
+            };
+
+            if (request) {
+                request.onsuccess = () => {
+                    const existing = (request.result as PendingContract[]).find((item) => (
+                        item.targetType === 'consentement-mpu' && item.victimId === entry.victimId
+                    ));
+                    write(existing);
+                };
+                request.onerror = () => reject(request.error);
+            } else {
+                write();
+            }
+
+            tx.oncomplete = () => {
+                resolve(toSave);
+            };
+            tx.onerror = () => reject(tx.error);
+            tx.onabort = () => reject(tx.error || new Error('La sauvegarde locale a été annulée.'));
+        });
+    } finally {
+        db.close();
+    }
+
+    if (saved.id === undefined) {
+        throw new Error('La sauvegarde locale a réussi sans identifiant de dossier.');
+    }
+
+    const persisted = (await getAllPendingContracts()).find((item) => item.id === saved.id);
+    if (!persisted) {
+        throw new Error('L’acte n’a pas été retrouvé après son enregistrement local.');
+    }
+
+    console.log('[ContractsCache] Acte en attente sauvegardé et vérifié localement', persisted.id);
+    return persisted;
 };
 
 export const getAllPendingContracts = async (): Promise<PendingContract[]> => {

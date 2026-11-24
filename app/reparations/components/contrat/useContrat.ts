@@ -439,10 +439,12 @@ export function useContrat(victim: Victim) {
         const checkPendingOffline = async () => {
             try {
                 const pending = await getAllPendingContracts();
-                const victimPending = pending.find(p => (
-                    p.victimId === victim.id &&
-                    (isMpuConsentement ? p.targetType === 'consentement-mpu' : p.targetType !== 'consentement-mpu')
-                ));
+                const victimPending = pending
+                    .filter(p => (
+                        p.victimId === victim.id &&
+                        (isMpuConsentement ? p.targetType === 'consentement-mpu' : p.targetType !== 'consentement-mpu')
+                    ))
+                    .sort((a, b) => b.createdAt - a.createdAt)[0];
                 if (victimPending) {
                     setPendingOfflineContrat(victimPending);
                     pendingContractIdRef.current = victimPending.id ?? null;
@@ -774,11 +776,10 @@ export function useContrat(victim: Victim) {
             const nomAgentFonarev = getConnectedAgentFullName();
 
             if (isMpuConsentement) {
-                let finalSignature = existingContrat?.signature || existingContrat?.signatureBeneficiaire || existingContrat?.signatureRepresentant || '';
-
-                if (signatureDataUrl && existingContrat && isOnline() && getAuthToken()) {
-                    finalSignature = await uploadSignature(signatureDataUrl);
-                }
+                const finalSignature = existingContrat?.signature
+                    || existingContrat?.signatureBeneficiaire
+                    || existingContrat?.signatureRepresentant
+                    || '';
 
                 const mpuPayload = {
                     victimeId: victim.id,
@@ -811,59 +812,23 @@ export function useContrat(victim: Victim) {
                     signature: finalSignature || 'SIG_ELEC',
                 };
 
-                if (existingContrat) {
-                    if (!isOnline() || !getAuthToken()) {
-                        const queued = await savePendingContract({
-                            victimId: victim.id,
-                            contractData: mpuPayload,
-                            signatureDataUrl,
-                            targetType: 'consentement-mpu',
-                            action: 'update',
-                            targetId: existingContrat.id,
-                        });
-                        setPendingOfflineContrat(queued);
-                        pendingContractIdRef.current = queued.id ?? null;
-                        setExistingContrat({ ...existingContrat, ...mpuPayload } as Contrat);
-                        setSaveMessage({ type: 'success', text: 'Acte modifié sur cet appareil. Il sera synchronisé dès qu’Internet et une session valide seront disponibles.' });
-                        setTimeout(() => setSaveMessage(null), 4000);
-                        return true;
-                    }
-
-                    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
-                    const response = await authenticatedFetch(`${baseUrl}/consentements-mpu/${existingContrat.id}`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(mpuPayload),
-                    });
-
-                    if (!response.ok) {
-                        throw new Error('Erreur lors de la mise à jour de l’acte de consentement MPU');
-                    }
-
-                    const updated = await response.json().catch(() => ({ ...existingContrat, ...mpuPayload }));
-                    const updatedData = updated?.data ?? updated;
-                    setExistingContrat({
-                        ...existingContrat,
-                        ...updatedData,
-                        dateSignature: updatedData.dateConsentement || existingContrat.dateSignature,
-                        signature: updatedData.signature || updatedData.signatureBeneficiaire || updatedData.signatureRepresentant || existingContrat.signature,
-                    });
-                    setSaveMessage({ type: 'success', text: 'Acte de consentement MPU enregistré.' });
-                    setTimeout(() => setSaveMessage(null), 3000);
-                    return true;
-                }
-
                 const queued = await savePendingContract({
                     victimId: victim.id,
                     contractData: mpuPayload,
                     signatureDataUrl,
                     targetType: 'consentement-mpu',
+                    ...(existingContrat?.id
+                        ? { action: 'update' as const, targetId: existingContrat.id }
+                        : { action: 'create' as const }),
                 });
                 setPendingOfflineContrat(queued);
                 pendingContractIdRef.current = queued.id ?? null;
+                if (existingContrat) {
+                    setExistingContrat({ ...existingContrat, ...mpuPayload } as Contrat);
+                }
 
                 setSaveMessage({ type: 'success', text: 'Acte de consentement enregistré sur cet appareil. Il reste en attente; synchronisez-le dans Réglages lorsque vous serez en ligne.' });
-                setTimeout(() => setSaveMessage(null), 3000);
+                setTimeout(() => setSaveMessage(null), 4000);
                 return true;
             }
 
