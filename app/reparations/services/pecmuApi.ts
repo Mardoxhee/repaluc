@@ -22,7 +22,7 @@ export type PecmuFilterRule = {
 
 export type FichePecmu = {
   workflowStatus?: WorkflowStatus;
-  status?: string;
+  status?: string | null;
   id: number;
   victimeId?: number;
   victimId?: number;
@@ -35,6 +35,7 @@ export type FichePecmu = {
   victimPhone?: string;
   emergencyContactName?: string;
   emergencyContactRelationship?: string;
+  emergencyContactPhone?: string;
   careStructureName?: string;
   healthZone?: string;
   healthArea?: string;
@@ -256,10 +257,10 @@ export const mapFichePecmuToVictimRow = (fiche: FichePecmu) => ({
   rawPecmuFiche: fiche,
 });
 
-export const mapF2ValuesToFichePecmuPayload = (values: Record<string, string>): Partial<FichePecmu> => {
+export const mapF2ValuesToFichePecmuPayload = (values: Record<string, string>, preserveEmpty = false): Partial<FichePecmu> => {
   const payload: Partial<FichePecmu> = {
     victimName: values.nomVictime,
-    age: toOptionalNumber(values.age),
+    age: values.age === '' && preserveEmpty ? null as any : toOptionalNumber(values.age),
     sex: values.sexe,
     province: values.province,
     locality: values.localite,
@@ -267,6 +268,7 @@ export const mapF2ValuesToFichePecmuPayload = (values: Record<string, string>): 
     victimPhone: values.telephoneVictime,
     emergencyContactName: values.contactUrgenceNom,
     emergencyContactRelationship: values.contactUrgenceLien,
+    emergencyContactPhone: values.contactUrgenceTelephone,
     careStructureName: values.structureNom,
     healthZone: values.zoneSante,
     healthArea: values.aireSante,
@@ -305,7 +307,57 @@ export const mapF2ValuesToFichePecmuPayload = (values: Record<string, string>): 
     }
   });
 
-  return compactPayload(payload);
+  return preserveEmpty ? payload : compactPayload(payload);
+};
+
+export const mapFichePecmuToF2Values = (fiche: FichePecmu): Record<string, string> => {
+  const yesNo = (value: unknown) => value === true ? 'Oui' : value === false ? 'Non' : '';
+  const values: Record<string, string> = {
+    nomVictime: fiche.victimName || '',
+    age: fiche.age == null ? '' : String(fiche.age),
+    sexe: fiche.sex || '',
+    province: fiche.province || '',
+    localite: fiche.locality || '',
+    adresseVictime: fiche.victimAddress || '',
+    telephoneVictime: fiche.victimPhone || '',
+    contactUrgenceNom: fiche.emergencyContactName || '',
+    contactUrgenceLien: fiche.emergencyContactRelationship || '',
+    contactUrgenceTelephone: fiche.emergencyContactPhone || '',
+    structureNom: fiche.careStructureName || '',
+    zoneSante: fiche.healthZone || '',
+    aireSante: fiche.healthArea || '',
+    adresseStructure: fiche.careStructureAddress || '',
+    contactMedecin: fiche.doctorOrNurseContact || '',
+    sourceNom: fiche.alertSourceFullName || '',
+    alertSourceStructureName: fiche.alertSourceStructureName || '',
+    alertSourceStructureType: fiche.alertSourceStructureType || '',
+    alertSourceOtherStructureType: fiche.alertSourceOtherStructureType || '',
+    sourceContact: fiche.alertSourcePhone || '',
+    sourceRapport: fiche.alertSourceRelationship || '',
+    sourceAdresse: fiche.alertSourceAddress || '',
+    typeViolation: fiche.violationType || '',
+    detailsIncident: fiche.incidentDetails || '',
+    periodeIncident: fiche.incidentPeriod || '',
+    partiesCorps: fiche.affectedBodyParts || '',
+    statutMedical: fiche.medicalStatus || '',
+    pronosticVital: fiche.vitalPrognosis || '',
+    autresPlaintes: fiche.otherComplaints || '',
+    identificationVictime: yesNo(fiche.victimIdentification),
+    validationNom: fiche.validatorName || '',
+    validationFonction: fiche.validatorRole || '',
+    decision: fiche.referralDecision || '',
+    partenaireDecision: fiche.partnerNameAndAddress || '',
+    timingReferencement: fiche.requiredTiming || '',
+    priseEnChargePlanifier: fiche.medicalCareToPlan || '',
+    referencementUrgent: yesNo(fiche.urgentMedicalReferralRequired),
+    commentaires: fiche.comments || '',
+    responsable: fiche.responsibleNameAndSignature || '',
+  };
+
+  Object.entries(symptomMap).forEach(([label, apiField]) => {
+    values[`plainte_${label}`] = yesNo(fiche[apiField]);
+  });
+  return values;
 };
 
 export const listFichesPecmu = async (
@@ -371,13 +423,13 @@ export const getFichePecmu = async (fetcher: PecmuFetcher, id: number): Promise<
   requireResponse(await fetcher(`/fiche-pecmu/${id}`), 'Impossible de charger la fiche PECMU.')
 );
 
-export const updateFichePecmu = async (fetcher: PecmuFetcher, id: number, payload: Partial<FichePecmu>): Promise<FichePecmu> => {
+export const updateFichePecmu = async (fetcher: PecmuFetcher, id: number, payload: Partial<FichePecmu>, preserveEmpty = false): Promise<FichePecmu> => {
   if (['incidentCertification', 'consentement', 'certificationNote', 'pecmuDecision'].some(key => key in payload)) {
     throw new Error('Les champs du parcours doivent être modifiés via les actions dédiées du workflow PECMU.');
   }
   return (
   requireResponse(await fetcher(`/fiche-pecmu/${id}`, {
-    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(compactPayload(payload)),
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(preserveEmpty ? payload : compactPayload(payload)),
   }), 'Impossible de modifier la fiche PECMU.')
   );
 };

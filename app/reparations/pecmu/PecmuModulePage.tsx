@@ -23,9 +23,12 @@ import { getVictimsFromCache, isOnline } from '../../utils/victimsCache';
 import { normalizeApiList, normalizeText } from '../utils/mentionStats';
 import {
   createFichePecmu,
+  mapFichePecmuToF2Values,
+  mapF2ValuesToFichePecmuPayload,
   listActesMedicauxByFiche,
   listFichesPecmuByVictim,
   listFichesPecmu,
+  updateFichePecmu,
   type FichePecmu,
 } from '../services/pecmuApi';
 import { violationGroups, violationOptions } from '../constants/violations';
@@ -366,6 +369,7 @@ const PecmuModulePage: React.FC = () => {
   const [medicalActCounts, setMedicalActCounts] = useState<Record<number, number>>({});
   const [alertMasterVictim, setAlertMasterVictim] = useState<MasterVictim | null>(null);
   const [existingVictimAlerts, setExistingVictimAlerts] = useState<FichePecmu[]>([]);
+  const [editingDraft, setEditingDraft] = useState<FichePecmu | null>(null);
   const [loadingVictimAlerts, setLoadingVictimAlerts] = useState(false);
   const [showVictimAlerts, setShowVictimAlerts] = useState(false);
   const [alertValues, setAlertValues] = useState<Record<string, string>>(() => buildF2Values(null));
@@ -599,6 +603,7 @@ const PecmuModulePage: React.FC = () => {
   };
 
   const openAlertModal = (victim?: Victim | null) => {
+    setEditingDraft(null);
     const selected = victim || selectedVictim;
     const linked = selected?.masterVictimId ? ({
       id: selected.masterVictimId, nom: selected.nom, prenom: selected.prenom, postnom: selected.postnom,
@@ -615,6 +620,27 @@ const PecmuModulePage: React.FC = () => {
     setOtherViolation(violations.other);
     setAlertValues(values);
     hydrateIncidentDates(values.periodeIncident);
+    setShowAlertModal(true);
+  };
+
+  const openDraftEditor = (draft: FichePecmu, victim?: Victim) => {
+    if (victim) {
+      setSelectedVictim(victim);
+      setAlertMasterVictim(victim.masterVictimId ? {
+        id: victim.masterVictimId, nom: victim.nom, prenom: victim.prenom, postnom: victim.postnom,
+        age: victim.age, sexe: victim.sexe, province: victim.province, territoire: victim.territoire,
+        commune: victim.commune, village: victim.village, adresse: victim.adresse,
+      } : null);
+    }
+    const values = mapFichePecmuToF2Values(draft);
+    const violations = parseViolationSelection(values.typeViolation);
+    setEditingDraft(draft);
+    setAlertValues(values);
+    setSelectedViolations(violations.selected);
+    setCustomViolation(violations.custom);
+    setOtherViolation(violations.other);
+    hydrateIncidentDates(values.periodeIncident);
+    setShowVictimAlerts(false);
     setShowAlertModal(true);
   };
 
@@ -658,6 +684,42 @@ const PecmuModulePage: React.FC = () => {
     event.preventDefault();
     if (submittingAlert) return;
     const saveAsDraft = (event.nativeEvent as SubmitEvent).submitter instanceof HTMLElement && (event.nativeEvent as SubmitEvent).submitter?.hasAttribute('data-save-draft');
+    if (editingDraft) {
+      setSubmittingAlert(true);
+      try {
+        const incidentPeriod = incidentDateMode === 'date' ? incidentDate : `${incidentStartDate} au ${incidentEndDate}`;
+        const violationType = [...selectedViolations, ...(otherViolation && customViolation.trim() ? [customViolation.trim()] : [])].join(' ; ');
+        const payload = mapF2ValuesToFichePecmuPayload({ ...alertValues, periodeIncident: incidentPeriod, typeViolation: violationType }, true);
+        if (saveAsDraft) payload.status = 'BROUILLON';
+        else payload.status = null;
+
+        await updateFichePecmu(fetcher, editingDraft.id, payload, true);
+        const savedDraftId = editingDraft.id;
+        setEditingDraft(null);
+        setShowAlertModal(false);
+        await loadVictims();
+
+        if (saveAsDraft) {
+          if (alertMasterVictim) {
+            setExistingVictimAlerts(await listFichesPecmuByVictim(fetcher, alertMasterVictim.id));
+            setShowVictimAlerts(true);
+          }
+          await Swal.fire({ icon: 'success', title: 'Brouillon mis à jour', text: 'Les modifications ont été enregistrées dans le brouillon.', confirmButtonColor: '#901c67' });
+        } else {
+          setShowVictimAlerts(false);
+          setOpenDossierId(savedDraftId);
+          await Swal.fire({ icon: 'success', title: 'Fiche soumise', text: 'Le brouillon a été soumis et son dossier est prêt à être suivi.', confirmButtonColor: '#901c67' });
+        }
+      } catch (error: any) {
+        const backendResponse = error instanceof PecmuApiError
+          ? `Réponse du backend (HTTP ${error.statusCode}, code ${error.code}) :\n${error.responseBody !== undefined ? JSON.stringify(error.responseBody, null, 2) : error.responseText || error.message}`
+          : 'Aucune réponse structurée du backend n’a été reçue.';
+        await Swal.fire({ icon: 'error', title: saveAsDraft ? 'Brouillon non mis à jour' : 'Fiche non soumise', text: `${error?.message || 'La fiche PECMU n’a pas pu être mise à jour.'}\n\n${backendResponse}`, confirmButtonColor: '#901c67' });
+      } finally {
+        setSubmittingAlert(false);
+      }
+      return;
+    }
     if (saveAsDraft) {
       setSubmittingAlert(true);
       try {
@@ -1096,6 +1158,8 @@ const PecmuModulePage: React.FC = () => {
               <tbody className="divide-y divide-slate-100">
                 {victims.map((victim, index) => {
                   const active = selectedVictim?.id === victim.id;
+                  const draftFiche = victim.rawPecmuFiche as FichePecmu | undefined;
+                  const isDraft = draftFiche?.status?.toUpperCase() === 'BROUILLON';
                   const actCount = victim.pecmuFicheIds?.length || victim.pecmuFicheId
                     ? (medicalActCounts[victim.id] ?? 0)
                     : medicalActs.filter((act) => act.victimId === victim.id).length;
@@ -1118,7 +1182,10 @@ const PecmuModulePage: React.FC = () => {
                       <td className="px-4 py-3 text-sm text-slate-700">{victim.status || '-'}</td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex flex-wrap justify-end gap-2">
-                          <button type="button" onClick={event => { event.stopPropagation(); requestAlertModal(victim); }} className="inline-flex items-center whitespace-nowrap border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100">Nouvelle alerte</button>
+                          {isDraft && draftFiche ? <>
+                            <button type="button" onClick={event => { event.stopPropagation(); setOpenDossierId(draftFiche.id); }} className="inline-flex items-center whitespace-nowrap border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50">Voir</button>
+                            <button type="button" onClick={event => { event.stopPropagation(); openDraftEditor(draftFiche, victim); }} className="inline-flex items-center whitespace-nowrap border border-primary/30 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/10">Éditer</button>
+                          </> : <button type="button" onClick={event => { event.stopPropagation(); requestAlertModal(victim); }} className="inline-flex items-center whitespace-nowrap border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100">Nouvelle alerte</button>}
                           <span className="inline-flex items-center whitespace-nowrap border border-secondary/20 bg-secondary/5 px-2.5 py-1 text-xs font-medium text-secondary">{actCount} {actCount > 1 ? 'actes médicaux' : 'acte médical'}</span>
                         </div>
                       </td>
@@ -1167,13 +1234,16 @@ const PecmuModulePage: React.FC = () => {
               <div><p className="text-xs font-bold uppercase tracking-widest text-primary">Historique PECMU</p><h2 className="mt-1 text-2xl font-bold">{alertMasterVictim ? masterVictimName(alertMasterVictim) : 'Alertes de la victime'}</h2><p className="mt-1 text-sm text-slate-500">{existingVictimAlerts.length} alerte{existingVictimAlerts.length === 1 ? '' : 's'} enregistrée{existingVictimAlerts.length === 1 ? '' : 's'}</p></div>
               <button type="button" onClick={() => setShowVictimAlerts(false)} className="rounded p-2 text-slate-500 hover:bg-slate-100" aria-label="Fermer"><X size={22} /></button>
             </div>
-            {loadingVictimAlerts ? <p role="status" className="py-8 text-center text-sm text-slate-500">Chargement des alertes…</p> : existingVictimAlerts.length ? <ol className="max-h-[60vh] divide-y divide-slate-100 overflow-y-auto">{existingVictimAlerts.map(alert => <li key={alert.id} className="flex flex-wrap items-center justify-between gap-3 py-4"><div><p className="font-semibold">Fiche PECMU #{alert.id} · {alert.alertSourceStructureName || alert.careStructureName || 'Structure non renseignée'}</p><p className="text-sm text-slate-500">{alert.incidentPeriod || 'Période non renseignée'} · {alert.workflowStatus ? statusLabels[alert.workflowStatus] : alert.medicalStatus || 'Statut non renseigné'} · {alert.createdAt ? new Date(alert.createdAt).toLocaleDateString('fr-FR') : 'Date non renseignée'}</p></div><button type="button" className="text-sm font-semibold text-primary underline" onClick={() => { setShowVictimAlerts(false); setOpenDossierId(alert.id); }}>Ouvrir le dossier</button></li>)}</ol> : <p className="py-8 text-center text-sm text-slate-500">Aucune alerte enregistrée pour cette victime.</p>}
+            {loadingVictimAlerts ? <p role="status" className="py-8 text-center text-sm text-slate-500">Chargement des alertes…</p> : existingVictimAlerts.length ? <ol className="max-h-[60vh] divide-y divide-slate-100 overflow-y-auto">{existingVictimAlerts.map(alert => {
+              const isDraft = alert.status?.toUpperCase() === 'BROUILLON';
+              return <li key={alert.id} className="flex flex-wrap items-center justify-between gap-3 py-4"><div><p className="font-semibold">Fiche PECMU #{alert.id} · {alert.alertSourceStructureName || alert.careStructureName || 'Structure non renseignée'}</p><p className="text-sm text-slate-500">{alert.incidentPeriod || 'Période non renseignée'} · {isDraft ? 'Brouillon' : alert.workflowStatus ? statusLabels[alert.workflowStatus] : alert.medicalStatus || 'Statut non renseigné'} · {alert.createdAt ? new Date(alert.createdAt).toLocaleDateString('fr-FR') : 'Date non renseignée'}</p></div><div className="flex items-center gap-2">{isDraft ? <><button type="button" className="border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50" onClick={() => { setShowVictimAlerts(false); setOpenDossierId(alert.id); }}>Voir</button><button type="button" className="bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary/90" onClick={() => openDraftEditor(alert)}>Éditer</button></> : <button type="button" className="text-sm font-semibold text-primary underline" onClick={() => { setShowVictimAlerts(false); setOpenDossierId(alert.id); }}>Ouvrir le dossier</button>}</div></li>;
+            })}</ol> : <p className="py-8 text-center text-sm text-slate-500">Aucune alerte enregistrée pour cette victime.</p>}
             <div className="flex justify-end gap-3 border-t border-slate-200 pt-4"><button type="button" onClick={() => setShowVictimAlerts(false)} className="border border-slate-300 px-4 py-2 text-sm font-semibold">Fermer</button>{selectedVictim && <button type="button" onClick={() => { setShowVictimAlerts(false); requestAlertModal(selectedVictim); }} className="bg-primary px-4 py-2 text-sm font-semibold text-white">Nouvelle alerte</button>}</div>
           </section>
         </ModalBody>
       </Modal>
 
-      <Modal show={showAlertModal} onClose={() => setShowAlertModal(false)} size="7xl" className="!z-[100] !h-dvh !bg-slate-950/60" aria-label="Nouvelle alerte PECMU">
+      <Modal show={showAlertModal} onClose={() => { setShowAlertModal(false); setEditingDraft(null); }} size="7xl" className="!z-[100] !h-dvh !bg-slate-950/60" aria-label={editingDraft ? 'Modifier un brouillon PECMU' : 'Nouvelle alerte PECMU'}>
         <ModalBody className="!p-0">
           <form onSubmit={handleAlertSubmit} className="relative !bg-white !text-gray-900">
             <button
@@ -1187,19 +1257,22 @@ const PecmuModulePage: React.FC = () => {
             </button>
 
             <div className="border-b !border-gray-200 px-4 pb-5 pt-8 md:px-7 md:pt-6">
-              <div className="text-[11px] font-black uppercase tracking-[0.35em] !text-red-600">Nouvelle alerte</div>
-              <h2 className="mt-2 text-2xl font-black !text-gray-950 md:text-3xl">Fiche identification cas</h2>
-              <p className="mt-1 text-sm !text-gray-500 md:text-base">Cherchez d’abord la victime existante. Une nouvelle alerte créera un dossier distinct.</p>
+              <div className="text-[11px] font-black uppercase tracking-[0.35em] !text-red-600">{editingDraft ? 'Brouillon PECMU' : 'Nouvelle alerte'}</div>
+              <h2 className="mt-2 text-2xl font-black !text-gray-950 md:text-3xl">{editingDraft ? `Modifier la fiche #${editingDraft.id}` : 'Fiche identification cas'}</h2>
+              <p className="mt-1 text-sm !text-gray-500 md:text-base">{editingDraft ? 'Modifiez les informations dans le parcours F2, puis mettez à jour le brouillon ou soumettez la fiche.' : 'Cherchez d’abord la victime existante. Une nouvelle alerte créera un dossier distinct.'}</p>
             </div>
 
             <div className="max-h-[calc(100vh-230px)] overflow-y-auto px-4 py-5 md:px-7">
               <fieldset disabled={submittingAlert} className="space-y-5">
                 <PecmuVictimSearch fetcher={fetcher} selected={alertMasterVictim} onSelect={victim => { void selectAlertVictim(victim); }} disabled={submittingAlert} />
-                {alertMasterVictim && <section className="space-y-3 rounded border border-slate-200 bg-white p-4">
+                {alertMasterVictim && !editingDraft && <section className="space-y-3 rounded border border-slate-200 bg-white p-4">
                   <div className="flex items-center justify-between gap-3"><h3 className="font-semibold">Alertes PECMU déjà enregistrées</h3><span className="rounded bg-primary/5 px-2 py-1 text-xs font-semibold text-primary">{existingVictimAlerts.length} alerte{existingVictimAlerts.length > 1 ? 's' : ''}</span></div>
-                  {loadingVictimAlerts ? <p role="status" className="text-sm text-slate-500">Chargement des alertes…</p> : existingVictimAlerts.length ? <ol className="space-y-2">{existingVictimAlerts.map(alert => <li key={alert.id} className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3"><div><p className="text-sm font-semibold">Fiche PECMU #{alert.id} · {alert.alertSourceStructureName || alert.careStructureName || 'Structure non renseignée'}</p><p className="text-xs text-slate-500">{alert.incidentPeriod || 'Période non renseignée'} · {alert.workflowStatus ? statusLabels[alert.workflowStatus] : alert.medicalStatus || 'Statut non renseigné'} · {alert.createdAt ? new Date(alert.createdAt).toLocaleDateString('fr-FR') : 'Date non renseignée'}</p></div><button type="button" className="text-sm font-semibold text-primary underline" onClick={() => { setShowAlertModal(false); setOpenDossierId(alert.id); }}>Ouvrir le dossier</button></li>)}</ol> : <p className="text-sm text-slate-500">Aucune alerte précédente trouvée pour cette victime.</p>}
+                  {loadingVictimAlerts ? <p role="status" className="text-sm text-slate-500">Chargement des alertes…</p> : existingVictimAlerts.length ? <ol className="space-y-2">{existingVictimAlerts.map(alert => {
+                    const isDraft = alert.status?.toUpperCase() === 'BROUILLON';
+                    return <li key={alert.id} className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3"><div><p className="text-sm font-semibold">Fiche PECMU #{alert.id} · {alert.alertSourceStructureName || alert.careStructureName || 'Structure non renseignée'}</p><p className="text-xs text-slate-500">{alert.incidentPeriod || 'Période non renseignée'} · {isDraft ? 'Brouillon' : alert.workflowStatus ? statusLabels[alert.workflowStatus] : alert.medicalStatus || 'Statut non renseigné'} · {alert.createdAt ? new Date(alert.createdAt).toLocaleDateString('fr-FR') : 'Date non renseignée'}</p></div><div className="flex items-center gap-2">{isDraft ? <><button type="button" className="border border-slate-300 px-3 py-1 text-sm font-semibold text-slate-700" onClick={() => { setShowAlertModal(false); setOpenDossierId(alert.id); }}>Voir</button><button type="button" className="border border-primary px-3 py-1 text-sm font-semibold text-primary" onClick={() => openDraftEditor(alert)}>Éditer</button></> : <button type="button" className="text-sm font-semibold text-primary underline" onClick={() => { setShowAlertModal(false); setOpenDossierId(alert.id); }}>Ouvrir le dossier</button>}</div></li>;
+                  })}</ol> : <p className="text-sm text-slate-500">Aucune alerte précédente trouvée pour cette victime.</p>}
                 </section>}
-                {f2Sections.filter((_, index) => !(alertMasterVictim && index === 0)).map((section) => (
+                {f2Sections.filter((_, index) => !(alertMasterVictim && !editingDraft && index === 0)).map((section) => (
                   <section key={section.title} className="border !border-gray-200 !bg-white p-4 md:p-5">
                     <h3 className="mb-4 text-sm font-black uppercase tracking-wide !text-gray-800">{section.title}</h3>
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -1236,11 +1309,11 @@ const PecmuModulePage: React.FC = () => {
             <div className="flex justify-end gap-3 border-t !border-gray-200 bg-white px-4 py-4 md:px-7">
               <button type="button" onClick={() => setShowAlertModal(false)} className="border !border-gray-300 px-4 py-2 text-sm font-bold !text-gray-700 hover:!bg-gray-50">Annuler</button>
               <button type="submit" data-save-draft disabled={submittingAlert} className="inline-flex items-center gap-2 border border-primary px-4 py-2 text-sm font-bold text-primary hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60">
-                <Save size={16} />{submittingAlert ? 'Enregistrement…' : 'Enregistrer le brouillon'}
+                <Save size={16} />{submittingAlert ? (editingDraft ? 'Mise à jour…' : 'Enregistrement…') : (editingDraft ? 'Mettre à jour' : 'Enregistrer le brouillon')}
               </button>
               <button type="submit" disabled={submittingAlert} className="inline-flex items-center gap-2 !bg-red-600 px-4 py-2 text-sm font-bold text-white hover:!bg-red-700 disabled:cursor-not-allowed disabled:opacity-60">
                 <Save size={16} />
-                {submittingAlert ? 'Enregistrement...' : 'Enregistrer l’alerte F2'}
+                {submittingAlert ? (editingDraft ? 'Soumission…' : 'Enregistrement...') : (editingDraft ? 'Soumettre' : 'Enregistrer l’alerte F2')}
               </button>
             </div>
           </form>
