@@ -1,8 +1,5 @@
 'use client';
 
-const AUTH_STORAGE_KEYS = ['token', 'usr', 'auth', 'apps', 'repaluc_auth'];
-const SESSION_LOCK_KEY = 'repaluc_session_locked';
-
 export const getAuthToken = (): string | null => {
   if (typeof window === 'undefined') return null;
 
@@ -36,62 +33,6 @@ const shouldSkipAuthHeaders = (input: RequestInfo | URL): boolean => {
   return url.startsWith('data:') || url.startsWith('blob:');
 };
 
-const getRequestUrl = (input: RequestInfo | URL): string => {
-  if (typeof input === 'string') return input;
-  if (input instanceof URL) return input.href;
-  return input.url;
-};
-
-const isAuthRequest = (input: RequestInfo | URL): boolean => {
-  const url = getRequestUrl(input);
-  return url.includes('/auth/login') || url.includes('/auth/verify-token');
-};
-
-const isDocumentDisplayRequest = (input: RequestInfo | URL, init: RequestInit): boolean => {
-  const method = (init.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
-  if (method !== 'GET') return false;
-
-  try {
-    const url = new URL(getRequestUrl(input), typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
-    const pathname = url.pathname.toLowerCase();
-    return pathname.startsWith('/document-victime/') || pathname.startsWith('/minio/files/');
-  } catch {
-    return false;
-  }
-};
-
-const isInvalidSessionResponse = async (response: Response): Promise<boolean> => {
-  if (response.status === 401) return true;
-  if (response.status !== 403) return false;
-
-  try {
-    const body = await response.clone().text();
-    return /(?:invalid|expired|revoked|malformed|invalide|expiré|expire|révoqué|revoque).{0,40}(?:token|session|jwt)|(?:token|session|jwt).{0,40}(?:invalid|expired|revoked|malformed|invalide|expiré|expire|révoqué|revoque)/i.test(body);
-  } catch {
-    return false;
-  }
-};
-
-const clearAuthSession = () => {
-  try {
-    AUTH_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
-    localStorage.setItem(SESSION_LOCK_KEY, JSON.stringify({
-      reason: 'unauthorized',
-      ts: Date.now(),
-    }));
-  } catch {
-    // ignore
-  }
-
-  void import('./authCache')
-    .then(({ clearOfflineCredentials }) => clearOfflineCredentials())
-    .catch(() => undefined);
-
-  if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
-    window.location.assign('/login');
-  }
-};
-
 export const authenticatedFetch = async (
   input: RequestInfo | URL,
   init: RequestInit = {}
@@ -102,15 +43,8 @@ export const authenticatedFetch = async (
 
   const baseHeaders = init.headers ?? (input instanceof Request ? input.headers : undefined);
 
-  const response = await fetch(input, {
+  return fetch(input, {
     ...init,
     headers: withAuthHeaders(baseHeaders),
   });
-
-  if (!isAuthRequest(input) && !isDocumentDisplayRequest(input, init) && await isInvalidSessionResponse(response)) {
-    // Un 403 d'habilitation ne signifie pas nécessairement que le token est invalide.
-    clearAuthSession();
-  }
-
-  return response;
 };
