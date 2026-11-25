@@ -47,11 +47,6 @@ export default function LoginPage() {
 
   const finishLogin = async () => {
     localStorage.setItem('repaluc_auth', JSON.stringify({ username, ts: Date.now() }));
-    try {
-      localStorage.removeItem('repaluc_session_locked');
-    } catch {
-      // ignore
-    }
     router.replace('/');
   };
 

@@ -1,13 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import SideBar from './sideBar';
 import Header from './header';
 import HamburgerMenu from '../HamburgerMenu';
 
 const AUTH_KEY = 'repaluc_auth';
-const SESSION_LOCK_KEY = 'repaluc_session_locked';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -18,6 +17,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, noZoom }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
+  const initialAuthCheckDone = useRef(false);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -38,6 +38,9 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, noZoom }) => {
   }, []);
 
   useEffect(() => {
+    if (initialAuthCheckDone.current) return;
+    initialAuthCheckDone.current = true;
+
     if (pathname === '/login') {
       setAuthChecked(true);
       return;
@@ -51,33 +54,9 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, noZoom }) => {
         return;
       }
 
-      const locked = localStorage.getItem(SESSION_LOCK_KEY);
-      if (locked === 'true') {
-        router.replace('/login');
-        return;
-      }
     } finally {
       setAuthChecked(true);
     }
-  }, [pathname, router]);
-
-  useEffect(() => {
-    if (pathname === '/login') return;
-
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === AUTH_KEY && e.newValue == null) {
-        router.replace('/login');
-      }
-
-      if (e.key === SESSION_LOCK_KEY && e.newValue === 'true') {
-        router.replace('/login');
-      }
-    };
-    window.addEventListener('storage', onStorage);
-
-    return () => {
-      window.removeEventListener('storage', onStorage);
-    };
   }, [pathname, router]);
 
   const toggleMenu = () => {
