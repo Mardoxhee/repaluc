@@ -77,7 +77,14 @@ Content-Type: application/json
 
 ### Stockage de la signature depuis le frontend
 
-L’API déployée a refusé les propriétés JSON `signature` et `signatureBeneficiaire` à l’écriture. Le frontend enregistre les données de l’acte via `/consentements-mpu`, puis envoie le tracé à `POST /document-victime/victime/:victimeId/upload` avec les champs multipart `file`, `category=signature` et un `label` identifiant l’acte et la capture. Le document de la victime porte la référence du fichier MinIO. Pour retrouver le tracé, la fiche consulte `GET /document-victime/by-id-victime/:victimeId`. Elle peut également lire les références historiques déjà présentes sur les anciens actes.
+Le tracé est enregistré sur l’appareil dans IndexedDB. Depuis les Réglages, le frontend retrouve ou crée l’acte et envoie l’image à `POST /minio/files/upload` sur la même base API. Le corps multipart contient un seul champ binaire `file`. Dans la réponse `201`, `originalName` désigne le nom fourni par l’appareil et `filename` le nom attribué par MinIO. Le frontend conserve `filename` dans IndexedDB puis inscrit cette valeur dans l’acte par `PATCH /consentements-mpu/:id`.
+
+| Signataire indiqué par le formulaire | Champ du PATCH | Valeur |
+| --- | --- | --- |
+| Bénéficiaire (`incapableConsentir: false`) | `signatureBeneficiaire` | Clé permanente du fichier |
+| Représentant (`incapableConsentir: true`) | `signatureRepresentant` | Clé permanente du fichier |
+
+Le frontend envoie le seul champ du signataire concerné. Il relit l’acte et vérifie que ce champ contient la clé attendue avant de retirer le tracé de la file locale. Si le serveur refuse le champ, ou le laisse à `null`, la clé et le tracé restent disponibles pour réessayer. Un refus `property … should not exist` sur le PATCH doit être corrigé dans la validation backend de cette route. Une propriété visible dans le JSON de lecture peut être absente du DTO de mise à jour.
 
 ### Valeurs recommandées pour les listes
 
@@ -199,23 +206,23 @@ export async function creerConsentementMpu(
 1. Vérifier que la victime est de mention `MPU` avant d'afficher le bouton « Créer le consentement ».
 2. Utiliser `GET /consentements-mpu/victime/:victimeId` pour savoir si la victime a déjà un consentement. Si un consentement existe, afficher l'édition (`PATCH`) plutôt qu'un second formulaire de création.
 3. Si `incapableConsentir` vaut `true`, afficher et demander les données du représentant ainsi que sa signature.
-4. Dans la fiche, afficher le tracé local pendant la synchronisation, puis la pièce de signature associée à l’acte ou une référence historique.
+4. Dans la fiche, afficher le tracé local en attente ou la signature confirmée sur l’acte. Si une ancienne version a stocké uniquement une pièce de signature dans le dossier de la victime, proposer son rattachement à l’acte correspondant. Un acte avec une décision et une date peut encore être à signer.
 5. N'envoyer que de vrais booléens (`true` ou `false`), jamais les chaînes `"true"` ou `"false"`.
 6. Envoyer les tableaux `mesuresProposees` et `vulnerabilites` sous forme de tableaux JSON, jamais sous forme de texte séparé par des virgules.
 
 ## Mise à jour — `PATCH /consentements-mpu/:id`
 
-Envoyer les champs métier à modifier, par exemple la décision après une première saisie.
+Exemple de rattachement à un acte déjà enregistré, après l’upload de la signature du bénéficiaire.
 
 ```json
 {
-  "decisionConsentement": "accepte"
+  "signatureBeneficiaire": "signature_exemple.png"
 }
 ```
 
 ## Victimes ayant signé
 
-Le serveur calcule cette liste. Vérifier sur le backend déployé qu’il compte aussi les signatures conservées dans les documents des victimes. Le frontend utilise cette liste pour la recherche et le tableau de bord MPU.
+Le serveur calcule cette liste à partir des actes signés. Le frontend l’utilise pour la recherche et le tableau de bord MPU.
 
 ### Liste paginée
 

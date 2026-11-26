@@ -45,7 +45,7 @@ export const normalizeVictimDocuments = (payload: any): VictimDocument[] => asDo
       ...doc,
       id: Number(doc?.id ?? doc?.documentId),
       label: String(doc?.label ?? doc?.originalName ?? doc?.fileName ?? doc?.filename ?? 'Document'),
-      name: String(doc?.fileName ?? doc?.filename ?? doc?.originalName ?? doc?.name ?? reference ?? ''),
+      name: String(doc?.fileName ?? doc?.filename ?? doc?.name ?? doc?.originalName ?? reference ?? ''),
       lien: typeof reference === 'string' ? reference : undefined,
     };
   })

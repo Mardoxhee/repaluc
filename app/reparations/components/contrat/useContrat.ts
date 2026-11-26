@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from 'react';
 import { isOnline } from '../../../utils/victimsCache';
 import { savePendingContract, getAllPendingContracts } from '../../../utils/contractsCache';
 import { getVictimFileUrl } from '../../../utils/victimDocumentApi';
-import { getLegacyMpuSignatureReference, readMpuConsentSignatureUrl } from '../../../utils/mpuConsentSignature';
+import { getMpuConsentDocumentReference, getMpuSignatureFileKey, getMpuSignerField, resolveMpuSignatureUrl } from '../../../utils/mpuConsentSignature';
 import { authenticatedFetch, getAuthToken } from '../../../utils/authFetch';
 import { getConnectedAgentFullName } from '../../../utils/currentUser';
 import type { PendingContract } from '../../../utils/contractsCache';
@@ -206,6 +206,8 @@ export function useContrat(victim: Victim) {
     const [loadingContrat, setLoadingContrat] = useState(true);
     const [signatureUrl, setSignatureUrl] = useState<string>('');
     const [signatureStatusMessage, setSignatureStatusMessage] = useState('');
+    const [signatureLoadFailed, setSignatureLoadFailed] = useState(false);
+    const [documentSignatureKey, setDocumentSignatureKey] = useState('');
     const [showContratDetail, setShowContratDetail] = useState(false);
     const [showSignatureModal, setShowSignatureModal] = useState(false);
     const [pendingOfflineContrat, setPendingOfflineContrat] = useState<PendingContract | null>(null);
@@ -213,7 +215,7 @@ export function useContrat(victim: Victim) {
     const pendingContractIdRef = useRef<number | null>(null);
     const hydratedPendingContractIdRef = useRef<number | null>(null);
 
-    const formattedSignatureDate = existingContrat
+    const formattedSignatureDate = existingContrat?.dateSignature
         ? new Date(existingContrat.dateSignature).toLocaleDateString('fr-FR')
         : '';
 
@@ -278,21 +280,31 @@ export function useContrat(victim: Victim) {
                 setLoadingContrat(true);
                 setSignatureUrl('');
                 setSignatureStatusMessage('');
+                setSignatureLoadFailed(false);
+                setDocumentSignatureKey('');
                 const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
                 const response = await authenticatedFetch(
                     isMpuConsentement
                         ? `${baseUrl}/consentements-mpu/victime/${victim.id}`
-                        : `${baseUrl}/contrat/${victim.id}`
+                        : `${baseUrl}/contrat/${victim.id}`,
+                    isMpuConsentement ? { cache: 'no-store' } : undefined
                 );
 
-                if (response.ok) {
+                if (active && isMpuConsentement && isOnline() && !response.ok && response.status !== 404) {
+                    setSignatureLoadFailed(true);
+                    setSignatureStatusMessage(`Consultation du consentement impossible (HTTP ${response.status}).`);
+                    return;
+                }
+                if (response.ok && response.status !== 204) {
                     const rawData = await response.json();
                     if (!active) return;
-                    const data = rawData?.data ?? rawData;
-                    if (reloadContrat > 0) setPendingOfflineContrat(null);
+                    const data = rawData && typeof rawData === 'object' && 'data' in rawData ? rawData.data : rawData;
+                    if (!data?.id) return;
+                    if (reloadContrat > 0 && pendingContractIdRef.current === null) setPendingOfflineContrat(null);
 
                     if (isMpuConsentement) {
-                        const signature = getLegacyMpuSignatureReference(data);
+                        const savedValue = data[getMpuSignerField(data.incapableConsentir === true)];
+                        const signature = getMpuSignatureFileKey(savedValue) || (typeof savedValue === 'string' && /^https?:\/\//i.test(savedValue) ? savedValue : '');
                         setExistingContrat({
                             ...data,
                             typeContrat: 'Acte de consentement MPU',
@@ -307,7 +319,7 @@ export function useContrat(victim: Victim) {
                             qualiteRepresentant: data.qualiteRepresentant || null,
                             pieceIdentiteRepresentant: data.pieceIdentiteRepresentant || null,
                             accepteReparation: data.decisionConsentement !== 'refuse',
-                            dateSignature: data.dateConsentement || new Date().toISOString(),
+                            dateSignature: data.dateConsentement || '',
                             signature,
                             lieuSignature: data.lieuConsentement || '',
                             victimeId: data.victimeId || victim.id,
@@ -321,8 +333,8 @@ export function useContrat(victim: Victim) {
                             reparationJudiciaire: '',
                             lieuSignature: data.lieuConsentement || prev.lieuSignature,
                             dateSignature: data.dateConsentement || prev.dateSignature,
-                            fonarevNom: FONAREV_DIRECTEUR_GENERAL_NOM,
-                            fonarevFonction: FONAREV_DIRECTEUR_GENERAL_FONCTION,
+                            fonarevNom: data.nomAgentFonarev || prev.fonarevNom,
+                            fonarevFonction: data.fonctionAgentFonarev || prev.fonarevFonction,
                         }));
 
                         setConsentements((prev) => ({
@@ -358,13 +370,19 @@ export function useContrat(victim: Victim) {
                         setLoadingContrat(false);
                         setSignatureStatusMessage('Chargement de la signature…');
                         try {
-                            const url = await readMpuConsentSignatureUrl(victim.id, data.id, signature);
+                            const reference = signature || await getMpuConsentDocumentReference(victim.id, data.id);
+                            if (!active) return;
+                            if (!signature) setDocumentSignatureKey(reference);
+                            const url = reference ? await resolveMpuSignatureUrl(reference) : '';
                             if (active) {
                                 setSignatureUrl(url);
                                 setSignatureStatusMessage('');
                             }
-                        } catch {
-                            if (active) setSignatureStatusMessage('Impossible de charger la signature enregistrée.');
+                        } catch (error) {
+                            if (active) {
+                                setSignatureLoadFailed(true);
+                                setSignatureStatusMessage(error instanceof Error ? error.message : 'Impossible de vérifier la signature.');
+                            }
                         }
                         return;
                     }
@@ -455,9 +473,11 @@ export function useContrat(victim: Victim) {
 
     // Vérifier s'il y a un contrat en attente offline pour cette victime
     useEffect(() => {
+        let active = true;
         const checkPendingOffline = async () => {
             try {
                 const pending = await getAllPendingContracts();
+                if (!active) return;
                 const victimPending = pending
                     .filter(p => (
                         p.victimId === victim.id &&
@@ -482,7 +502,7 @@ export function useContrat(victim: Victim) {
 
         // Revérifier périodiquement (au cas où la synchro a eu lieu)
         const interval = setInterval(checkPendingOffline, 5000);
-        return () => clearInterval(interval);
+        return () => { active = false; clearInterval(interval); };
     }, [victim.id, isMpuConsentement]);
 
     useEffect(() => {
@@ -655,7 +675,8 @@ export function useContrat(victim: Victim) {
     };
 
     // Sauvegarde du contrat
-    const saveContract = async (): Promise<boolean> => {
+    const saveContract = async (documentKey?: string): Promise<boolean> => {
+        if (isSaving) return false;
         setIsSaving(true);
         setSaveMessage(null);
 
@@ -679,7 +700,11 @@ export function useContrat(victim: Victim) {
             const nomAgentFonarev = getConnectedAgentFullName();
 
             if (isMpuConsentement) {
-                if (!signatureDataUrl) {
+                if (documentKey && (!existingContrat || documentKey !== documentSignatureKey || pendingOfflineContrat)) {
+                    setSaveMessage({ type: 'error', text: 'La signature à rattacher a changé. Rouvrez l’acte pour la vérifier.' });
+                    return false;
+                }
+                if (!signatureDataUrl && !documentKey) {
                     setSaveMessage({ type: 'error', text: 'Dessinez la signature avant de sauvegarder l’acte.' });
                     return false;
                 }
@@ -714,9 +739,16 @@ export function useContrat(victim: Victim) {
                     fonctionAgentFonarev: contractForm.fonarevFonction || undefined,
                 };
 
+                // A repair of a server act only changes its signature and keeps its recorded signer.
+                const repairExisting = existingContrat && (!pendingOfflineContrat || pendingOfflineContrat.consentMetadataSynced);
+                const signerField = getMpuSignerField(existingContrat?.incapableConsentir === true);
                 const queued = await savePendingContract({
                     victimId: victim.id,
-                    contractData: mpuPayload,
+                    contractData: repairExisting && existingContrat
+                        ? { ...mpuPayload, incapableConsentir: existingContrat.incapableConsentir, ...(documentKey ? { [signerField]: documentKey } : {}) }
+                        : mpuPayload,
+                    ...(repairExisting ? { consentMetadataSynced: true } : {}),
+                    ...(repairExisting && !existingContrat?.signature ? { expectedSignatureFileKey: '' } : {}),
                     signatureDataUrl,
                     targetType: 'consentement-mpu',
                     ...(existingContrat?.id
@@ -725,11 +757,13 @@ export function useContrat(victim: Victim) {
                 });
                 setPendingOfflineContrat(queued);
                 pendingContractIdRef.current = queued.id ?? null;
-                if (existingContrat) {
+                if (existingContrat && !repairExisting) {
                     setExistingContrat({ ...existingContrat, ...mpuPayload } as Contrat);
                 }
 
-                setSaveMessage({ type: 'success', text: 'Acte de consentement enregistré sur cet appareil. Il reste en attente; synchronisez-le dans Réglages lorsque vous serez en ligne.' });
+                setSaveMessage({ type: 'success', text: documentKey
+                    ? 'Rattachement enregistré sur cet appareil. Synchronisez l’acte dans Réglages.'
+                    : 'Acte de consentement enregistré sur cet appareil. Synchronisez-le dans Réglages lorsque vous serez en ligne.' });
                 setTimeout(() => setSaveMessage(null), 4000);
                 return true;
             }
@@ -979,6 +1013,8 @@ export function useContrat(victim: Victim) {
         loadingContrat,
         signatureUrl,
         signatureStatusMessage,
+        retrySignatureLookup: signatureLoadFailed ? () => setReloadContrat(value => value + 1) : undefined,
+        documentSignatureKey,
         showContratDetail,
         showSignatureModal,
         formattedSignatureDate,

@@ -3,7 +3,6 @@ import React from 'react';
 import { Clock, Wifi } from 'lucide-react';
 import type { Victim, Contrat, SaveMessage, ContractForm } from './types';
 import type { PendingContract } from '../../../utils/contractsCache';
-import { getLegacyMpuSignatureReference } from '../../../utils/mpuConsentSignature';
 
 interface SignaturesSectionProps {
     victim: Victim;
@@ -12,8 +11,13 @@ interface SignaturesSectionProps {
     existingContrat: Contrat | null;
     signatureUrl: string;
     signatureStatusMessage: string;
+    retrySignatureLookup?: () => void;
+    hasSignedAct: boolean;
+    localDrawing?: string;
+    representativeName?: string;
+    attachSignature?: () => Promise<boolean>;
+    isSaving: boolean;
     pendingSignatureMissing: boolean;
-    canRedrawPendingSignature: boolean;
     formattedSignatureDate: string;
     saveMessage: SaveMessage | null;
     pendingOfflineContrat: PendingContract | null;
@@ -30,8 +34,13 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
     existingContrat,
     signatureUrl,
     signatureStatusMessage,
+    retrySignatureLookup,
+    hasSignedAct,
+    localDrawing,
+    representativeName,
+    attachSignature,
+    isSaving,
     pendingSignatureMissing,
-    canRedrawPendingSignature,
     formattedSignatureDate,
     saveMessage,
     pendingOfflineContrat,
@@ -40,9 +49,8 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
     documentLabel = 'Contrat',
     documentActionLabel = 'le contrat',
 }) => {
-    const legacySignature = getLegacyMpuSignatureReference(pendingOfflineContrat?.contractData);
-    const localSignature = pendingOfflineContrat?.signatureDataUrl || (legacySignature.startsWith('data:image/') ? legacySignature : '');
-    const previewSignature = localSignature || signatureUrl;
+    const previewSignature = localDrawing || signatureUrl;
+    const pendingMpu = pendingOfflineContrat?.targetType === 'consentement-mpu';
     const updateField = (field: keyof ContractForm, value: string) => {
         setContractForm((prev) => ({ ...prev, [field]: value }));
     };
@@ -103,12 +111,13 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
 
                     <div>
                         <div className="border-t-2 border-blue-700 pt-3">
-                            <p className="font-bold text-sm mb-3 text-blue-950">Le/la bénéficiaire</p>
+                            <p className="font-bold text-sm mb-3 text-blue-950">{representativeName !== undefined ? 'Le/la représentant(e)' : 'Le/la bénéficiaire'}</p>
                             <label className="mb-4 flex items-end gap-2 text-sm">
                                 <span>Nom :</span>
                                 <input
                                     type="text"
-                                    value={contractForm.nom || victim.nom || ''}
+                                    value={representativeName ?? (contractForm.nom || victim.nom || '')}
+                                    readOnly={representativeName !== undefined}
                                     onChange={(e) => updateField('nom', e.target.value)}
                                     className="min-w-0 flex-1 border-b border-dotted border-gray-400 bg-transparent px-1 outline-none"
                                 />
@@ -127,9 +136,15 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
                                     <div className="signature-box">
                                         <img
                                             src={signatureUrl}
-                                            alt="Signature"
+                                            alt={attachSignature ? 'Signature retrouvée dans le dossier de la victime' : 'Signature'}
                                             className="h-auto max-w-full"
                                         />
+                                        {attachSignature && <div className="no-print mt-3">
+                                            <p className="mb-2 text-sm text-amber-800">Cette signature figure dans le dossier. Son rattachement à l’acte reste à synchroniser.</p>
+                                            <button type="button" onClick={attachSignature} disabled={isSaving} className="px-4 py-2 bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+                                                Rattacher cette signature
+                                            </button>
+                                        </div>}
                                     </div>
                                 ) : pendingOfflineContrat ? (
                                     <div className="no-print p-4 bg-amber-50 border border-amber-200">
@@ -138,9 +153,9 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
                                                 <Clock className="w-5 h-5 text-amber-600" />
                                             </div>
                                             <div>
-                                                <p className="font-semibold text-amber-800">{documentLabel} {pendingSignatureMissing ? 'à signer' : 'signé hors ligne'}</p>
+                                                <p className="font-semibold text-amber-800">{documentLabel} {pendingSignatureMissing ? 'à signer' : localDrawing || !pendingMpu ? 'signé hors ligne' : 'en attente'}</p>
                                                 <p className="text-sm text-amber-700">
-                                                    {pendingSignatureMissing ? 'Enregistré le' : 'Signé le'} {new Date(pendingOfflineContrat.createdAt).toLocaleDateString('fr-FR')} à {new Date(pendingOfflineContrat.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                                                    {pendingMpu ? 'Enregistré le' : 'Signé le'} {new Date(pendingOfflineContrat.createdAt).toLocaleDateString('fr-FR')} à {new Date(pendingOfflineContrat.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                                                 </p>
                                             </div>
                                         </div>
@@ -150,16 +165,22 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
                                         </div>
                                         {previewSignature && <div className="signature-box mt-4 bg-white p-3">
                                             <img src={previewSignature} alt="Signature de l’acte" className="h-auto max-h-32 max-w-full object-contain" />
-                                            {localSignature && <p className="mt-2 text-xs text-gray-500">Signature conservée sur cet appareil jusqu’à la synchronisation.</p>}
+                                            {localDrawing && <p className="mt-2 text-xs text-gray-500">Signature conservée sur cet appareil jusqu’à la synchronisation.</p>}
                                         </div>}
-                                        {canRedrawPendingSignature && (
+                                        {pendingSignatureMissing && (
                                             <button type="button" onClick={() => setShowSignatureModal(true)} className="mt-3 px-4 py-2 bg-blue-600 text-sm font-medium text-white hover:bg-blue-700">
-                                                {pendingSignatureMissing ? 'Ajouter la signature' : 'Dessiner à nouveau la signature'}
+                                                Ajouter la signature
                                             </button>
                                         )}
                                     </div>
                                 ) : signatureStatusMessage ? (
-                                    <p role="status" className="text-sm text-gray-600">{signatureStatusMessage}</p>
+                                    <div>
+                                        <p role="status" className="text-sm text-gray-600">{signatureStatusMessage}</p>
+                                        {retrySignatureLookup && <div className="no-print mt-2 flex flex-wrap items-center gap-3">
+                                            <button type="button" className="text-sm text-blue-700 underline" onClick={retrySignatureLookup}>Réessayer</button>
+                                            {existingContrat && !hasSignedAct && <button type="button" onClick={() => setShowSignatureModal(true)} className="px-4 py-2 bg-blue-600 text-sm font-medium text-white hover:bg-blue-700">Signer {documentActionLabel}</button>}
+                                        </div>}
+                                    </div>
                                 ) : (
                                     <button
                                         type="button"
@@ -183,10 +204,10 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
                 </div>
             )}
 
-            {existingContrat && !pendingSignatureMissing && (
+            {hasSignedAct && !pendingSignatureMissing && (
                 <div className="mt-8 p-4 bg-green-50 border border-green-200 rounded no-print">
                     <p className="text-green-800 text-sm">
-                        ✓ {documentLabel} signé le {formattedSignatureDate}
+                        ✓ {documentLabel} signé{formattedSignatureDate && ` le ${formattedSignatureDate}`}
                     </p>
                 </div>
             )}

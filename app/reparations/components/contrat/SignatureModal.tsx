@@ -6,6 +6,7 @@ import type { SaveMessage } from './types';
 interface SignatureModalProps {
     canvasRef: React.RefObject<HTMLCanvasElement | null>;
     canSave: boolean;
+    forRepresentative?: boolean;
     saveMessage: SaveMessage | null;
     isSaving: boolean;
     startDrawing: (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => void;
@@ -21,6 +22,7 @@ interface SignatureModalProps {
 export const SignatureModal: React.FC<SignatureModalProps> = ({
     canvasRef,
     canSave,
+    forRepresentative = false,
     saveMessage,
     isSaving,
     startDrawing,
@@ -48,7 +50,7 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
                 </div>
                 <div className="p-4">
                     <p className="text-sm text-gray-600 mb-3">
-                        Merci de dessiner la signature ou l'empreinte de la victime dans l'espace ci-dessous.
+                        Merci de dessiner la signature ou l'empreinte {forRepresentative ? 'du représentant' : 'de la victime'} dans l'espace ci-dessous.
                     </p>
                     <div className="signature-box relative inline-block w-full">
                         <canvas

@@ -3,7 +3,7 @@ import { getAllPendingContracts, recordPendingContractSync, type PendingContract
 import { isOnline } from './victimsCache';
 import { authenticatedFetch, getAuthToken } from './authFetch';
 import { getConnectedAgentFullName } from './currentUser';
-import { ensureMpuConsentSignatureDocument, getLegacyMpuSignatureReference, readMpuConsentSignatureUrl } from './mpuConsentSignature';
+import { getMpuConsentDocumentReference, getMpuSignerField, getMpuSignatureFileKey } from './mpuConsentSignature';
 import { readUploadedFileReference, readSyncHttpError } from './uploadResponse';
 import type { SyncProgressCallback } from './syncProgress';
 
@@ -75,61 +75,140 @@ const positiveId = (value: unknown): number | undefined => {
 
 const readConsentId = (raw: any, victimId: number): number | undefined => {
     const data = raw?.data ?? raw;
-    if (data?.victimeId != null && positiveId(data.victimeId) !== victimId) {
+    if ([data?.victimeId, data?.victime?.id].some(id => id != null && positiveId(id) !== victimId)) {
         throw new Error('Le consentement retourné appartient à une autre victime.');
     }
     return positiveId(data?.id);
 };
 
-const findConsent = async (victimId: number): Promise<{ id: number; signature: string } | undefined> => {
+type ServerConsent = {
+    id: number;
+    incapableConsentir?: boolean;
+    signatureBeneficiaire?: string | null;
+    signatureRepresentant?: string | null;
+};
+
+const findConsent = async (victimId: number): Promise<ServerConsent | undefined> => {
     const resp = await authenticatedFetch(`${consentEndpoint()}/victime/${victimId}`, { cache: 'no-store' });
     if (resp.status === 404 || resp.status === 204) return undefined;
-    if (!resp.ok) throw await readSyncHttpError(resp, 'Recherche du consentement MPU');
+    if (!resp.ok) throw await readSyncHttpError(resp, 'Lecture du consentement MPU');
     const raw = await resp.json();
     if (raw === null || raw?.data === null) return undefined;
     const id = readConsentId(raw, victimId);
     if (!id) throw new Error('La recherche du consentement MPU a renvoyé un acte sans identifiant.');
-    return { id, signature: getLegacyMpuSignatureReference(raw?.data ?? raw) };
+    return { ...(raw?.data ?? raw), id };
 };
+
+const writeConsentMetadata = async (data: Record<string, unknown>, victimId: number, consentId?: number) => {
+    const payload: Record<string, unknown> = {};
+    for (const field of consentFields) {
+        if (data[field] != null) payload[field] = data[field];
+    }
+    if (typeof payload.dateConsentement === 'string' && /^\d{4}-\d\d-\d\dT/.test(payload.dateConsentement)) {
+        payload.dateConsentement = payload.dateConsentement.slice(0, 10);
+    }
+    if (!consentId) payload.victimeId = victimId;
+    const resp = await authenticatedFetch(consentId ? `${consentEndpoint()}/${consentId}` : consentEndpoint(), {
+        method: consentId ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    if (!resp.ok) throw await readSyncHttpError(resp, 'Enregistrement du consentement MPU');
+    return consentId ?? readConsentId(await resp.json().catch(() => null), victimId);
+};
+
+const missingSignature = 'Tracé de signature absent. Ouvrez l’acte de consentement dans la fiche de la victime pour le signer.';
+
+async function uploadMpuSignature(dataUrl: string, victimId: number, capturedAt: number): Promise<string> {
+    const image = await (await fetch(dataUrl)).blob();
+    const extensions: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' };
+    const extension = extensions[image.type];
+    if (!extension || !image.size) throw new Error('Le tracé de signature est vide ou illisible.');
+
+    const form = new FormData();
+    form.append('file', image, `signature_${victimId}_${capturedAt}.${extension}`);
+    const response = await authenticatedFetch(`${getBaseUrl()}/minio/files/upload`, { method: 'POST', body: form });
+    if (!response.ok) throw await readSyncHttpError(response, 'Envoi de la signature MPU à MinIO');
+
+    const result = await response.json().catch(() => null);
+    const filename = getMpuSignatureFileKey(result?.filename ?? result?.data?.filename);
+    if (!filename) throw new Error('MinIO n’a pas renvoyé le champ filename permanent de la signature MPU.');
+    return filename;
+}
+
+function localConsentSignature(item: PendingContract, role: unknown): string {
+    const data = item.contractData ?? {};
+    const hasRole = typeof role === 'boolean';
+    const signerReference = hasRole ? data[getMpuSignerField(role)] : undefined;
+    const otherReference = hasRole ? data[getMpuSignerField(!role)] : undefined;
+    const legacyReference = data.signature !== otherReference ? data.signature : undefined;
+    for (const reference of [item.signatureFileKey, item.signatureDataUrl, signerReference, legacyReference]) {
+        if (typeof reference === 'string' && reference.startsWith('data:image/')) return reference;
+        const key = getMpuSignatureFileKey(reference);
+        if (key) return key;
+    }
+    return '';
+}
 
 const syncConsent = async (item: PendingContract) => {
     const data = item.contractData ?? {};
     const victimId = positiveId(item.victimId);
     if (!victimId) throw new Error('Identifiant de la victime manquant pour cet acte.');
-    const signature = item.signatureDataUrl || getLegacyMpuSignatureReference(data);
-    let consentId = positiveId(item.targetId);
-    if (!consentId || !signature) {
-        // An offline creation may refer to an existing act, including a POST whose response was lost.
-        const existing = await findConsent(victimId);
-        if (consentId && consentId !== existing?.id) throw new Error('Le consentement à modifier n’a pas été retrouvé pour cette victime.');
-        consentId = existing?.id;
-        if (!signature && !(existing && await readMpuConsentSignatureUrl(victimId, existing.id, existing.signature))) {
-            throw new Error('Tracé de signature absent. Ouvrez l’acte de consentement dans la fiche de la victime pour le signer.');
-        }
-    }
-    if (!item.consentMetadataSynced || !consentId) {
-        const payload: Record<string, unknown> = {};
-        for (const field of consentFields) {
-            if (data[field] != null) payload[field] = data[field];
-        }
-        if (typeof payload.dateConsentement === 'string' && /^\d{4}-\d\d-\d\dT/.test(payload.dateConsentement)) {
-            payload.dateConsentement = payload.dateConsentement.slice(0, 10);
-        }
-        if (!consentId) payload.victimeId = victimId;
-        const resp = await authenticatedFetch(consentId ? `${consentEndpoint()}/${consentId}` : consentEndpoint(), {
-            method: consentId ? 'PATCH' : 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-        });
-        if (!resp.ok) throw await readSyncHttpError(resp, 'Enregistrement du consentement MPU');
-        if (!consentId) {
-            consentId = readConsentId(await resp.json().catch(() => null), victimId) ?? (await findConsent(victimId))?.id;
-        }
-        if (!consentId) throw new Error('Le serveur n’a pas confirmé l’identifiant du consentement. La signature reste sur cet appareil.');
-        if (!await recordPendingContractSync(item, consentId)) return false;
+    let consent = await findConsent(victimId);
+    const targetId = positiveId(item.targetId);
+    if ((targetId && targetId !== consent?.id) || (item.action === 'update' && !consent)) {
+        throw new Error('Le consentement à modifier n’a pas été retrouvé pour cette victime.');
     }
 
-    if (signature) await ensureMpuConsentSignatureDocument(victimId, consentId, signature, item.signatureCapturedAt ?? item.createdAt);
+    if (!consent || !item.consentMetadataSynced) {
+        // Recover the server act first if an offline creation or its response was interrupted.
+        if (!consent && !localConsentSignature(item, data.incapableConsentir)) throw new Error(missingSignature);
+        const id = await writeConsentMetadata(data, victimId, consent?.id);
+        if (id && !await recordPendingContractSync(item, id)) return false;
+        consent = await findConsent(victimId);
+        if (!consent || (id && consent.id !== id)) throw new Error('Le serveur n’a pas confirmé l’identifiant du consentement.');
+        if (!id && !await recordPendingContractSync(item, consent.id)) return false;
+    }
+
+    const signerRole = consent.incapableConsentir ?? data.incapableConsentir;
+    if (typeof signerRole !== 'boolean') throw new Error('Le rôle du signataire de cet acte MPU est indéterminé.');
+    if (typeof data.incapableConsentir === 'boolean' && data.incapableConsentir !== signerRole) {
+        throw new Error('Le rôle du signataire diffère entre la saisie locale et l’acte enregistré.');
+    }
+    const field = getMpuSignerField(signerRole);
+    const local = localConsentSignature(item, signerRole);
+    const remote = getMpuSignatureFileKey(consent[field]);
+    if (item.expectedSignatureFileKey !== undefined && consent[field] && consent[field] !== 'SIG_ELEC' &&
+        remote !== local && (remote || consent[field]) !== item.expectedSignatureFileKey) {
+        throw new Error('La signature de cet acte a changé sur le serveur depuis la saisie. Vérifiez l’acte avant de le modifier.');
+    }
+    const capturedAt = item.signatureCapturedAt ?? item.createdAt;
+    let key = getMpuSignatureFileKey(local);
+    if (local.startsWith('data:image/')) {
+        // The earlier sync could have attached this exact capture as a victim document.
+        if (item.consentMetadataSynced && item.expectedSignatureFileKey === undefined) {
+            key = await getMpuConsentDocumentReference(victimId, consent.id, capturedAt).catch(() => '');
+        }
+        if (!key) key = await uploadMpuSignature(local, victimId, capturedAt);
+    } else if (!key) {
+        key = remote || await getMpuConsentDocumentReference(victimId, consent.id, capturedAt);
+        if (!key) throw new Error(missingSignature);
+    }
+
+    if (consent[field] !== key) {
+        if (!await recordPendingContractSync(item, consent.id, key)) return false;
+        const resp = await authenticatedFetch(`${consentEndpoint()}/${consent.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ [field]: key }),
+        });
+        if (!resp.ok) throw await readSyncHttpError(resp, `Rattachement du fichier à l’acte MPU dans ${field}`);
+        const confirmed = await findConsent(victimId);
+        if (confirmed?.id !== consent.id || confirmed[field] !== key ||
+            (typeof confirmed.incapableConsentir === 'boolean' && confirmed.incapableConsentir !== signerRole)) {
+            throw new Error(`Le serveur n’a pas confirmé le fichier de signature dans ${field}. L’acte reste en attente sur cet appareil.`);
+        }
+    }
     return recordPendingContractSync(item);
 };
 

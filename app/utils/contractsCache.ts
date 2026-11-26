@@ -1,4 +1,5 @@
 // IndexedDB utilitaire pour les contrats en attente de synchronisation
+import { getMpuSignerField, getMpuSignatureFileKey } from './mpuConsentSignature';
 
 const DB_NAME = 'ContractsDB';
 const DB_VERSION = 1;
@@ -10,6 +11,8 @@ export interface PendingContract {
     contractData: any;
     signatureDataUrl?: string | null;
     signatureCapturedAt?: number;
+    signatureFileKey?: string;
+    expectedSignatureFileKey?: string;
     targetType?: 'contrat' | 'consentement-mpu';
     action?: 'create' | 'update';
     targetId?: number;
@@ -56,15 +59,21 @@ export const savePendingContract = async (
 
             const write = (existing?: PendingContract) => {
                 if (existing?.id !== undefined) {
-                    const sameDrawing = !entry.signatureDataUrl || entry.signatureDataUrl === existing.signatureDataUrl;
+                    const sameSigner = entry.contractData?.incapableConsentir === existing.contractData?.incapableConsentir;
+                    const selectedKey = !entry.signatureDataUrl && typeof entry.contractData?.incapableConsentir === 'boolean'
+                        ? getMpuSignatureFileKey(entry.contractData[getMpuSignerField(entry.contractData.incapableConsentir)]) : '';
+                    const sameDrawing = sameSigner &&
+                        (!entry.signatureDataUrl || entry.signatureDataUrl === existing.signatureDataUrl) &&
+                        (!selectedKey || selectedKey === existing.signatureFileKey);
                     const targetId = existing.targetId ?? entry.targetId;
                     toSave = {
                         ...toSave,
                         id: existing.id,
                         action: targetId ? 'update' : entry.action,
                         targetId,
-                        signatureDataUrl: entry.signatureDataUrl || existing.signatureDataUrl,
+                        signatureDataUrl: entry.signatureDataUrl || (sameDrawing ? existing.signatureDataUrl : null),
                         signatureCapturedAt: sameDrawing ? existing.signatureCapturedAt ?? existing.createdAt : toSave.createdAt,
+                        signatureFileKey: sameDrawing ? existing.signatureFileKey : undefined,
                         revision: (existing.revision ?? 0) + 1,
                     };
                 }
@@ -125,7 +134,7 @@ export const getAllPendingContracts = async (): Promise<PendingContract[]> => {
 };
 
 // A new signature or edit saved while the request is in flight must stay queued.
-export const recordPendingContractSync = async (sent: PendingContract, consentId?: number): Promise<boolean> => {
+export const recordPendingContractSync = async (sent: PendingContract, consentId?: number, signatureFileKey?: string): Promise<boolean> => {
     const localId = sent.id;
     if (localId == null) throw new Error('Identifiant local de l’acte manquant.');
     const db = await openContractsDB();
@@ -140,7 +149,10 @@ export const recordPendingContractSync = async (sent: PendingContract, consentId
                 if (!current || current.revision !== sent.revision) return;
                 matched = true;
                 if (consentId === undefined) store.delete(localId);
-                else store.put({ ...current, targetId: consentId, action: 'update', consentMetadataSynced: true });
+                else store.put({
+                    ...current, targetId: consentId, action: 'update', consentMetadataSynced: true,
+                    ...(signatureFileKey !== undefined ? { signatureFileKey } : {}),
+                });
             };
             tx.oncomplete = () => resolve(matched);
             tx.onerror = () => reject(tx.error);

@@ -1,5 +1,5 @@
 import type { PrecacheEntry, RuntimeCaching, SerwistGlobalConfig } from "serwist";
-import { Serwist, NetworkFirst, CacheFirst, StaleWhileRevalidate } from "serwist";
+import { Serwist, NetworkFirst, NetworkOnly, CacheFirst, StaleWhileRevalidate } from "serwist";
 
 // This declares the value of `injectionPoint` to TypeScript.
 declare global {
@@ -28,6 +28,13 @@ const onlyOkResponses = {
  * une journée).
  */
 const runtimeCaching: RuntimeCaching[] = [
+  // La confirmation d’une signature détermine si le tracé peut quitter la file IndexedDB.
+  {
+    matcher: ({ request, url }) =>
+      request.method === "GET" && request.cache === "no-store" &&
+      /\/consentements-mpu\/(?:victime\/)?\d+\/?$/.test(url.pathname),
+    handler: new NetworkOnly(),
+  },
   // Les navigations du routeur Next reçoivent les composants de la version
   // déployée. Réutiliser leur cache historique si le réseau est coupé.
   {

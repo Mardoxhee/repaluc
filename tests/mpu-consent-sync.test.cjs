@@ -19,7 +19,7 @@ function pendingConsent() {
     signatureDataUrl: 'data:image/png;base64,aW1hZ2U=',
     contractData: {
       victimeId: 25, decisionConsentement: 'accepte', dateConsentement: '2026-11-26T00:00:00.000Z',
-      lieuConsentement: 'Lieu', informeMpu: false, signature: 'SIG_ELEC', signatureBeneficiaire: 'ancienne.png',
+      lieuConsentement: 'Lieu', informeMpu: false, incapableConsentir: false, signature: 'SIG_ELEC', signatureBeneficiaire: 'ancienne.png',
       signatureRepresentant: 'ancienne.png', id: 77, victime: { id: 25 },
     },
   };
@@ -32,10 +32,13 @@ function simulate(t, record, handle) {
   t.mock.method(auth, 'getAuthToken', () => 'session-de-test');
   t.mock.method(connectivity, 'isOnline', () => true);
   t.mock.method(cache, 'getAllPendingContracts', async () => state.record ? [structuredClone(state.record)] : []);
-  t.mock.method(cache, 'recordPendingContractSync', async (sent, consentId) => {
+  t.mock.method(cache, 'recordPendingContractSync', async (sent, consentId, signatureFileKey) => {
     if (!state.record || state.record.revision !== sent.revision) return false;
     if (consentId === undefined) state.record = null;
-    else Object.assign(state.record, { targetId: consentId, action: 'update', consentMetadataSynced: true });
+    else {
+      Object.assign(state.record, { targetId: consentId, action: 'update', consentMetadataSynced: true });
+      if (signatureFileKey !== undefined) state.record.signatureFileKey = signatureFileKey;
+    }
     return true;
   });
   t.mock.method(auth, 'authenticatedFetch', async (url, init = {}) => {
@@ -47,38 +50,163 @@ function simulate(t, record, handle) {
   return { state, calls, progress, sync: () => syncPendingContracts({ onProgress: value => progress.push(value) }) };
 }
 
-test('MPU saves allowed fields, then attaches the signature; after a refused upload only the attachment is retried', async t => {
-  let uploads = 0;
-  const stored = [];
-  const consent = pendingConsent();
-  const { state, calls, sync, progress } = simulate(t, consent, (method, path, init) => {
-    if (method === 'GET' && path === '/consentements-mpu/victime/25') return new Response(null, { status: 404 });
-    if (method === 'POST' && path === '/consentements-mpu') {
-      assert.deepEqual(JSON.parse(init.body), {
-        victimeId: 25, decisionConsentement: 'accepte', dateConsentement: '2026-11-26',
-        lieuConsentement: 'Lieu', informeMpu: false,
-      });
-      return Response.json({ data: { id: 13, victimeId: 25 } }, { status: 201 });
+// The API may accept the act and still return both signer fields as null.
+function unsignedAct() {
+  return { id: 13, victimeId: 25, incapableConsentir: false,
+    signatureBeneficiaire: null, signatureRepresentant: null,
+    victime: { id: 25, age: '11', mention: 'MPU', documentVictime: [] } };
+}
+
+function simulateMpu(t, entry, existing = null) {
+  const server = { act: existing, documents: [], uploadBodies: [], patchBodies: [], metadataWrites: 0 };
+  const fileKey = '31d62c9c-557d-4706-aa97-17aac9f083f2.png';
+  const harness = simulate(t, entry, (method, path, init) => {
+    if (method === 'GET' && ['/consentements-mpu/victime/25', '/consentements-mpu/13'].includes(path)) {
+      assert.equal(init.cache, 'no-store');
+      return server.act ? Response.json({ data: server.act }) : new Response(null, { status: 404 });
     }
-    if (method === 'GET' && path === '/document-victime/by-id-victime/25') return Response.json(stored);
-    if (method === 'POST' && path === '/document-victime/victime/25/upload') {
-      uploads++;
-      assert.equal(init.body.get('category'), 'signature');
-      assert.equal(init.body.get('file').type, 'image/png');
-      assert.ok(init.body.get('file').size > 0);
-      if (uploads === 1) return Response.json({ message: ['fichier refusé'] }, { status: 400 });
-      stored.push({ id: 47, label: init.body.get('label'), lien: 'stored.png' });
-      return Response.json(stored[0]);
+    if (method === 'GET' && path === '/document-victime/by-id-victime/25') return Response.json(server.documents);
+    if (method === 'POST' && path === '/minio/files/upload') {
+      server.uploadBodies.push(init.body);
+      if (server.onUpload) server.onUpload();
+      const file = init.body.get('file');
+      return Response.json(server.uploadReply ?? {
+        message: 'Fichier chargé avec succès', filename: fileKey,
+        originalName: file.name, mimeType: file.type, size: file.size,
+      }, { status: 201 });
+    }
+    if (method === 'POST' && path === '/consentements-mpu') {
+      assert.equal(server.act, null, 'must not create twice');
+      const payload = JSON.parse(init.body);
+      assert.equal(payload.victimeId, 25);
+      assert.equal(payload.dateConsentement, '2026-11-26');
+      assert.equal(payload.informeMpu, false);
+      for (const key of ['signature', 'signatureBeneficiaire', 'signatureRepresentant', 'id', 'victime']) {
+        assert.equal(key in payload, false);
+      }
+      server.metadataWrites++;
+      server.act = { ...unsignedAct(), ...payload };
+      return Response.json(server.act, { status: 201 });
+    }
+    if (method === 'PATCH' && path === '/consentements-mpu/13') {
+      assert.ok(server.act);
+      const payload = JSON.parse(init.body);
+      if ('signatureBeneficiaire' in payload || 'signatureRepresentant' in payload) {
+        server.patchBodies.push(payload);
+        if (server.signatureReply) return server.signatureReply(payload);
+      } else {
+        server.metadataWrites++;
+      }
+      Object.assign(server.act, payload);
+      return new Response(null, { status: 204 });
     }
     throw new Error('Unexpected request: ' + method + ' ' + path);
   });
+  return { ...harness, server, fileKey };
+}
+
+test('an MPU PATCH rejected by the DTO preserves the drawing and resumes with the uploaded filename', async t => {
+  const originalEnv = process.env;
+  const api = 'https://api.test';
+  process.env = { ...originalEnv, NEXT_PUBLIC_API_BASE_URL: api + '/',
+    NEXT_PUBLIC_UPLOAD_ENDPOINT: api + '/document-victime/victime/25/upload' };
+  t.after(() => { process.env = originalEnv; });
+  const entry = pendingConsent();
+  const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5s6NsAAAAASUVORK5CYII=';
+  entry.signatureDataUrl = 'data:image/png;base64,' + pngBase64;
+  const { sync, server, state, progress, fileKey, calls } = simulateMpu(t, entry);
+  server.signatureReply = () => Response.json({ message: ['property signatureBeneficiaire should not exist'] }, { status: 400 });
   assert.equal((await sync()).failed, 1);
-  assert.match(progress.at(-1).message, /400.*fichier refusé/);
+  assert.match(progress.at(-1).message, /400.*property signatureBeneficiaire should not exist/);
+  assert.ok(state.record.signatureDataUrl);
   assert.equal(state.record.targetId, 13);
-  assert.equal(state.record.signatureDataUrl, consent.signatureDataUrl);
-  assert.equal((await sync()).synced, 1);
-  assert.equal(calls.filter(([, path]) => path.startsWith('/consentements-mpu')).length, 2);
+  assert.equal(state.record.signatureFileKey, fileKey);
+  assert.equal(server.act.signatureBeneficiaire, null);
+  assert.deepEqual(server.patchBodies, [{ signatureBeneficiaire: fileKey }]);
+  delete server.signatureReply;
+  assert.equal((await sync()).synced, 1, progress.at(-1).message);
+  assert.equal(server.metadataWrites, 1);
+  assert.equal(server.uploadBodies.length, 1);
+  const form = server.uploadBodies[0];
+  assert.deepEqual([...form.keys()], ['file']);
+  const file = form.get('file');
+  assert.equal(file.type, 'image/png');
+  assert.equal(file.name, 'signature_25_1700000000000.png');
+  assert.deepEqual(Buffer.from(await file.arrayBuffer()), Buffer.from(pngBase64, 'base64'));
+  const uploads = auth.authenticatedFetch.mock.calls
+    .map(call => call.arguments[0]).filter(url => url.endsWith('/upload'));
+  assert.deepEqual(uploads, [api + '/minio/files/upload']);
+  assert.equal(server.act.signatureBeneficiaire, fileKey);
+  assert.equal(server.act.signatureRepresentant, null);
+  assert.equal(calls.at(-1)[0], 'GET');
   assert.equal(state.record, null);
+});
+
+test('a 2xx signature PATCH is insufficient when the subsequent GET does not return the intended signer and key', async t => {
+  const entry = pendingConsent();
+  entry.contractData.incapableConsentir = true;
+  const { sync, state, server, calls, fileKey, progress } = simulateMpu(t, entry, unsignedAct());
+  // The PATCH can echo the submitted key even when a subsequent read fails to find it.
+  server.signatureReply = payload => Response.json({ ...server.act, ...payload });
+  assert.equal((await sync()).failed, 1);
+  assert.ok(state.record.signatureDataUrl);
+  assert.deepEqual(server.patchBodies, [{ signatureRepresentant: fileKey }]);
+  assert.equal(calls.at(-1)[0], 'GET');
+
+  server.act.signatureBeneficiaire = fileKey;
+  server.act.signatureRepresentant = 'signature-precedente.png';
+  assert.equal((await sync()).failed, 1);
+  assert.ok(state.record);
+  delete server.signatureReply;
+  assert.equal((await sync()).synced, 1, progress.at(-1).message);
+  assert.equal(server.uploadBodies.length, 1);
+  assert.equal(server.act.signatureRepresentant, fileKey);
+  assert.equal(state.record, null);
+});
+
+test('an act recovered from a former dossier attachment still requires its signature field to be persisted', async t => {
+  const entry = pendingConsent();
+  Object.assign(entry, { action: 'update', targetId: 13, consentMetadataSynced: true, signatureDataUrl: null });
+  entry.contractData = { signature: 'SIG_ELEC', incapableConsentir: false };
+  const { state, server, sync, progress } = simulateMpu(t, entry, unsignedAct());
+  server.documents = [{ id: 27, originalName: 'signature_consentement_mpu_13_' + (entry.createdAt - 1) + '.png', fileName: 'other-capture.png' }];
+  assert.equal((await sync()).failed, 1);
+  assert.deepEqual(server.patchBodies, []);
+  assert.ok(state.record);
+  server.documents.push({ id: 28, originalName: 'signature_consentement_mpu_13_' + entry.createdAt + '.png', fileName: 'kept.png' });
+  assert.equal((await sync()).synced, 1, progress.at(-1).message);
+  assert.deepEqual(server.patchBodies, [{ signatureBeneficiaire: 'kept.png' }]);
+  assert.equal(server.uploadBodies.length, 0);
+  assert.equal(state.record, null);
+});
+
+test('a temporary upload URL alone never gets written into an MPU consent', async t => {
+  const { server, progress, state, sync } = simulateMpu(t, pendingConsent());
+  server.uploadReply = { url: 'https://storage.test/blob?X-Amz-Signature=temp' };
+  assert.equal((await sync()).failed, 1);
+  assert.match(progress.at(-1).message, /référence|permanent|fichier|clé/i);
+  assert.ok(state.record.signatureDataUrl);
+  assert.deepEqual(server.patchBodies, []);
+});
+
+test('an MPU upload returning only the client originalName retains the drawing for retry', async t => {
+  const entry = pendingConsent();
+  const { server, state, sync } = simulateMpu(t, entry);
+  server.uploadReply = { originalName: 'signature_25_1700000000000.png' };
+  assert.equal((await sync()).failed, 1);
+  assert.equal(state.record.signatureDataUrl, entry.signatureDataUrl);
+  assert.equal(state.record.signatureFileKey, undefined);
+  assert.deepEqual(server.patchBodies, []);
+});
+
+test('an older queue item without a local signer flag uses the signer on the remote act', async t => {
+  const entry = pendingConsent();
+  Object.assign(entry, { targetId: 13, action: 'update', consentMetadataSynced: true });
+  delete entry.contractData.incapableConsentir;
+  const { sync, server, fileKey, progress } = simulateMpu(t, entry, { ...unsignedAct(), incapableConsentir: true });
+  assert.equal((await sync()).synced, 1, progress.at(-1).message);
+  assert.deepEqual(server.patchBodies, [{ signatureRepresentant: fileKey }]);
+  assert.equal(server.act.signatureBeneficiaire, null);
 });
 
 test('an offline MPU create for an existing consent patches it; validation errors reach the settings and preserve the drawing', async t => {
@@ -126,46 +254,27 @@ test('a legacy update verifies the remote signature if the pending item has only
   const consent = pendingConsent();
   Object.assign(consent, { signatureDataUrl: null, targetId: 13, action: 'update' });
   consent.contractData = { signature: 'SIG_ELEC', lieuConsentement: 'Nouveau lieu' };
-  const { sync, calls, state } = simulate(t, consent, (method, path, init) => {
-    if (method === 'GET' && path === '/consentements-mpu/victime/25') {
-      return Response.json({ id: 13, victimeId: 25, signatureBeneficiaire: 'original.png' });
-    }
-    if (method === 'GET' && path === '/document-victime/by-id-victime/25') return Response.json([]);
-    if (method === 'GET' && path === '/minio/files/original.png') return Response.json({ url: 'https://example.invalid/original.png' });
-    if (method === 'PATCH' && path === '/consentements-mpu/13') {
-      assert.deepEqual(JSON.parse(init.body), { lieuConsentement: 'Nouveau lieu' });
-      return new Response(null, { status: 204 });
-    }
-    throw new Error('Unexpected request: ' + method + ' ' + path);
-  });
-  assert.equal((await sync()).synced, 1);
-  assert.equal(calls.filter(([method]) => method === 'POST').length, 0);
+  const original = { ...unsignedAct(), signatureBeneficiaire: 'original.png' };
+  const { sync, server, state, progress } = simulateMpu(t, consent, original);
+  assert.equal((await sync()).synced, 1, progress.at(-1).message);
+  assert.equal(server.act.lieuConsentement, 'Nouveau lieu');
+  assert.equal(server.act.signatureBeneficiaire, 'original.png');
+  assert.equal(server.uploadBodies.length, 0);
   assert.equal(state.record, null);
 });
 
-test('a newer local edit during attachment upload remains queued for the next sync', async t => {
-  const consent = pendingConsent();
-  let uploads = 0;
-  const stored = [];
-  const { sync, state, progress } = simulate(t, consent, (method, path, init) => {
-    if (method === 'GET' && path === '/consentements-mpu/victime/25') return Response.json({ id: 13, victimeId: 25 });
-    if (method === 'PATCH' && path === '/consentements-mpu/13') return new Response(null, { status: 204 });
-    if (method === 'GET' && path === '/document-victime/by-id-victime/25') return Response.json(stored);
-    if (method === 'POST' && path === '/document-victime/victime/25/upload') {
-      if (++uploads === 1) {
-        state.record = { ...state.record, revision: 1, consentMetadataSynced: false, signatureCapturedAt: consent.createdAt + 1000,
-          signatureDataUrl: 'data:image/png;base64,cmV2aXNpb24=' };
-      }
-      const document = { id: uploads, label: init.body.get('label'), lien: 'stored-' + uploads + '.png' };
-      stored.push(document);
-      return Response.json(document);
-    }
-    throw new Error('Unexpected request: ' + method + ' ' + path);
-  });
+test('a new drawing saved during an upload keeps its own revision in the queue', async t => {
+  const { server, sync, state, progress } = simulateMpu(t, pendingConsent(), unsignedAct());
+  const replacement = 'data:image/png;base64,cmV2aXNpb24=';
+  server.onUpload = () => {
+    state.record = { ...state.record, revision: 2, consentMetadataSynced: false, signatureCapturedAt: state.record.createdAt + 1000, signatureDataUrl: replacement };
+  };
   assert.equal((await sync()).failed, 1);
-  assert.match(progress.at(-1).message, /modifié pendant l’envoi/);
-  assert.equal(state.record.revision, 1);
-  assert.equal((await sync()).synced, 1);
+  assert.equal(state.record.signatureDataUrl, replacement);
+  assert.equal(server.patchBodies.length, 0);
+  delete server.onUpload;
+  assert.equal((await sync()).synced, 1, progress.at(-1).message);
+  assert.equal(server.uploadBodies.length, 2);
   assert.equal(state.record, null);
 });
 

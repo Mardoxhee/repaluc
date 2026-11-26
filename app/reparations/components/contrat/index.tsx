@@ -12,7 +12,7 @@ import { SignatureModal } from './SignatureModal';
 import { ContractTemplateSelector } from './ContractTemplateSelector';
 import { ReparationMeasuresSection } from './ReparationMeasuresSection';
 import { MpuConsentementForm } from './MpuConsentementForm';
-import { getLegacyMpuSignatureReference } from '../../../utils/mpuConsentSignature';
+import { getMpuSignatureFileKey, getMpuSignerField } from '../../../utils/mpuConsentSignature';
 
 const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
     const {
@@ -29,6 +29,8 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
         loadingContrat,
         signatureUrl,
         signatureStatusMessage,
+        retrySignatureLookup,
+        documentSignatureKey,
         showContratDetail,
         showSignatureModal,
         formattedSignatureDate,
@@ -55,8 +57,14 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
     const usesLegacyContractText = selectedTemplateId === 'luc-decision-justice';
     const documentLabel = isMpuConsentement ? 'Acte de consentement MPU' : 'Contrat de réparation';
     const documentActionLabel = isMpuConsentement ? "l’acte de consentement MPU" : 'le contrat';
-    const canRedrawPendingSignature = pendingOfflineContrat?.targetType === 'consentement-mpu' && !pendingOfflineContrat.signatureDataUrl;
-    const pendingSignatureMissing = canRedrawPendingSignature && !getLegacyMpuSignatureReference(pendingOfflineContrat.contractData);
+    const pendingData = pendingOfflineContrat?.contractData;
+    const signerIsRepresentative = isMpuConsentement && (pendingData?.incapableConsentir ?? existingContrat?.incapableConsentir ?? consentements.incapaciteConsentir);
+    const pendingReferences = [pendingOfflineContrat?.signatureFileKey, pendingData?.[getMpuSignerField(signerIsRepresentative)], pendingData?.signature];
+    const localDrawing = pendingOfflineContrat?.signatureDataUrl || pendingReferences.find(ref => typeof ref === 'string' && ref.startsWith('data:image/'));
+    const pendingSignatureMissing = pendingOfflineContrat?.targetType === 'consentement-mpu' && !localDrawing && !pendingReferences.some(getMpuSignatureFileKey);
+    const hasSignedAct = !!existingContrat && (!isMpuConsentement || !!existingContrat.signature);
+    const pendingDate = pendingData?.dateConsentement || pendingOfflineContrat?.createdAt;
+    const documentDate = formattedSignatureDate || (pendingDate ? new Date(pendingDate).toLocaleDateString('fr-FR') : '');
 
     return (
         <>
@@ -245,10 +253,11 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                                 <FileText className="text-blue-600" size={24} />
                                 <div>
                                     <p className="font-semibold text-gray-800">{documentLabel}</p>
-                                    <p className="text-sm text-gray-600">
-                                        {pendingSignatureMissing ? 'Enregistré le' : 'Signé le'} {new Date(existingContrat?.dateSignature || pendingOfflineContrat?.contractData?.dateConsentement || pendingOfflineContrat?.createdAt || Date.now()).toLocaleDateString('fr-FR')}
-                                    </p>
+                                    {documentDate && <p className="text-sm text-gray-600">
+                                        {hasSignedAct || (!isMpuConsentement && !pendingSignatureMissing) ? 'Signé le' : 'Enregistré le'} {documentDate}
+                                    </p>}
                                     {pendingOfflineContrat && <p className="mt-1 text-xs font-medium text-amber-700">{pendingSignatureMissing ? 'Signature à compléter avant la synchronisation' : 'En attente de synchronisation'}</p>}
+                                    {isMpuConsentement && existingContrat && !hasSignedAct && !pendingOfflineContrat && <p className="mt-1 text-xs font-medium text-amber-700">Signature à compléter sur l’acte</p>}
                                 </div>
                             </div>
                             <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -347,8 +356,14 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                                 existingContrat={existingContrat}
                                 signatureUrl={signatureUrl}
                                 signatureStatusMessage={signatureStatusMessage}
+                                retrySignatureLookup={retrySignatureLookup}
+                                hasSignedAct={hasSignedAct}
+                                localDrawing={localDrawing}
+                                representativeName={signerIsRepresentative ? representant.nom : undefined}
+                                attachSignature={isMpuConsentement && documentSignatureKey && signatureUrl && !pendingOfflineContrat
+                                    ? () => saveContract(documentSignatureKey) : undefined}
+                                isSaving={isSaving}
                                 pendingSignatureMissing={pendingSignatureMissing}
-                                canRedrawPendingSignature={canRedrawPendingSignature}
                                 formattedSignatureDate={formattedSignatureDate}
                                 saveMessage={saveMessage}
                                 pendingOfflineContrat={pendingOfflineContrat}
@@ -366,7 +381,8 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
             {showSignatureModal && (
                 <SignatureModal
                     canvasRef={canvasRef}
-                    canSave={!existingContrat || canRedrawPendingSignature || (isMpuConsentement && !signatureUrl && !signatureStatusMessage)}
+                    canSave={!existingContrat || pendingSignatureMissing || (isMpuConsentement && !hasSignedAct && !pendingOfflineContrat)}
+                    forRepresentative={signerIsRepresentative}
                     saveMessage={saveMessage}
                     isSaving={isSaving}
                     startDrawing={startDrawing}
