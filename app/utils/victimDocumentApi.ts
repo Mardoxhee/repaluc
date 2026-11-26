@@ -1,6 +1,7 @@
 'use client';
 
 import { authenticatedFetch } from './authFetch';
+import { readSyncHttpError } from './uploadResponse';
 
 export interface VictimDocument {
   id: number;
@@ -24,15 +25,11 @@ export class VictimDocumentApiError extends Error {
 }
 
 const readPayload = async (response: Response, action: string): Promise<any> => {
-  const text = await response.text().catch(() => '');
-  let payload: any = null;
-  try { payload = text ? JSON.parse(text) : null; } catch { payload = null; }
   if (!response.ok) {
-    const message = payload?.message || payload?.error || text;
-    const detail = Array.isArray(message) ? message.join('; ') : message;
-    throw new VictimDocumentApiError(`${action} (${response.status})${detail ? `: ${detail}` : ''}`, response.status);
+    const error = await readSyncHttpError(response, action);
+    throw new VictimDocumentApiError(error.message, response.status);
   }
-  return payload;
+  return response.json().catch(() => null);
 };
 
 const asDocumentArray = (payload: any): any[] => {

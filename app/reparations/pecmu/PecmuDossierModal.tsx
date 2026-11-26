@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import PecmuNewCareModal, { type CareMode } from './PecmuNewCareModal';
 import { useMedicalCareFields } from './useMedicalCareFields';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Modal, ModalBody } from 'flowbite-react';
@@ -25,7 +25,7 @@ import { buttonClass, fieldClass, WorkflowForm, type WorkflowField } from './Wor
 import PecmuPsychologicalCare from './PecmuPsychologicalCare';
 import PecmuVictimSearch, { masterVictimName, type MasterVictim } from './PecmuVictimSearch';
 
-type Props = { ficheId: number; initialTab?: 'care' | 'readmission'; fetcher: PecmuFetcher; onClose: () => void; onChanged: () => void };
+type Props = { ficheId: number; initialTab?: 'care' | 'readmission'; initialCareMode?: CareMode; fetcher: PecmuFetcher; onClose: () => void; onChanged: () => void };
 const tabs: Array<{ id: WorkflowTab; label: string }> = [
   { id: 'identity', label: 'Identification et alerte' }, { id: 'certification', label: 'Certification' },
   { id: 'decision', label: 'Pool médical' }, { id: 'consents', label: 'Consentements' },
@@ -72,7 +72,7 @@ const errorHints: Record<string, string> = {
   CORE_SSO_UNAVAILABLE: 'Le service d’authentification est temporairement indisponible. Réessayez.',
 };
 
-export default function PecmuDossierModal({ ficheId, initialTab, fetcher, onClose, onChanged }: Props) {
+export default function PecmuDossierModal({ ficheId, initialTab, initialCareMode, fetcher, onClose, onChanged }: Props) {
   const [state, setState] = useState<WorkflowSnapshot | null>(null);
   const [tab, setTab] = useState<WorkflowTab>('certification');
   const [busy, setBusy] = useState(false);
@@ -85,6 +85,8 @@ export default function PecmuDossierModal({ ficheId, initialTab, fetcher, onClos
   const [editInvoices, setEditInvoices] = useState<File[]>([]);
   const uploadedInvoices = useRef(new WeakSet<File>());
   const [editCare, setEditCare] = useState(false);
+  const careTrigger = useRef<HTMLButtonElement>(null);
+  const [careMode, setCareMode] = useState<CareMode | null>(initialCareMode ?? null);
   const [certificationChoice, setCertificationChoice] = useState<boolean | null>(null);
   const [certificationFile, setCertificationFile] = useState<File | null>(null);
   const uploadedCertification = useRef<string | null>(null);
@@ -100,7 +102,7 @@ export default function PecmuDossierModal({ ficheId, initialTab, fetcher, onClos
   const statusRef = useRef<string | null>(null);
   const base = `/fiche-pecmu/${ficheId}`;
   const canEdit = canEditPecmuWorkflow(state);
-  const load = useCallback(async () => {
+  const load = useCallback(async (keepTab = false) => {
     const fresh = await loadPecmuWorkflow(fetcher, ficheId).catch(error => {
       if (error instanceof PecmuApiError && [401, 403].includes(error.statusCode)) {
         setState(null);
@@ -113,7 +115,7 @@ export default function PecmuDossierModal({ ficheId, initialTab, fetcher, onClos
     setOrientationNotes(typeof fresh.fiche.orientationNotes === 'string' ? fresh.fiche.orientationNotes : '');
     if (statusRef.current !== fresh.currentStatus) {
       const currentTab = activeWorkflowTab(fresh.currentStatus);
-      setTab(entryTab.current ?? (currentTab === 'closure' ? 'care' : currentTab));
+      if (!keepTab) setTab(entryTab.current ?? (currentTab === 'closure' ? 'care' : currentTab));
       entryTab.current = undefined;
       statusRef.current = fresh.currentStatus;
     }
@@ -144,7 +146,31 @@ export default function PecmuDossierModal({ ficheId, initialTab, fetcher, onClos
   const certifyAlert = hasRecordedCertification || (certificationChoice ?? false);
   const latest = state?.medicalCare.at(-1);
   const readmissions = state?.medicalCare.filter(care => care.admissionType === 'READMISSION') || [];
-  const { careFormFields, carePartners, normalizeSupervisorValues, supervisorInitial, loadingSupervisors } = useMedicalCareFields(fetcher, canEdit);
+  const careInputs = useMedicalCareFields(fetcher, canEdit);
+  const { careFormFields, carePartners, normalizeSupervisorValues, supervisorInitial, loadingSupervisors } = careInputs;
+  const finishCare = async (changed: boolean) => {
+    setCareMode(null);
+    if (!changed) {
+      requestAnimationFrame(() => careTrigger.current?.focus({ preventScroll: true }));
+      return;
+    }
+    setBusy(true);
+    setError('');
+    setErrorCode('');
+    try {
+      await load(true);
+      setVersion(value => value + 1);
+    } catch {
+      setSyncFailed(true);
+      setError('La prise en charge a été enregistrée. Actualisez le parcours pour recharger le dossier.');
+    } finally {
+      setBusy(false);
+      requestAnimationFrame(() => {
+        if (document.activeElement === document.body) careTrigger.current?.focus({ preventScroll: true });
+      });
+      onChanged();
+    }
+  };
   const isTransferred = state?.currentStatus === 'TRANSFERRED';
   const mutate = async (operation: () => Promise<unknown>): Promise<boolean> => {
     if (!canEdit || mutationLock.current) return false;
@@ -283,9 +309,9 @@ export default function PecmuDossierModal({ ficheId, initialTab, fetcher, onClos
               <section aria-label={tab === 'care' ? 'Prises en charge' : 'Réadmissions'} className="w-full space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h2 className="text-lg font-semibold text-slate-900">{tab === 'care' ? 'Prises en charge' : 'Réadmissions après rechute'}</h2>
-                  {canEdit && (tab === 'care' || latest) && <Link className={buttonClass} href={`/reparations/pecmu/${ficheId}/soins/${tab === 'readmission' ? 'readmission' : isTransferred ? 'transfert' : 'nouveau'}`}>
+                  {canEdit && (tab === 'care' || latest) && <button type="button" ref={careTrigger} aria-haspopup="dialog" disabled={busy} className={buttonClass} onClick={() => setCareMode(tab === 'readmission' ? 'readmission' : isTransferred ? 'transfert' : 'nouveau')}>
                     {tab === 'readmission' ? 'Enregistrer une réadmission' : 'Ouvrir une prise en charge'}
-                  </Link>}
+                  </button>}
                 </div>
                 {tab === 'care' && !latest && <Empty text="Aucune prise en charge enregistrée." />}
                 {tab === 'readmission' && !readmissions.length && <Empty text={latest ? 'Aucune réadmission enregistrée.' : 'Une première prise en charge est nécessaire pour enregistrer une réadmission.'} />}
@@ -356,6 +382,7 @@ export default function PecmuDossierModal({ ficheId, initialTab, fetcher, onClos
           </>}
         </main>
       </div>
+      {careMode && state && canEdit && <PecmuNewCareModal mode={careMode} state={state} fields={careInputs} fetcher={fetcher} onFinish={finishCare} />}
     </ModalBody></Modal>
     {preview && <PecmuDocumentViewer document={preview} onClose={() => setPreview(null)} />}
   </>;

@@ -6,8 +6,17 @@ import { outcomeLabels, type MedicalCare } from '../services/pecmuWorkflowApi';
 import { WorkflowForm, fieldClass, type WorkflowField } from './WorkflowForm';
 import PecmuInvoiceInput from './PecmuInvoiceInput';
 import YesNoToggle from './YesNoToggle';
+import styles from './PecmuCareForm.module.css';
 
-export default function PecmuEvolutionForm({ care, hasClosureForm, busy, onSave, careFields = [], carePartners = [], initial, submitLabel = 'Enregistrer l’évolution' }: {
+const careSectionStarts: Record<string, string> = {
+  supervisorName: 'Organisation des soins',
+  careProvince: 'Structure et équipe soignante',
+  complaints: 'Situation clinique',
+  appointmentDate1: 'Rendez-vous de suivi',
+  bilanParaclinique: 'Bilan et observations',
+};
+
+export default function PecmuEvolutionForm({ care, hasClosureForm, busy, onSave, careFields = [], carePartners = [], initial, submitLabel = 'Enregistrer l’évolution', modalFormId }: {
   care: MedicalCare;
   hasClosureForm: boolean;
   busy: boolean;
@@ -15,6 +24,7 @@ export default function PecmuEvolutionForm({ care, hasClosureForm, busy, onSave,
   carePartners?: CarePartnerLocation[];
   initial?: Record<string, any>;
   submitLabel?: string;
+  modalFormId?: string;
   onSave: (values: Record<string, any>, files: Record<string, File>, closeCase: boolean, invoices: File[]) => Promise<boolean>;
 }) {
   const [invoices, setInvoices] = useState<File[]>([]);
@@ -37,9 +47,13 @@ export default function PecmuEvolutionForm({ care, hasClosureForm, busy, onSave,
       setFiles(previous => { const next = { ...previous }; if (file) next[type] = file; else delete next[type]; return next; });
     }} />
   </label>;
-  return <WorkflowForm busy={busy} initial={initial ?? care} submitLabel={submitLabel} fields={[
-    ...careFields,
-    ...(careFields.length ? [{ key: 'evolutionHeading', label: 'Évolution', type: 'heading' as const }] : []),
+  const groupedCareFields = modalFormId ? careFields.flatMap(field => {
+    const section = careSectionStarts[field.key];
+    return section ? [{ key: field.key + 'Heading', label: section, type: 'heading' as const }, field] : [field];
+  }) : careFields;
+  return <WorkflowForm externalFormId={modalFormId} className={modalFormId ? styles.form : undefined} busy={busy} initial={initial ?? care} submitLabel={submitLabel} fields={[
+    ...groupedCareFields,
+    ...(careFields.length ? [{ key: 'evolutionHeading', label: modalFormId ? 'Évolution du dossier' : 'Évolution', type: 'heading' as const }] : []),
     { key: 'outcome', label: 'Évolution', type: 'select', options: outcomeLabels, required: !careFields.length },
     ...careLocationFields('transfer', carePartners).map(field => ({ ...field, when: (values: Record<string, any>) => values.outcome === 'TRANSFERRED' })),
     { key: 'transferNotes', label: 'Motif de transfert', type: 'textarea', when: values => values.outcome === 'TRANSFERRED' },
@@ -53,6 +67,7 @@ export default function PecmuEvolutionForm({ care, hasClosureForm, busy, onSave,
       : `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
     return onSave({ ...values, ...(values.outcome ? { outcomeDate } : {}) }, Object.fromEntries(requiredDocuments.filter(({ type }) => files[type]).map(({ type }) => [type, files[type]])), canClose(values.outcome) && closeCase, invoices);
   }}>{values => <>
+    {modalFormId && <h3>Pièces jointes</h3>}
     <PecmuInvoiceInput onChange={setInvoices} />
     {documents(values.outcome).filter(doc => doc.type !== 'CLOSURE_FORM').map(doc => fileInput(doc.type, doc.label))}
     {canClose(values.outcome) && <div className="md:col-span-2"><YesNoToggle label="Dossier clôturé ?" checked={closeCase} onChange={setCloseCase} /></div>}

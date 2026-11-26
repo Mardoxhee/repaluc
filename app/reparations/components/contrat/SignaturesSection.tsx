@@ -3,6 +3,7 @@ import React from 'react';
 import { Clock, Wifi } from 'lucide-react';
 import type { Victim, Contrat, SaveMessage, ContractForm } from './types';
 import type { PendingContract } from '../../../utils/contractsCache';
+import { getLegacyMpuSignatureReference } from '../../../utils/mpuConsentSignature';
 
 interface SignaturesSectionProps {
     victim: Victim;
@@ -10,6 +11,9 @@ interface SignaturesSectionProps {
     setContractForm: React.Dispatch<React.SetStateAction<ContractForm>>;
     existingContrat: Contrat | null;
     signatureUrl: string;
+    signatureStatusMessage: string;
+    pendingSignatureMissing: boolean;
+    canRedrawPendingSignature: boolean;
     formattedSignatureDate: string;
     saveMessage: SaveMessage | null;
     pendingOfflineContrat: PendingContract | null;
@@ -25,6 +29,9 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
     setContractForm,
     existingContrat,
     signatureUrl,
+    signatureStatusMessage,
+    pendingSignatureMissing,
+    canRedrawPendingSignature,
     formattedSignatureDate,
     saveMessage,
     pendingOfflineContrat,
@@ -33,6 +40,9 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
     documentLabel = 'Contrat',
     documentActionLabel = 'le contrat',
 }) => {
+    const legacySignature = getLegacyMpuSignatureReference(pendingOfflineContrat?.contractData);
+    const localSignature = pendingOfflineContrat?.signatureDataUrl || (legacySignature.startsWith('data:image/') ? legacySignature : '');
+    const previewSignature = localSignature || signatureUrl;
     const updateField = (field: keyof ContractForm, value: string) => {
         setContractForm((prev) => ({ ...prev, [field]: value }));
     };
@@ -128,9 +138,9 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
                                                 <Clock className="w-5 h-5 text-amber-600" />
                                             </div>
                                             <div>
-                                                <p className="font-semibold text-amber-800">{documentLabel} signé hors ligne</p>
+                                                <p className="font-semibold text-amber-800">{documentLabel} {pendingSignatureMissing ? 'à signer' : 'signé hors ligne'}</p>
                                                 <p className="text-sm text-amber-700">
-                                                    Signé le {new Date(pendingOfflineContrat.createdAt).toLocaleDateString('fr-FR')} à {new Date(pendingOfflineContrat.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                                                    {pendingSignatureMissing ? 'Enregistré le' : 'Signé le'} {new Date(pendingOfflineContrat.createdAt).toLocaleDateString('fr-FR')} à {new Date(pendingOfflineContrat.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                                                 </p>
                                             </div>
                                         </div>
@@ -138,11 +148,18 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
                                             <Wifi className="w-4 h-4" />
                                             <span>En attente de synchronisation avec le serveur...</span>
                                         </div>
-                                        {(pendingOfflineContrat.signatureDataUrl || signatureUrl) && <div className="signature-box mt-4 bg-white p-3">
-                                            <img src={pendingOfflineContrat.signatureDataUrl || signatureUrl} alt="Signature enregistrée sur cet appareil" className="h-auto max-h-32 max-w-full object-contain" />
-                                            <p className="mt-2 text-xs text-gray-500">Signature conservée sur cet appareil jusqu’à la synchronisation.</p>
+                                        {previewSignature && <div className="signature-box mt-4 bg-white p-3">
+                                            <img src={previewSignature} alt="Signature de l’acte" className="h-auto max-h-32 max-w-full object-contain" />
+                                            {localSignature && <p className="mt-2 text-xs text-gray-500">Signature conservée sur cet appareil jusqu’à la synchronisation.</p>}
                                         </div>}
+                                        {canRedrawPendingSignature && (
+                                            <button type="button" onClick={() => setShowSignatureModal(true)} className="mt-3 px-4 py-2 bg-blue-600 text-sm font-medium text-white hover:bg-blue-700">
+                                                {pendingSignatureMissing ? 'Ajouter la signature' : 'Dessiner à nouveau la signature'}
+                                            </button>
+                                        )}
                                     </div>
+                                ) : signatureStatusMessage ? (
+                                    <p role="status" className="text-sm text-gray-600">{signatureStatusMessage}</p>
                                 ) : (
                                     <button
                                         type="button"
@@ -166,7 +183,7 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
                 </div>
             )}
 
-            {existingContrat && (
+            {existingContrat && !pendingSignatureMissing && (
                 <div className="mt-8 p-4 bg-green-50 border border-green-200 rounded no-print">
                     <p className="text-green-800 text-sm">
                         ✓ {documentLabel} signé le {formattedSignatureDate}

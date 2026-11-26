@@ -6,6 +6,8 @@ const withSerwist = withSerwistInit({
   swSrc: "app/sw.ts",
   swDest: "public/sw.js",
   disable: process.env.NODE_ENV === "development",
+  // SerwistProvider gère l'enregistrement et les refus du navigateur.
+  register: false,
   cacheOnNavigation: true,
   // Ne PAS recharger automatiquement à la reconnexion : cela peut
   // interrompre l'utilisateur et, sur connexion faible, remplacer un

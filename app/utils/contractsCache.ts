@@ -9,9 +9,12 @@ export interface PendingContract {
     victimId: number;
     contractData: any;
     signatureDataUrl?: string | null;
+    signatureCapturedAt?: number;
     targetType?: 'contrat' | 'consentement-mpu';
     action?: 'create' | 'update';
     targetId?: number;
+    revision?: number;
+    consentMetadataSynced?: boolean;
     createdAt: number;
 }
 
@@ -40,6 +43,7 @@ export const savePendingContract = async (
 
     let toSave: PendingContract = {
         ...entry,
+        revision: 1,
         createdAt: Date.now(),
     };
 
@@ -52,12 +56,16 @@ export const savePendingContract = async (
 
             const write = (existing?: PendingContract) => {
                 if (existing?.id !== undefined) {
-                    // Keep one pending consent per victim, updating its local copy on each save.
+                    const sameDrawing = !entry.signatureDataUrl || entry.signatureDataUrl === existing.signatureDataUrl;
+                    const targetId = existing.targetId ?? entry.targetId;
                     toSave = {
                         ...toSave,
                         id: existing.id,
-                        action: existing.action || entry.action,
-                        targetId: existing.targetId ?? entry.targetId,
+                        action: targetId ? 'update' : entry.action,
+                        targetId,
+                        signatureDataUrl: entry.signatureDataUrl || existing.signatureDataUrl,
+                        signatureCapturedAt: sameDrawing ? existing.signatureCapturedAt ?? existing.createdAt : toSave.createdAt,
+                        revision: (existing.revision ?? 0) + 1,
                     };
                 }
                 const writeRequest = existing ? store.put(toSave) : store.add(toSave);
@@ -105,6 +113,8 @@ export const getAllPendingContracts = async (): Promise<PendingContract[]> => {
     const tx = db.transaction([STORE_NAME], 'readonly');
     const store = tx.objectStore(STORE_NAME);
     const request = store.getAll();
+    tx.oncomplete = () => db.close();
+    tx.onabort = () => db.close();
 
     return new Promise((resolve, reject) => {
         request.onsuccess = () => {
@@ -114,18 +124,29 @@ export const getAllPendingContracts = async (): Promise<PendingContract[]> => {
     });
 };
 
-export const deletePendingContract = async (id: number): Promise<void> => {
+// A new signature or edit saved while the request is in flight must stay queued.
+export const recordPendingContractSync = async (sent: PendingContract, consentId?: number): Promise<boolean> => {
+    const localId = sent.id;
+    if (localId == null) throw new Error('Identifiant local de l’acte manquant.');
     const db = await openContractsDB();
     const tx = db.transaction([STORE_NAME], 'readwrite');
     const store = tx.objectStore(STORE_NAME);
-
-    store.delete(id);
-
-    return new Promise((resolve, reject) => {
-        tx.oncomplete = () => {
-            console.log('[ContractsCache] Contrat en attente supprimé', id);
-            resolve();
-        };
-        tx.onerror = () => reject(tx.error);
-    });
+    const request = store.get(localId);
+    let matched = false;
+    try {
+        return await new Promise<boolean>((resolve, reject) => {
+            request.onsuccess = () => {
+                const current: PendingContract | undefined = request.result;
+                if (!current || current.revision !== sent.revision) return;
+                matched = true;
+                if (consentId === undefined) store.delete(localId);
+                else store.put({ ...current, targetId: consentId, action: 'update', consentMetadataSynced: true });
+            };
+            tx.oncomplete = () => resolve(matched);
+            tx.onerror = () => reject(tx.error);
+            tx.onabort = () => reject(tx.error || new Error('La mise à jour locale a été interrompue.'));
+        });
+    } finally {
+        db.close();
+    }
 };

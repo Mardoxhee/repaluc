@@ -92,6 +92,7 @@ const ReglagesPage = () => {
   const [pendingVictimCacheInfo, setPendingVictimCacheInfo] = useState<PendingVictimCacheInfo | null>(null);
   const [loadingVictimPending, setLoadingVictimPending] = useState(false);
   const [syncingVictimId, setSyncingVictimId] = useState<number | null>(null);
+  const [mediaSyncError, setMediaSyncError] = useState('');
   const [selectedVictims, setSelectedVictims] = useState<Record<number, boolean>>({});
   const [batchCount, setBatchCount] = useState<number>(10);
   const [batchSyncing, setBatchSyncing] = useState<boolean>(false);
@@ -416,7 +417,7 @@ const ReglagesPage = () => {
             : result.synced > 0
               ? `${result.synced} élément(s) synchronisé(s) avec succès.`
               : result.skipped > 0
-                ? `${result.skipped} élément(s) restent en attente d’une nouvelle tentative.`
+                ? type === 'photos' && progress.message ? progress.message : `${result.skipped} élément(s) restent en attente d’une nouvelle tentative.`
                 : progress.message || 'Aucun élément traité.',
         };
       });
@@ -545,6 +546,18 @@ const ReglagesPage = () => {
     }
   };
 
+  const syncVictimMedia = async (victimId: number) => {
+    const [photos, docs] = await Promise.allSettled([
+      syncPendingVictimPhotosForVictim(victimId),
+      syncPendingVictimDocsForVictim(victimId, { retryRejected: true }),
+    ]);
+    const problems: string[] = [];
+    if (photos.status === 'rejected') problems.push('Synchronisation des photos interrompue.');
+    else if (photos.value.failed) problems.push(photos.value.lastError || 'Une photo reste à synchroniser.');
+    if (docs.status === 'rejected' || docs.value.failed) problems.push('Un document reste à synchroniser.');
+    if (problems.length) setMediaSyncError(`Victime n°${victimId} — ${problems.join(' ')}`);
+  };
+
   const syncOneVictim = async (victimId: number) => {
     if (!online || !getAuthToken()) {
       await Swal.fire({
@@ -557,11 +570,9 @@ const ReglagesPage = () => {
     }
 
     setSyncingVictimId(victimId);
+    setMediaSyncError('');
     try {
-      await Promise.allSettled([
-        syncPendingVictimPhotosForVictim(victimId),
-        syncPendingVictimDocsForVictim(victimId, { retryRejected: true }),
-      ]);
+      await syncVictimMedia(victimId);
     } finally {
       await loadPendingVictimMedia(pendingVictimPage);
       setSyncingVictimId(null);
@@ -602,13 +613,11 @@ const ReglagesPage = () => {
     if (!result.isConfirmed) return;
 
     setBatchSyncing(true);
+    setMediaSyncError('');
     try {
       for (const victimId of toSync) {
         setSyncingVictimId(victimId);
-        await Promise.allSettled([
-          syncPendingVictimPhotosForVictim(victimId),
-          syncPendingVictimDocsForVictim(victimId, { retryRejected: true }),
-        ]);
+        await syncVictimMedia(victimId);
         await loadPendingVictimMedia(pendingVictimPage);
       }
     } finally {
@@ -836,7 +845,13 @@ const ReglagesPage = () => {
 
     try {
       const total = pendingContracts.length;
-      const syncResult = await syncPendingContracts({ onProgress: setContractsSyncProgress });
+      let previousFailures = 0;
+      let blockage = '';
+      const syncResult = await syncPendingContracts({ onProgress: (progress) => {
+        if (progress.failed > previousFailures && progress.message) blockage = progress.message;
+        previousFailures = progress.failed;
+        setContractsSyncProgress({ ...progress, message: blockage || progress.message });
+      } });
       setContractsSyncResult({ total, ...syncResult });
       await loadPendingContracts();
       await loadCacheInventory();
@@ -844,11 +859,12 @@ const ReglagesPage = () => {
       await Swal.fire({
         icon: syncResult.failed === 0 ? 'success' : 'warning',
         title: 'Resoumission terminée',
-        html: `
-          <p>${syncResult.synced} document(s) synchronisé(s)</p>
-          ${syncResult.skipped > 0 ? `<p>${syncResult.skipped} document(s) déjà existant(s)</p>` : ''}
-          ${syncResult.failed > 0 ? `<p class="text-red-600">${syncResult.failed} échec(s)</p>` : ''}
-        `,
+        text: [
+          `${syncResult.synced} document(s) synchronisé(s).`,
+          syncResult.skipped ? `${syncResult.skipped} élément(s) ignoré(s).` : '',
+          syncResult.failed ? `${syncResult.failed} échec(s).` : '',
+          blockage,
+        ].filter(Boolean).join(' '),
         confirmButtonColor: '#901c67'
       });
     } catch (error: any) {
@@ -1202,6 +1218,7 @@ const ReglagesPage = () => {
                     </div>
                   </div>
 
+                  {mediaSyncError && <p role="alert" className="mt-3 text-sm text-amber-900">{mediaSyncError}</p>}
                   {pendingVictimTotal > 0 && (
                     <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-gray-600">
                       <span>

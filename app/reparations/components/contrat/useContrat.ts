@@ -1,11 +1,13 @@
 'use client';
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { isOnline } from '../../../utils/victimsCache';
-import { savePendingContract, getAllPendingContracts, deletePendingContract } from '../../../utils/contractsCache';
+import { savePendingContract, getAllPendingContracts } from '../../../utils/contractsCache';
 import { getVictimFileUrl } from '../../../utils/victimDocumentApi';
+import { getLegacyMpuSignatureReference, readMpuConsentSignatureUrl } from '../../../utils/mpuConsentSignature';
 import { authenticatedFetch, getAuthToken } from '../../../utils/authFetch';
 import { getConnectedAgentFullName } from '../../../utils/currentUser';
 import type { PendingContract } from '../../../utils/contractsCache';
+import { syncPendingContracts } from '../../../utils/contractsSyncService';
 import type { Victim, Tranche, Contrat, Consentements, Representant, SaveMessage, ContractForm, ContractTemplateId, MesureReparationKey } from './types';
 import { getVictimBirthInfo } from '../../utils/victimBirthInfo';
 import {
@@ -203,6 +205,7 @@ export function useContrat(victim: Victim) {
     const [existingContrat, setExistingContrat] = useState<Contrat | null>(null);
     const [loadingContrat, setLoadingContrat] = useState(true);
     const [signatureUrl, setSignatureUrl] = useState<string>('');
+    const [signatureStatusMessage, setSignatureStatusMessage] = useState('');
     const [showContratDetail, setShowContratDetail] = useState(false);
     const [showSignatureModal, setShowSignatureModal] = useState(false);
     const [pendingOfflineContrat, setPendingOfflineContrat] = useState<PendingContract | null>(null);
@@ -269,9 +272,12 @@ export function useContrat(victim: Victim) {
 
     // Charger le contrat existant
     useEffect(() => {
+        let active = true;
         const fetchContrat = async () => {
             try {
                 setLoadingContrat(true);
+                setSignatureUrl('');
+                setSignatureStatusMessage('');
                 const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
                 const response = await authenticatedFetch(
                     isMpuConsentement
@@ -281,11 +287,12 @@ export function useContrat(victim: Victim) {
 
                 if (response.ok) {
                     const rawData = await response.json();
+                    if (!active) return;
                     const data = rawData?.data ?? rawData;
                     if (reloadContrat > 0) setPendingOfflineContrat(null);
 
                     if (isMpuConsentement) {
-                        const signature = data.signature || data.signatureBeneficiaire || data.signatureRepresentant || '';
+                        const signature = getLegacyMpuSignatureReference(data);
                         setExistingContrat({
                             ...data,
                             typeContrat: 'Acte de consentement MPU',
@@ -348,7 +355,17 @@ export function useContrat(victim: Victim) {
                             pieceIdentite: data.pieceIdentiteRepresentant || '',
                         });
 
-                        if (signature && signature !== 'SIG_ELEC') setSignatureUrl(await getVictimFileUrl(signature));
+                        setLoadingContrat(false);
+                        setSignatureStatusMessage('Chargement de la signature…');
+                        try {
+                            const url = await readMpuConsentSignatureUrl(victim.id, data.id, signature);
+                            if (active) {
+                                setSignatureUrl(url);
+                                setSignatureStatusMessage('');
+                            }
+                        } catch {
+                            if (active) setSignatureStatusMessage('Impossible de charger la signature enregistrée.');
+                        }
                         return;
                     }
 
@@ -421,17 +438,19 @@ export function useContrat(victim: Victim) {
                     });
 
                     if (data.signature && data.signature !== 'SIG_ELEC') {
-                        setSignatureUrl(await getVictimFileUrl(data.signature));
+                        const url = await getVictimFileUrl(data.signature);
+                        if (active) setSignatureUrl(url);
                     }
                 }
             } catch (error) {
                 console.log('Erreur lors du chargement du contrat:', error);
             } finally {
-                setLoadingContrat(false);
+                if (active) setLoadingContrat(false);
             }
         };
 
         fetchContrat();
+        return () => { active = false; };
     }, [victim.id, isMpuConsentement, reloadContrat]);
 
     // Vérifier s'il y a un contrat en attente offline pour cette victime
@@ -506,122 +525,6 @@ export function useContrat(victim: Victim) {
             pieceIdentite: data.pieceIdentiteRepresentant || '',
         });
     }, [isMpuConsentement, pendingOfflineContrat, setContractForm]);
-
-    const uploadSignature = async (dataUrl: string): Promise<string> => {
-        const uploadEndpoint = process.env.NEXT_PUBLIC_UPLOAD_ENDPOINT || 'https://360.fonasite.app:5521/minio/files/upload';
-
-        const res = await fetch(dataUrl);
-        const blob = await res.blob();
-
-        const file = new File([blob], `signature_${victim.id}_${Date.now()}.png`, { type: 'image/png' });
-        const formData = new FormData();
-        formData.append('file', file);
-
-        const resp = await authenticatedFetch(uploadEndpoint, {
-            method: 'POST',
-            body: formData,
-        });
-
-        if (!resp.ok) {
-            throw new Error(`Failed to upload signature: ${resp.statusText}`);
-        }
-
-        const data = await resp.json();
-        console.log('Signature uploaded:', data);
-        return data.url || data.link || '';
-    };
-
-    const syncPendingContracts = useCallback(async () => {
-        if (!isOnline()) return;
-
-        try {
-            const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
-            const pending: PendingContract[] = (await getAllPendingContracts()).filter(item => item.targetType !== 'consentement-mpu');
-
-            for (const item of pending) {
-                try {
-                    const targetType = item.targetType === 'consentement-mpu' ? 'consentement-mpu' : 'contrat';
-                    let finalSignature = item.contractData.signature
-                        || item.contractData.signatureBeneficiaire
-                        || item.contractData.signatureRepresentant
-                        || 'SIG_ELEC';
-
-                    if (item.signatureDataUrl) {
-                        finalSignature = await uploadSignature(item.signatureDataUrl);
-                    }
-
-                    const payload = targetType === 'consentement-mpu'
-                        ? (() => {
-                            const { signatureBeneficiaire: _beneficiarySignature, signatureRepresentant: _representativeSignature, ...consentData } = item.contractData || {};
-                            return {
-                                ...consentData,
-                                signature: finalSignature,
-                                nomAgentFonarev: item.contractData?.nomAgentFonarev || getConnectedAgentFullName(),
-                            };
-                        })()
-                        : (() => {
-                            const {
-                                nomAgentFonarev: pendingAgentName,
-                                metadataContrat,
-                                ...contractDataWithoutAgent
-                            } = item.contractData || {};
-                            const { nomAgentFonarev: _metadataAgentName, ...metadataWithoutAgent } = metadataContrat || {};
-                            const agentFullName = typeof pendingAgentName === 'string' && pendingAgentName.trim()
-                                ? pendingAgentName.trim()
-                                : getConnectedAgentFullName() || '';
-
-                            return {
-                                ...contractDataWithoutAgent,
-                                ...(metadataContrat ? { metadataContrat: metadataWithoutAgent } : {}),
-                                signature: finalSignature,
-                                planIndemnisation: Array.isArray(contractDataWithoutAgent.planIndemnisation)
-                                    ? contractDataWithoutAgent.planIndemnisation.map((plan: any) => ({
-                                        ...plan,
-                                        nomAgentFonarev: typeof plan?.nomAgentFonarev === 'string' && plan.nomAgentFonarev.trim()
-                                            ? plan.nomAgentFonarev.trim()
-                                            : agentFullName,
-                                    }))
-                                    : contractDataWithoutAgent.planIndemnisation,
-                            };
-                        })();
-                    const endpoint = targetType === 'consentement-mpu'
-                        ? `${baseUrl}/consentements-mpu`
-                        : `${baseUrl}/contrat`;
-
-                    const resp = await authenticatedFetch(endpoint, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(payload),
-                    });
-
-                    if (!resp.ok) {
-                        console.log('[ContractsSync] Erreur API, on garde le contrat en attente');
-                        continue;
-                    }
-
-                    await deletePendingContract(item.id as number);
-                    console.log('[ContractsSync] Contrat synchronisé pour victime', item.victimId);
-                } catch (err) {
-                    console.log('[ContractsSync] Erreur lors de la synchro d\'un contrat:', err);
-                }
-            }
-        } catch (err) {
-            console.log('[ContractsSync] Erreur globale de synchro:', err);
-        }
-    }, []);
-
-    // Synchroniser les contrats en attente quand on revient en ligne
-    useEffect(() => {
-        const handleOnline = () => {
-            console.log('[ContractsSync] Retour en ligne détecté, tentative de synchronisation des contrats');
-            syncPendingContracts();
-        };
-
-        window.addEventListener('online', handleOnline);
-        return () => window.removeEventListener('online', handleOnline);
-    }, [syncPendingContracts]);
 
     // Fonctions de dessin
     const getCoordinates = (
@@ -776,10 +679,10 @@ export function useContrat(victim: Victim) {
             const nomAgentFonarev = getConnectedAgentFullName();
 
             if (isMpuConsentement) {
-                const finalSignature = existingContrat?.signature
-                    || existingContrat?.signatureBeneficiaire
-                    || existingContrat?.signatureRepresentant
-                    || '';
+                if (!signatureDataUrl) {
+                    setSaveMessage({ type: 'error', text: 'Dessinez la signature avant de sauvegarder l’acte.' });
+                    return false;
+                }
 
                 const mpuPayload = {
                     victimeId: victim.id,
@@ -809,7 +712,6 @@ export function useContrat(victim: Victim) {
                     lieuConsentement: contractForm.lieuSignature,
                     nomAgentFonarev,
                     fonctionAgentFonarev: contractForm.fonarevFonction || undefined,
-                    signature: finalSignature || 'SIG_ELEC',
                 };
 
                 const queued = await savePendingContract({
@@ -948,7 +850,7 @@ export function useContrat(victim: Victim) {
             setPendingOfflineContrat(queued);
             pendingContractIdRef.current = queued.id ?? null;
 
-            await syncPendingContracts();
+            await syncPendingContracts({ targetType: 'contrat' });
 
             setSaveMessage({ type: 'success', text: 'Contrat enregistré (hors ligne si nécessaire). La synchronisation se fera automatiquement.' });
             setTimeout(() => setSaveMessage(null), 3000);
@@ -1076,6 +978,7 @@ export function useContrat(victim: Victim) {
         existingContrat,
         loadingContrat,
         signatureUrl,
+        signatureStatusMessage,
         showContratDetail,
         showSignatureModal,
         formattedSignatureDate,

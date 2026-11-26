@@ -1,0 +1,81 @@
+.form > fieldset {
+  min-inline-size: 0;
+  align-items: start;
+  column-gap: 1.25rem;
+}
+
+.form h3 {
+  grid-column: 1 / -1;
+  margin: 0.5rem 0 0;
+  border-top: 1px solid var(--color-gray-200, #e5e7eb);
+  padding-top: 1.5rem;
+  color: var(--color-gray-600, #4b5563);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.form h3:first-child {
+  margin-top: 0;
+  border-top: 0;
+  padding-top: 0;
+}
+
+.form label,
+.form fieldset > div > p:first-child {
+  min-width: 0;
+  color: var(--color-gray-800, #1f2937);
+  font-weight: 600;
+}
+
+.form :is(input, select, textarea) {
+  display: block;
+  min-width: 0;
+  margin-top: 0.375rem;
+  border-color: var(--color-gray-300, #d1d5db);
+  padding-block: 0.625rem;
+  color: var(--color-gray-900, #111827);
+  font-weight: 400;
+}
+
+.form select {
+  appearance: none;
+  padding-right: 2.25rem;
+}
+
+.form :is(input, select, textarea):focus {
+  border-color: var(--primary);
+  outline: 2px solid color-mix(in srgb, var(--primary) 20%, transparent);
+  outline-offset: 0;
+  box-shadow: none;
+}
+
+.form input[aria-label] {
+  margin-top: 0;
+}
+
+.form input[type="file"]::file-selector-button {
+  margin-right: 0.75rem;
+  border: 1px solid var(--color-gray-300, #d1d5db);
+  border-radius: 0.25rem;
+  background: var(--color-gray-50, #f9fafb);
+  padding: 0.25rem 0.65rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+@media (min-width: 48rem) {
+  .form :is([data-field="careStructureName"], [data-field="transferStructureName"], [data-field="outcome"]) {
+    grid-column: 1 / -1;
+  }
+
+  .form :is([data-field^="appointmentComment"], [data-field="observation"]) {
+    grid-column: auto;
+  }
+
+  .form [data-field^="appointmentComment"] textarea {
+    min-height: 4rem;
+  }
+}

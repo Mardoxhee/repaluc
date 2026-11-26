@@ -1,187 +1,64 @@
 'use client';
 
-import { getAllPendingVictimPhotos, getPendingVictimPhotosToSyncForVictim, markVictimPhotoSynced, PendingVictimPhoto } from './victimPhotosCache';
+import {
+  getAllPendingVictimPhotos, getVictimPhotosForVictim, markVictimPhotoRejected,
+  markVictimPhotoSynced, markVictimPhotoSuperseded, saveVictimPhotoUploadReference, type PendingVictimPhoto,
+} from './victimPhotosCache';
 import { isOnline } from './victimsCache';
 import { authenticatedFetch, getAuthToken } from './authFetch';
+import { getConnectedAgentFullName } from './currentUser';
+import { readSyncHttpError, readUploadedFileReference } from './uploadResponse';
 import type { SyncProgressCallback } from './syncProgress';
 
 let isSyncing = false;
 let syncInterval: NodeJS.Timeout | null = null;
 
-const getAgentFullNameFromLocalStorage = (): string | null => {
-  try {
-    const raw = localStorage.getItem('usr');
-    if (!raw) {
-      const authRaw = localStorage.getItem('repaluc_auth');
-      if (!authRaw) return null;
-      const auth = JSON.parse(authRaw);
-      const username = auth?.username;
-      if (typeof username === 'string' && username.trim().length > 0) return username.trim();
-      return null;
-    }
+const uploadPhoto = async (item: PendingVictimPhoto): Promise<string> => {
+  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, '');
+  const uploadEndpoint = process.env.NEXT_PUBLIC_UPLOAD_ENDPOINT || (baseUrl && `${baseUrl}/minio/files/upload`);
+  if (!uploadEndpoint) throw new Error("L’adresse d’envoi des photos n’est pas configurée.");
 
-    const user = JSON.parse(raw);
-    if (!user || typeof user !== 'object') return null;
-
-    const direct =
-      user.fullName ??
-      user.nomComplet ??
-      user.nom_complet ??
-      user.name;
-    if (typeof direct === 'string' && direct.trim().length > 0) return direct.trim();
-
-    const first = user.prenom ?? user.firstName ?? user.firstname;
-    const last = user.nom ?? user.lastName ?? user.lastname;
-    const parts = [first, last].filter((x: any) => typeof x === 'string' && x.trim().length > 0).map((x: string) => x.trim());
-    if (parts.length > 0) return parts.join(' ');
-
-    const username = user.username ?? user.userName ?? user.email;
-    if (typeof username === 'string' && username.trim().length > 0) return username.trim();
-
-    return null;
-  } catch {
-    return null;
-  }
-};
-
-const uploadPhoto = async (dataUrl: string, victimId: number): Promise<string> => {
-  const uploadEndpoint = process.env.NEXT_PUBLIC_UPLOAD_ENDPOINT;
-
-  if (!uploadEndpoint) {
-    throw new Error('NEXT_PUBLIC_UPLOAD_ENDPOINT n\'est pas configurée');
-  }
-
-  const res = await fetch(dataUrl);
-  const blob = await res.blob();
-
-  const extension = blob.type === 'image/jpeg' ? 'jpg' : 'png';
-  const file = new File([blob], `victim_photo_${victimId}_${Date.now()}.${extension}`, { type: blob.type || 'image/png' });
-
+  if (!item.photoDataUrl?.startsWith('data:')) throw new Error('Image locale introuvable.');
+  const blob = await fetch(item.photoDataUrl).then(response => response.blob()).catch(() => {
+    throw new Error('Lecture de l’image locale impossible.');
+  });
+  if (!blob.size) throw new Error('Le fichier photo est vide.');
+  const mimeType = blob.type.split(';')[0].toLowerCase();
+  const subtype = /^image\/([a-z0-9-]+)(?:\+[a-z0-9-]+)?$/.exec(mimeType)?.[1];
+  if (!subtype) throw new Error('Le type de l’image locale est inconnu.');
+  const extension = subtype === 'jpeg' ? 'jpg' : subtype;
+  const filename = `victim_photo_${item.victimId}_${item.createdAt ?? item.id}.${extension}`;
   const formData = new FormData();
-  formData.append('file', file);
+  formData.append('file', blob, filename);
 
-  const resp = await authenticatedFetch(uploadEndpoint, {
-    method: 'POST',
-    body: formData,
-  });
-
-  if (!resp.ok) {
-    let bodyText = '';
-    try {
-      bodyText = await resp.text();
-    } catch {
-      // ignore
-    }
-    throw new Error(`Failed to upload photo: ${resp.status} ${resp.statusText}${bodyText ? ` - ${bodyText}` : ''}`);
-  }
-
-  const data = await resp.json();
-  return data.url || data.link || '';
+  const response = await authenticatedFetch(uploadEndpoint, { method: 'POST', body: formData });
+  return readUploadedFileReference(response);
 };
 
-const patchVictimPhoto = async (victimId: number, photoUrl: string): Promise<boolean> => {
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+const syncPhoto = async (item: PendingVictimPhoto): Promise<void> => {
+  if (!item.id) throw new Error('Photo locale sans identifiant.');
+  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, '');
+  if (!baseUrl) throw new Error("L’adresse de l’API victimes n’est pas configurée.");
 
-  if (!baseUrl) {
-    throw new Error('NEXT_PUBLIC_API_BASE_URL n\'est pas configurée');
+  let reference = item.remoteUrl;
+  if (!reference) {
+    reference = await uploadPhoto(item);
+    await saveVictimPhotoUploadReference(item.id, reference);
   }
 
-  const resp = await authenticatedFetch(`${baseUrl}/victime/${victimId}`, {
+  const response = await authenticatedFetch(`${baseUrl}/victime/${item.victimId}`, {
     method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ photo: photoUrl }),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ photo: reference }),
   });
+  if (!response.ok) throw await readSyncHttpError(response, 'Association de la photo à la victime');
 
-  if (!resp.ok) {
-    let bodyText = '';
-    try {
-      bodyText = await resp.text();
-    } catch {
-      // ignore
-    }
-    console.warn('[VictimPhotosSync] PATCH failed', { victimId, status: resp.status, statusText: resp.statusText, bodyText });
+  await markVictimPhotoSynced(item.id, reference);
+  const agentName = getConnectedAgentFullName();
+  if (agentName) {
+    // L’association de la photo est déjà confirmée, même si le suivi de l’agent échoue.
+    await patchVictimAgentReparation(item.victimId, agentName).catch(() => false);
   }
-
-  return resp.ok;
-};
-
-export const syncPendingVictimPhotosForVictim = async (
-  victimId: number,
-  opts?: { limit?: number }
-): Promise<{ synced: number; failed: number; skipped: number }> => {
-  if (isSyncing) {
-    return { synced: 0, failed: 0, skipped: 0 };
-  }
-
-  if (!isOnline() || !getAuthToken()) {
-    return { synced: 0, failed: 0, skipped: 0 };
-  }
-
-  isSyncing = true;
-  let synced = 0;
-  let failed = 0;
-  let skipped = 0;
-
-  try {
-    const filtered = await getPendingVictimPhotosToSyncForVictim(victimId);
-
-    const limit = typeof opts?.limit === 'number' && opts.limit > 0 ? opts.limit : undefined;
-    const toSync = typeof limit === 'number' ? filtered.slice(0, limit) : filtered;
-
-    for (const item of toSync) {
-      if (!getAuthToken()) break;
-      if (item.synced) {
-        skipped++;
-        continue;
-      }
-
-      if (!item.id) {
-        failed++;
-        continue;
-      }
-
-      try {
-        const remoteUrl = await uploadPhoto(item.photoDataUrl, item.victimId);
-
-        if (!remoteUrl) {
-          failed++;
-          continue;
-        }
-
-        const ok = await patchVictimPhoto(item.victimId, remoteUrl);
-
-        if (!ok) {
-          failed++;
-          continue;
-        }
-
-        try {
-          const agentFullName = getAgentFullNameFromLocalStorage();
-          if (agentFullName) {
-            await patchVictimAgentReparation(item.victimId, agentFullName);
-          }
-        } catch {
-          // ignore
-        }
-
-        await markVictimPhotoSynced(item.id, remoteUrl);
-        synced++;
-      } catch (e) {
-        console.warn('[VictimPhotosSync] Failed to sync photo (per victim)', {
-          itemId: item.id,
-          victimId: item.victimId,
-          error: e,
-        });
-        failed++;
-      }
-    }
-  } finally {
-    isSyncing = false;
-  }
-
-  return { synced, failed, skipped };
 };
 
 const getVictimVariablesSpecifiques = async (victimId: number): Promise<Record<string, any> | null> => {
@@ -218,6 +95,7 @@ const patchVictimAgentReparation = async (victimId: number, agentFullName: strin
   if (existingVars == null) {
     return false;
   }
+  if (existingVars.agentReparation === agentFullName) return true;
 
   const resp = await authenticatedFetch(`${baseUrl}/victime/${victimId}`, {
     method: 'PATCH',
@@ -228,119 +106,96 @@ const patchVictimAgentReparation = async (victimId: number, agentFullName: strin
   });
 
   if (!resp.ok) {
-    let bodyText = '';
-    try {
-      bodyText = await resp.text();
-    } catch {
-      // ignore
-    }
-    console.warn('[VictimPhotosSync] PATCH agentReparation failed', {
-      victimId,
-      status: resp.status,
-      statusText: resp.statusText,
-      bodyText,
-    });
+    const error = await readSyncHttpError(resp, 'Mise à jour de l’agent de réparation');
+    console.warn('[VictimPhotosSync]', error.message);
   }
 
   return resp.ok;
 };
 
-export const syncPendingVictimPhotos = async (opts?: { onProgress?: SyncProgressCallback }): Promise<{ synced: number; failed: number; skipped: number }> => {
-  if (isSyncing) {
-    return { synced: 0, failed: 0, skipped: 0 };
-  }
+type PhotoSyncResult = { synced: number; failed: number; skipped: number; lastError?: string };
+type PhotoSyncOptions = { limit?: number; automatic?: boolean; onProgress?: SyncProgressCallback };
 
-  if (!isOnline() || !getAuthToken()) {
-    return { synced: 0, failed: 0, skipped: 0 };
-  }
+const syncPhotos = async (
+  loadPhotos: () => Promise<PendingVictimPhoto[]>,
+  options?: PhotoSyncOptions,
+): Promise<PhotoSyncResult> => {
+  const result: PhotoSyncResult = { synced: 0, failed: 0, skipped: 0 };
+  if (isSyncing || !isOnline() || !getAuthToken()) return result;
 
   isSyncing = true;
-  let synced = 0;
-  let failed = 0;
-  let skipped = 0;
-
   try {
-    const pending: PendingVictimPhoto[] = (await getAllPendingVictimPhotos()).filter((item) => item.synced !== true);
+    const photos = await loadPhotos();
+    const latestSyncedId = new Map<number, number>();
+    for (const photo of photos) {
+      if (photo.synced && photo.id) latestSyncedId.set(photo.victimId, Math.max(photo.id, latestSyncedId.get(photo.victimId) ?? 0));
+    }
+    const limit = options?.limit && options.limit > 0 ? options.limit : undefined;
+    const pending = photos.filter(photo => !photo.synced && !photo.superseded).slice(0, limit);
     let processed = 0;
-    const reportProgress = (message?: string) => opts?.onProgress?.({ total: pending.length, processed, synced, failed, skipped, message });
+    const reportProgress = (message: string) => options?.onProgress?.({ total: pending.length, processed, ...result, message });
     reportProgress(pending.length ? 'Préparation des photos…' : 'Aucune photo à envoyer.');
-
     for (const item of pending) {
-      if (!getAuthToken()) { reportProgress('Envoi interrompu : reconnectez-vous pour continuer.'); break; }
-
-      if (!item.id) {
-        failed++;
-        processed++;
-        reportProgress('Photo locale sans identifiant.');
-        continue;
+      if (!getAuthToken()) {
+        reportProgress('Envoi interrompu. Reconnectez-vous pour continuer.');
+        break;
       }
 
+      processed++;
       try {
-        const remoteUrl = await uploadPhoto(item.photoDataUrl, item.victimId);
-
-        if (!remoteUrl) {
-          failed++;
-          processed++;
-          reportProgress(`Le serveur n’a pas renvoyé de lien pour la photo ${processed}/${pending.length}.`);
+        if (item.id && (latestSyncedId.get(item.victimId) ?? 0) > item.id) {
+          await markVictimPhotoSuperseded(item.id);
+          result.skipped++;
+          reportProgress('Photo remplacée par une photo plus récente déjà associée à la victime.');
           continue;
         }
-
-        const ok = await patchVictimPhoto(item.victimId, remoteUrl);
-
-        if (!ok) {
-          failed++;
-          processed++;
-          reportProgress(`Le serveur a refusé l’association de la photo ${processed}/${pending.length}.`);
+        if (options?.automatic && item.validationError) {
+          result.skipped++;
+          reportProgress(item.validationError);
           continue;
         }
-
-        try {
-          const agentFullName = getAgentFullNameFromLocalStorage();
-          if (agentFullName) {
-            await patchVictimAgentReparation(item.victimId, agentFullName);
-          }
-        } catch {
-          // ignore
-        }
-
-        await markVictimPhotoSynced(item.id, remoteUrl);
-        synced++;
-        processed++;
+        await syncPhoto(item);
+        if (item.id) latestSyncedId.set(item.victimId, item.id);
+        result.synced++;
         reportProgress(`Photo ${processed}/${pending.length} synchronisée.`);
-      } catch (e) {
-        console.warn('[VictimPhotosSync] Failed to sync photo', {
-          itemId: item.id,
-          victimId: item.victimId,
-          error: e,
-        });
-        failed++;
-        processed++;
-        const message = e instanceof Error ? e.message : String(e);
-        reportProgress(`Blocage sur la photo ${processed}/${pending.length}: ${message}`);
+      } catch (error) {
+        result.failed++;
+        const detail = error instanceof Error ? error.message : 'Erreur de synchronisation.';
+        if (item.id && error instanceof Error && 'status' in error && error.status === 400) {
+          await markVictimPhotoRejected(item.id, detail);
+        }
+        result.lastError = `Photo ${processed}/${pending.length} (victime #${item.victimId}) — ${detail}`;
+        reportProgress(result.lastError);
       }
     }
-    if (processed < pending.length && getAuthToken()) reportProgress('Synchronisation interrompue avant la fin.');
+    return result;
   } finally {
     isSyncing = false;
   }
-
-  return { synced, failed, skipped };
 };
+
+export const syncPendingVictimPhotosForVictim = (
+  victimId: number,
+  opts?: { limit?: number; onProgress?: SyncProgressCallback },
+): Promise<PhotoSyncResult> => syncPhotos(() => getVictimPhotosForVictim(victimId), opts);
+
+export const syncPendingVictimPhotos = (opts?: Pick<PhotoSyncOptions, 'automatic' | 'onProgress'>): Promise<PhotoSyncResult> =>
+  syncPhotos(getAllPendingVictimPhotos, opts);
 
 export const startVictimPhotosSyncService = () => {
   if (isOnline()) {
-    syncPendingVictimPhotos();
+    syncPendingVictimPhotos({ automatic: true });
   }
 
   const handleOnline = () => {
-    syncPendingVictimPhotos();
+    syncPendingVictimPhotos({ automatic: true });
   };
 
   window.addEventListener('online', handleOnline);
 
   syncInterval = setInterval(() => {
     if (isOnline()) {
-      syncPendingVictimPhotos();
+      syncPendingVictimPhotos({ automatic: true });
     }
   }, 30000);
 

@@ -12,6 +12,7 @@ import { SignatureModal } from './SignatureModal';
 import { ContractTemplateSelector } from './ContractTemplateSelector';
 import { ReparationMeasuresSection } from './ReparationMeasuresSection';
 import { MpuConsentementForm } from './MpuConsentementForm';
+import { getLegacyMpuSignatureReference } from '../../../utils/mpuConsentSignature';
 
 const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
     const {
@@ -27,6 +28,7 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
         existingContrat,
         loadingContrat,
         signatureUrl,
+        signatureStatusMessage,
         showContratDetail,
         showSignatureModal,
         formattedSignatureDate,
@@ -53,6 +55,8 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
     const usesLegacyContractText = selectedTemplateId === 'luc-decision-justice';
     const documentLabel = isMpuConsentement ? 'Acte de consentement MPU' : 'Contrat de réparation';
     const documentActionLabel = isMpuConsentement ? "l’acte de consentement MPU" : 'le contrat';
+    const canRedrawPendingSignature = pendingOfflineContrat?.targetType === 'consentement-mpu' && !pendingOfflineContrat.signatureDataUrl;
+    const pendingSignatureMissing = canRedrawPendingSignature && !getLegacyMpuSignatureReference(pendingOfflineContrat.contractData);
 
     return (
         <>
@@ -242,9 +246,9 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                                 <div>
                                     <p className="font-semibold text-gray-800">{documentLabel}</p>
                                     <p className="text-sm text-gray-600">
-                                        Signé le {new Date(existingContrat?.dateSignature || pendingOfflineContrat?.contractData?.dateConsentement || pendingOfflineContrat?.createdAt || Date.now()).toLocaleDateString('fr-FR')}
+                                        {pendingSignatureMissing ? 'Enregistré le' : 'Signé le'} {new Date(existingContrat?.dateSignature || pendingOfflineContrat?.contractData?.dateConsentement || pendingOfflineContrat?.createdAt || Date.now()).toLocaleDateString('fr-FR')}
                                     </p>
-                                    {pendingOfflineContrat && <p className="mt-1 text-xs font-medium text-amber-700">En attente de synchronisation · signature conservée sur cet appareil</p>}
+                                    {pendingOfflineContrat && <p className="mt-1 text-xs font-medium text-amber-700">{pendingSignatureMissing ? 'Signature à compléter avant la synchronisation' : 'En attente de synchronisation'}</p>}
                                 </div>
                             </div>
                             <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -342,6 +346,9 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
                                 setContractForm={setContractForm}
                                 existingContrat={existingContrat}
                                 signatureUrl={signatureUrl}
+                                signatureStatusMessage={signatureStatusMessage}
+                                pendingSignatureMissing={pendingSignatureMissing}
+                                canRedrawPendingSignature={canRedrawPendingSignature}
                                 formattedSignatureDate={formattedSignatureDate}
                                 saveMessage={saveMessage}
                                 pendingOfflineContrat={pendingOfflineContrat}
@@ -359,7 +366,8 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
             {showSignatureModal && (
                 <SignatureModal
                     canvasRef={canvasRef}
-                    existingContrat={existingContrat}
+                    canSave={!existingContrat || canRedrawPendingSignature || (isMpuConsentement && !signatureUrl && !signatureStatusMessage)}
+                    saveMessage={saveMessage}
                     isSaving={isSaving}
                     startDrawing={startDrawing}
                     draw={draw}

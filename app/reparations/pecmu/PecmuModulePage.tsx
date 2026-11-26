@@ -38,6 +38,7 @@ import { alertSourceLabel, readAlertSources, type AlertSource } from '../service
 import PecmuAlertSources from './PecmuAlertSources';
 import YesNoToggle from './YesNoToggle';
 import PecmuDossierModal from './PecmuDossierModal';
+import type { CareMode } from './PecmuNewCareModal';
 import PecmuPartnersSettings from '../../reglages/PecmuPartnersSettings';
 import PecmuVictimSearch, { masterVictimAge, masterVictimLocality, masterVictimName, type MasterVictim } from './PecmuVictimSearch';
 
@@ -378,15 +379,20 @@ const PecmuModulePage: React.FC = () => {
   const [selectedVictim, setSelectedVictim] = useState<Victim | null>(null);
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [openDossierId, setOpenDossierId] = useState<number | null>(null);
-  const [returnedDossier, setReturnedDossier] = useState<{ id: number; tab: 'readmission' | 'care' } | null>(null);
+  const [returnedDossier, setReturnedDossier] = useState<{ id: number; tab: 'readmission' | 'care'; mode?: CareMode } | null>(null);
   useEffect(() => {
     const url = new URL(window.location.href);
     const id = Number(url.searchParams.get('dossier'));
     if (!Number.isSafeInteger(id) || id <= 0) return;
-    setReturnedDossier({ id, tab: url.searchParams.get('etape') === 'readmission' ? 'readmission' : 'care' });
+    const mode = url.searchParams.get('soins');
+    setReturnedDossier({
+      id, tab: url.searchParams.get('etape') === 'readmission' ? 'readmission' : 'care',
+      mode: mode === 'nouveau' || mode === 'transfert' || mode === 'readmission' ? mode : undefined,
+    });
     setOpenDossierId(id);
     url.searchParams.delete('dossier');
     url.searchParams.delete('etape');
+    url.searchParams.delete('soins');
     window.history.replaceState(window.history.state, '', url.toString());
   }, []);
 
@@ -1445,6 +1451,7 @@ const PecmuModulePage: React.FC = () => {
           key={openDossierId}
           ficheId={openDossierId}
           initialTab={returnedDossier?.id === openDossierId ? returnedDossier.tab : undefined}
+          initialCareMode={returnedDossier?.id === openDossierId ? returnedDossier.mode : undefined}
           fetcher={fetcher}
           onClose={() => { setOpenDossierId(null); setReturnedDossier(null); }}
           onChanged={loadVictims}

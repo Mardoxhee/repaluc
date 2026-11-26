@@ -1,18 +1,19 @@
 'use client';
 import React, { useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, Plus, Trash2 } from 'lucide-react';
 import YesNoToggle from './YesNoToggle';
 
 export const fieldClass = 'mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-1 focus:ring-primary';
 export const buttonClass = 'rounded-md border border-primary bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40';
 export type WorkflowField = { key: string; label: string; type?: 'text' | 'textarea' | 'date' | 'number' | 'select' | 'boolean' | 'list' | 'heading'; itemLabel?: string; addLabel?: string; options?: Record<string, string> | ((values: Record<string, any>) => Record<string, string>); resetOnChange?: string[]; required?: boolean; when?: (values: Record<string, any>) => boolean };
-export function WorkflowForm({ fields, initial = {}, submitLabel, busy, onSubmit, children }: {
+export function WorkflowForm({ fields, initial = {}, submitLabel, busy, onSubmit, children, externalFormId, className }: {
   fields: WorkflowField[]; initial?: Record<string, any>; submitLabel: string; busy: boolean;
+  externalFormId?: string; className?: string;
   onSubmit: (values: Record<string, any>) => Promise<boolean>; children?: React.ReactNode | ((values: Record<string, any>) => React.ReactNode);
 }) {
   const [values, setValues] = useState<Record<string, any>>(() => Object.fromEntries(fields.map(field => [field.key, field.type === 'list' ? (typeof initial[field.key] === 'string' && initial[field.key] ? initial[field.key].split(/\r?\n/) : ['']) : (field.type === 'date' && typeof initial[field.key] === 'string' ? initial[field.key].slice(0, 10) : initial[field.key]) ?? (field.type === 'boolean' ? false : '')])));
   const [error, setError] = useState('');
-  return <form onSubmit={async event => {
+  return <form id={externalFormId} className={className} onSubmit={async event => {
     event.preventDefault(); setError('');
     const payload: Record<string, any> = {};
     for (const field of fields) {
@@ -46,14 +47,14 @@ export function WorkflowForm({ fields, initial = {}, submitLabel, busy, onSubmit
         </div>
         : field.type === 'boolean'
         ? <YesNoToggle key={field.key} label={field.label} checked={Boolean(values[field.key])} onChange={checked => setValues(previous => ({ ...previous, [field.key]: checked }))} />
-        : <label key={field.key} className={`block text-sm font-medium ${field.type === 'textarea' ? 'md:col-span-2' : ''}`}>{field.label}{field.required ? ' *' : ''}
-          {field.type === 'select' ? <select required={field.required} className={fieldClass} value={values[field.key]} onChange={event => setValues(previous => ({ ...previous, [field.key]: event.target.value, ...Object.fromEntries((field.resetOnChange || []).map(key => [key, ''])) }))}><option value="">Sélectionner</option>{Object.entries(typeof field.options === 'function' ? field.options(values) : field.options || {}).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+        : <label key={field.key} data-field={externalFormId ? field.key : undefined} className={`block text-sm font-medium ${field.type === 'textarea' ? 'md:col-span-2' : ''}`}>{field.label}{field.required && <span className={externalFormId ? 'text-red-600' : undefined}> *</span>}
+          {field.type === 'select' ? <span className={externalFormId ? 'relative block' : 'contents'}><select required={field.required} className={fieldClass} value={values[field.key]} onChange={event => setValues(previous => ({ ...previous, [field.key]: event.target.value, ...Object.fromEntries((field.resetOnChange || []).map(key => [key, ''])) }))}><option value="">Sélectionner</option>{Object.entries(typeof field.options === 'function' ? field.options(values) : field.options || {}).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>{externalFormId && <ChevronDown size={16} aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" />}</span>
             : field.type === 'textarea' ? <textarea required={field.required} className={`${fieldClass} min-h-24`} value={values[field.key]} onChange={event => setValues(previous => ({ ...previous, [field.key]: event.target.value }))} />
             : <input required={field.required} type={field.type || 'text'} min={field.key === 'hospitalizationEndDate' ? values.hospitalizationStartDate || undefined : field.type === 'number' ? 0 : undefined} step={field.type === 'number' ? '0.01' : undefined} className={fieldClass} value={values[field.key]} onChange={event => setValues(previous => ({ ...previous, [field.key]: event.target.value }))} />}
         </label>)}
       {typeof children === 'function' ? children(values) : children}
       {error && <p role="alert" className="text-sm text-red-600 md:col-span-2">{error}</p>}
-      <div className="md:col-span-2"><button type="submit" className={buttonClass}>{busy ? 'Enregistrement…' : submitLabel}</button></div>
+      {!externalFormId && <div className="md:col-span-2"><button type="submit" className={buttonClass}>{busy ? 'Enregistrement…' : submitLabel}</button></div>}
     </fieldset>
   </form>;
 }

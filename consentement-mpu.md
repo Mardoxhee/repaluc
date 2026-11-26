@@ -74,8 +74,10 @@ Content-Type: application/json
 | `pieceIdentiteRepresentant` | `string` | Référence de sa pièce d'identité |
 | `nomAgentFonarev` | `string` | Agent FONAREV signataire |
 | `fonctionAgentFonarev` | `string` | Fonction de l'agent FONAREV |
-| `signatureBeneficiaire` | `string` | Référence/URL/nom de fichier de la signature ou empreinte du bénéficiaire |
-| `signatureRepresentant` | `string` | Référence/URL/nom de fichier de la signature du représentant |
+
+### Stockage de la signature depuis le frontend
+
+L’API déployée a refusé les propriétés JSON `signature` et `signatureBeneficiaire` à l’écriture. Le frontend enregistre les données de l’acte via `/consentements-mpu`, puis envoie le tracé à `POST /document-victime/victime/:victimeId/upload` avec les champs multipart `file`, `category=signature` et un `label` identifiant l’acte et la capture. Le document de la victime porte la référence du fichier MinIO. Pour retrouver le tracé, la fiche consulte `GET /document-victime/by-id-victime/:victimeId`. Elle peut également lire les références historiques déjà présentes sur les anciens actes.
 
 ### Valeurs recommandées pour les listes
 
@@ -138,8 +140,7 @@ Pour une autre mesure ou vulnérabilité, remplir respectivement `autresMesures`
   "dateConsentement": "2026-08-13",
   "lieuConsentement": "Kalemie",
   "nomAgentFonarev": "Marie Kabongo",
-  "fonctionAgentFonarev": "Chargée de protection",
-  "signatureBeneficiaire": "signatures/consentement-42.png"
+  "fonctionAgentFonarev": "Chargée de protection"
 }
 ```
 
@@ -154,8 +155,7 @@ Pour une autre mesure ou vulnérabilité, remplir respectivement `autresMesures`
   "pieceIdentiteRepresentant": "Carte d'électeur n°12345",
   "decisionConsentement": "accepte",
   "dateConsentement": "2026-08-13",
-  "lieuConsentement": "Kalemie",
-  "signatureRepresentant": "signatures/representant-43.png"
+  "lieuConsentement": "Kalemie"
 }
 ```
 
@@ -169,8 +169,6 @@ type ConsentementMpuPayload = {
   lieuConsentement: string;
   mesuresProposees?: string[];
   vulnerabilites?: string[];
-  signatureBeneficiaire?: string;
-  signatureRepresentant?: string;
   [key: string]: unknown;
 };
 
@@ -201,22 +199,23 @@ export async function creerConsentementMpu(
 1. Vérifier que la victime est de mention `MPU` avant d'afficher le bouton « Créer le consentement ».
 2. Utiliser `GET /consentements-mpu/victime/:victimeId` pour savoir si la victime a déjà un consentement. Si un consentement existe, afficher l'édition (`PATCH`) plutôt qu'un second formulaire de création.
 3. Si `incapableConsentir` vaut `true`, afficher et demander les données du représentant ainsi que sa signature.
-4. Une victime est considérée comme ayant signé si `signatureBeneficiaire` **ou** `signatureRepresentant` contient une valeur non vide.
+4. Dans la fiche, afficher le tracé local pendant la synchronisation, puis la pièce de signature associée à l’acte ou une référence historique.
 5. N'envoyer que de vrais booléens (`true` ou `false`), jamais les chaînes `"true"` ou `"false"`.
 6. Envoyer les tableaux `mesuresProposees` et `vulnerabilites` sous forme de tableaux JSON, jamais sous forme de texte séparé par des virgules.
 
 ## Mise à jour — `PATCH /consentements-mpu/:id`
 
-Envoyer uniquement les champs à modifier. Exemple pour enregistrer la signature après une première saisie :
+Envoyer les champs métier à modifier, par exemple la décision après une première saisie.
 
 ```json
 {
-  "signatureBeneficiaire": "signatures/consentement-42.png",
   "decisionConsentement": "accepte"
 }
 ```
 
 ## Victimes ayant signé
+
+Le serveur calcule cette liste. Vérifier sur le backend déployé qu’il compte aussi les signatures conservées dans les documents des victimes. Le frontend utilise cette liste pour la recherche et le tableau de bord MPU.
 
 ### Liste paginée
 

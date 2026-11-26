@@ -13,6 +13,8 @@ export interface PendingVictimPhoto {
   synced: boolean;
   syncedAt?: number;
   remoteUrl?: string;
+  validationError?: string;
+  superseded?: boolean;
 }
 
 export interface PendingVictimMediaSummary {
@@ -65,8 +67,8 @@ export const savePendingVictimPhoto = async (victimId: number, photoDataUrl: str
   const request = store.put(entry);
 
   return new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result as number);
-    request.onerror = () => reject(request.error);
+    tx.oncomplete = () => resolve(request.result as number);
+    tx.onabort = () => reject(tx.error ?? new Error('Enregistrement local de la photo interrompu.'));
   });
 };
 
@@ -112,12 +114,12 @@ export const getPendingVictimPhotosSummary = async (): Promise<PendingVictimMedi
       totalRecords++;
       if (value?.synced === true) {
         syncedRecords++;
-      } else {
+      } else if (!value?.superseded) {
         pendingRecords++;
       }
 
       const victimId = value?.victimId;
-      if (value?.synced !== true && typeof victimId === 'number') {
+      if (value?.synced !== true && !value?.superseded && typeof victimId === 'number') {
         counts.set(victimId, (counts.get(victimId) || 0) + 1);
       }
       cursor.continue();
@@ -126,7 +128,7 @@ export const getPendingVictimPhotosSummary = async (): Promise<PendingVictimMedi
   });
 };
 
-export const getPendingVictimPhotosToSyncForVictim = async (victimId: number): Promise<PendingVictimPhoto[]> => {
+export const getVictimPhotosForVictim = async (victimId: number): Promise<PendingVictimPhoto[]> => {
   const db = await openDB();
   const tx = db.transaction([STORE_NAME], 'readonly');
   const store = tx.objectStore(STORE_NAME);
@@ -137,12 +139,12 @@ export const getPendingVictimPhotosToSyncForVictim = async (victimId: number): P
     request.onsuccess = () => {
       const cursor = request.result;
       if (!cursor) {
-        resolve(photos.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)));
+        resolve(photos);
         return;
       }
 
       const photo = cursor.value as PendingVictimPhoto;
-      if (photo?.victimId === victimId && photo?.synced !== true) {
+      if (photo?.victimId === victimId) {
         photos.push(photo);
       }
       cursor.continue();
@@ -152,46 +154,40 @@ export const getPendingVictimPhotosToSyncForVictim = async (victimId: number): P
 };
 
 export const getLatestVictimPhoto = async (victimId: number): Promise<PendingVictimPhoto | null> => {
-  const all = await getAllPendingVictimPhotos();
-  const filtered = all.filter((x) => x.victimId === victimId);
-  if (filtered.length === 0) return null;
-  filtered.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  return filtered[0] || null;
+  const photos = await getVictimPhotosForVictim(victimId);
+  return photos.reverse().find(photo => !photo.superseded) ?? null;
 };
 
-export const markVictimPhotoSynced = async (id: number, remoteUrl: string): Promise<void> => {
+const updatePhotoUpload = async (id: number, update: Partial<Pick<PendingVictimPhoto, 'synced' | 'remoteUrl' | 'syncedAt' | 'validationError' | 'superseded'>>): Promise<void> => {
   const db = await openDB();
   const tx = db.transaction([STORE_NAME], 'readwrite');
   const store = tx.objectStore(STORE_NAME);
 
-  const getReq = store.get(id);
-
-  const entry = await new Promise<PendingVictimPhoto | undefined>((resolve, reject) => {
-    getReq.onsuccess = () => resolve(getReq.result as PendingVictimPhoto | undefined);
-    getReq.onerror = () => reject(getReq.error);
-  });
-
-  if (!entry) return;
-
-  const updated: PendingVictimPhoto = {
-    ...entry,
-    synced: true,
-    syncedAt: Date.now(),
-    remoteUrl,
-  };
-
-  store.put(updated);
-
   await new Promise<void>((resolve, reject) => {
+    const request = store.get(id);
+    request.onsuccess = () => {
+      const entry: PendingVictimPhoto | undefined = request.result;
+      if (!entry) {
+        tx.abort();
+        return;
+      }
+      store.put({ ...entry, ...update });
+    };
     tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('La photo en attente n’est plus disponible.'));
   });
 };
+
+export const saveVictimPhotoUploadReference = (id: number, remoteUrl: string) => updatePhotoUpload(id, { remoteUrl });
+export const markVictimPhotoRejected = (id: number, validationError: string) => updatePhotoUpload(id, { validationError });
+export const markVictimPhotoSuperseded = (id: number) => updatePhotoUpload(id, { superseded: true });
+export const markVictimPhotoSynced = (id: number, remoteUrl: string) =>
+  updatePhotoUpload(id, { remoteUrl, synced: true, syncedAt: Date.now(), validationError: undefined });
 
 export const hasPendingVictimPhotosToSync = async (): Promise<boolean> => {
   try {
     const all = await getAllPendingVictimPhotos();
-    return all.some((x) => !x.synced);
+    return all.some((x) => !x.synced && !x.superseded);
   } catch {
     return false;
   }

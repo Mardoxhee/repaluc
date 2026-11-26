@@ -1,11 +1,12 @@
 'use client';
 import React from 'react';
 import { X, Eraser } from 'lucide-react';
-import { Contrat } from './types';
+import type { SaveMessage } from './types';
 
 interface SignatureModalProps {
     canvasRef: React.RefObject<HTMLCanvasElement | null>;
-    existingContrat: Contrat | null;
+    canSave: boolean;
+    saveMessage: SaveMessage | null;
     isSaving: boolean;
     startDrawing: (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => void;
     draw: (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => void;
@@ -19,7 +20,8 @@ interface SignatureModalProps {
 
 export const SignatureModal: React.FC<SignatureModalProps> = ({
     canvasRef,
-    existingContrat,
+    canSave,
+    saveMessage,
     isSaving,
     startDrawing,
     draw,
@@ -30,6 +32,7 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
     documentLabel = 'contrat',
     documentActionLabel = 'le contrat',
 }) => {
+    const [attemptedSave, setAttemptedSave] = React.useState(false);
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
             <div className="bg-white w-full max-w-3xl mx-4 rounded-lg shadow-xl relative">
@@ -71,6 +74,9 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
                             <Eraser size={16} />
                         </button>
                     </div>
+                    {attemptedSave && saveMessage?.type === 'error' && (
+                        <p className="mt-3 text-sm text-red-700" role="alert">{saveMessage.text}</p>
+                    )}
                     <div className="mt-4 flex justify-end gap-2 no-print">
                         <button
                             type="button"
@@ -79,10 +85,11 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
                         >
                             Fermer
                         </button>
-                        {!existingContrat && (
+                        {canSave && (
                             <button
                                 type="button"
                                 onClick={async () => {
+                                    setAttemptedSave(true);
                                     const saved = await saveContract();
                                     if (saved) onClose();
                                 }}

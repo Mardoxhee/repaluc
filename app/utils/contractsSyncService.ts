@@ -1,15 +1,18 @@
 'use client';
-import { getAllPendingContracts, deletePendingContract, PendingContract } from './contractsCache';
+import { getAllPendingContracts, recordPendingContractSync, type PendingContract } from './contractsCache';
 import { isOnline } from './victimsCache';
 import { authenticatedFetch, getAuthToken } from './authFetch';
 import { getConnectedAgentFullName } from './currentUser';
+import { ensureMpuConsentSignatureDocument, getLegacyMpuSignatureReference, readMpuConsentSignatureUrl } from './mpuConsentSignature';
+import { readUploadedFileReference, readSyncHttpError } from './uploadResponse';
 import type { SyncProgressCallback } from './syncProgress';
 
-let isSyncing = false;
-let syncInterval: NodeJS.Timeout | null = null;
+const getBaseUrl = () => (process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006').replace(/\/$/, '');
+const consentEndpoint = () => `${getBaseUrl()}/consentements-mpu`;
+let queuedSync: Promise<unknown> = Promise.resolve();
 
 const uploadSignature = async (dataUrl: string, victimId: number): Promise<string> => {
-    const uploadEndpoint = process.env.NEXT_PUBLIC_UPLOAD_ENDPOINT || 'https://360.fonasite.app:5521/minio/files/upload';
+    const uploadEndpoint = process.env.NEXT_PUBLIC_UPLOAD_ENDPOINT || `${getBaseUrl()}/minio/files/upload`;
 
     const res = await fetch(dataUrl);
     const blob = await res.blob();
@@ -23,40 +26,14 @@ const uploadSignature = async (dataUrl: string, victimId: number): Promise<strin
         body: formData,
     });
 
-    if (!resp.ok) {
-        throw new Error(`Failed to upload signature: ${resp.statusText}`);
-    }
-
-    const data = await resp.json();
-    console.log('[ContractsSyncService] Signature uploaded:', data);
-    return data.url || data.link || '';
+    return readUploadedFileReference(resp, { allowSignedUrl: true });
 };
 
 const getPendingTargetType = (item: PendingContract): 'contrat' | 'consentement-mpu' => (
     item.targetType === 'consentement-mpu' ? 'consentement-mpu' : 'contrat'
 );
 
-const buildPendingPayload = (
-    item: PendingContract,
-    finalSignature: string
-): { endpoint: string; payload: any; label: string } => {
-    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006';
-    const targetType = getPendingTargetType(item);
-
-    if (targetType === 'consentement-mpu') {
-        const { signatureBeneficiaire: _signatureBeneficiaire, signatureRepresentant: _signatureRepresentant, ...consentData } = item.contractData || {};
-
-        return {
-            endpoint: `${baseUrl}/consentements-mpu`,
-            label: 'Acte de consentement MPU',
-            payload: {
-                ...consentData,
-                signature: finalSignature,
-                nomAgentFonarev: item.contractData?.nomAgentFonarev || getConnectedAgentFullName(),
-            },
-        };
-    }
-
+const buildContractPayload = (item: PendingContract, finalSignature: string) => {
     const {
         nomAgentFonarev: pendingAgentName,
         metadataContrat,
@@ -68,160 +45,161 @@ const buildPendingPayload = (
         : getConnectedAgentFullName() || '';
 
     return {
-        endpoint: `${baseUrl}/contrat`,
-        label: 'Contrat',
-        payload: {
-            ...contractDataWithoutAgent,
-            ...(metadataContrat ? { metadataContrat: metadataWithoutAgent } : {}),
-            signature: finalSignature,
-            planIndemnisation: Array.isArray(contractDataWithoutAgent.planIndemnisation)
-                ? contractDataWithoutAgent.planIndemnisation.map((plan: any) => ({
-                    ...plan,
-                    nomAgentFonarev: typeof plan?.nomAgentFonarev === 'string' && plan.nomAgentFonarev.trim()
-                        ? plan.nomAgentFonarev.trim()
-                        : agentFullName,
-                }))
-                : contractDataWithoutAgent.planIndemnisation,
-        },
+        ...contractDataWithoutAgent,
+        ...(metadataContrat ? { metadataContrat: metadataWithoutAgent } : {}),
+        signature: finalSignature,
+        planIndemnisation: Array.isArray(contractDataWithoutAgent.planIndemnisation)
+            ? contractDataWithoutAgent.planIndemnisation.map((plan: any) => ({
+                ...plan,
+                nomAgentFonarev: typeof plan?.nomAgentFonarev === 'string' && plan.nomAgentFonarev.trim()
+                    ? plan.nomAgentFonarev.trim()
+                    : agentFullName,
+            }))
+            : contractDataWithoutAgent.planIndemnisation,
     };
 };
 
-export const syncPendingContracts = async (opts?: {
-    targetType?: 'contrat' | 'consentement-mpu';
-    onProgress?: SyncProgressCallback;
-}): Promise<{ synced: number; failed: number; skipped: number }> => {
-    if (isSyncing) {
-        console.log('[ContractsSyncService] Synchronisation déjà en cours...');
-        return { synced: 0, failed: 0, skipped: 0 };
+const consentFields = [
+    'etatVictimisation', 'situationVulnerabiliteUrgente', 'mesuresProposees', 'autresMesures',
+    'vulnerabilites', 'autresVulnerabilites', 'informeMpu', 'droitsExpliques', 'aExerceDroit',
+    'engagementsAcceptes', 'mediateurFonarev', 'accompagnementPersonneConfiance', 'incapableConsentir',
+    'nomRepresentant', 'qualiteRepresentant', 'organisationRepresentant', 'pieceIdentiteRepresentant',
+    'decisionConsentement', 'dateConsentement', 'lieuConsentement', 'nomAgentFonarev', 'fonctionAgentFonarev',
+] as const;
+
+const positiveId = (value: unknown): number | undefined => {
+    if (typeof value !== 'number' && typeof value !== 'string') return undefined;
+    const id = Number(value);
+    return Number.isSafeInteger(id) && id > 0 ? id : undefined;
+};
+
+const readConsentId = (raw: any, victimId: number): number | undefined => {
+    const data = raw?.data ?? raw;
+    if (data?.victimeId != null && positiveId(data.victimeId) !== victimId) {
+        throw new Error('Le consentement retourné appartient à une autre victime.');
+    }
+    return positiveId(data?.id);
+};
+
+const findConsent = async (victimId: number): Promise<{ id: number; signature: string } | undefined> => {
+    const resp = await authenticatedFetch(`${consentEndpoint()}/victime/${victimId}`, { cache: 'no-store' });
+    if (resp.status === 404 || resp.status === 204) return undefined;
+    if (!resp.ok) throw await readSyncHttpError(resp, 'Recherche du consentement MPU');
+    const raw = await resp.json();
+    if (raw === null || raw?.data === null) return undefined;
+    const id = readConsentId(raw, victimId);
+    if (!id) throw new Error('La recherche du consentement MPU a renvoyé un acte sans identifiant.');
+    return { id, signature: getLegacyMpuSignatureReference(raw?.data ?? raw) };
+};
+
+const syncConsent = async (item: PendingContract) => {
+    const data = item.contractData ?? {};
+    const victimId = positiveId(item.victimId);
+    if (!victimId) throw new Error('Identifiant de la victime manquant pour cet acte.');
+    const signature = item.signatureDataUrl || getLegacyMpuSignatureReference(data);
+    let consentId = positiveId(item.targetId);
+    if (!consentId || !signature) {
+        // An offline creation may refer to an existing act, including a POST whose response was lost.
+        const existing = await findConsent(victimId);
+        if (consentId && consentId !== existing?.id) throw new Error('Le consentement à modifier n’a pas été retrouvé pour cette victime.');
+        consentId = existing?.id;
+        if (!signature && !(existing && await readMpuConsentSignatureUrl(victimId, existing.id, existing.signature))) {
+            throw new Error('Tracé de signature absent. Ouvrez l’acte de consentement dans la fiche de la victime pour le signer.');
+        }
+    }
+    if (!item.consentMetadataSynced || !consentId) {
+        const payload: Record<string, unknown> = {};
+        for (const field of consentFields) {
+            if (data[field] != null) payload[field] = data[field];
+        }
+        if (typeof payload.dateConsentement === 'string' && /^\d{4}-\d\d-\d\dT/.test(payload.dateConsentement)) {
+            payload.dateConsentement = payload.dateConsentement.slice(0, 10);
+        }
+        if (!consentId) payload.victimeId = victimId;
+        const resp = await authenticatedFetch(consentId ? `${consentEndpoint()}/${consentId}` : consentEndpoint(), {
+            method: consentId ? 'PATCH' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!resp.ok) throw await readSyncHttpError(resp, 'Enregistrement du consentement MPU');
+        if (!consentId) {
+            consentId = readConsentId(await resp.json().catch(() => null), victimId) ?? (await findConsent(victimId))?.id;
+        }
+        if (!consentId) throw new Error('Le serveur n’a pas confirmé l’identifiant du consentement. La signature reste sur cet appareil.');
+        if (!await recordPendingContractSync(item, consentId)) return false;
     }
 
-    if (!isOnline() || !getAuthToken()) {
-        console.log('[ContractsSyncService] Hors ligne, synchronisation reportée');
-        return { synced: 0, failed: 0, skipped: 0 };
-    }
+    if (signature) await ensureMpuConsentSignatureDocument(victimId, consentId, signature, item.signatureCapturedAt ?? item.createdAt);
+    return recordPendingContractSync(item);
+};
 
-    isSyncing = true;
+const syncContract = async (item: PendingContract) => {
+    const signature = item.signatureDataUrl
+        ? await uploadSignature(item.signatureDataUrl, item.victimId)
+        : item.contractData?.signature || item.contractData?.signatureBeneficiaire || item.contractData?.signatureRepresentant || 'SIG_ELEC';
+    const isUpdate = item.action === 'update';
+    if (isUpdate && !positiveId(item.targetId)) throw new Error('Identifiant du contrat à modifier manquant.');
+    const endpoint = `${getBaseUrl()}/contrat${isUpdate ? `/${item.targetId}` : ''}`;
+    const resp = await authenticatedFetch(endpoint, {
+        method: isUpdate ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildContractPayload(item, signature)),
+    });
+    if (!resp.ok) throw await readSyncHttpError(resp, 'Enregistrement du contrat');
+    return recordPendingContractSync(item);
+};
+
+type SyncOptions = { targetType?: PendingContract['targetType']; onProgress?: SyncProgressCallback };
+
+const runPendingContracts = async (opts: SyncOptions) => {
+    const pending = (await getAllPendingContracts()).filter((item) => !opts.targetType || getPendingTargetType(item) === opts.targetType);
     let synced = 0;
     let failed = 0;
     let skipped = 0;
-
-    try {
-        const allPending: PendingContract[] = await getAllPendingContracts();
-        const pending = opts?.targetType
-            ? allPending.filter((item) => getPendingTargetType(item) === opts.targetType)
-            : allPending;
-        let processed = 0;
-        const reportProgress = (message?: string) => opts?.onProgress?.({ total: pending.length, processed, synced, failed, skipped, message });
-        reportProgress(pending.length ? 'Préparation des contrats et actes…' : 'Aucun contrat ou acte à envoyer.');
-
-        if (pending.length === 0) {
-            console.log('[ContractsSyncService] Aucun document en attente');
-            return { synced: 0, failed: 0, skipped: 0 };
+    const report = (message: string) => opts.onProgress?.({ total: pending.length, processed: synced + failed + skipped, synced, failed, skipped, message });
+    report(pending.length ? 'Préparation des contrats et actes…' : 'Aucun contrat ou acte à envoyer.');
+    for (const item of pending) {
+        if (!isOnline() || !getAuthToken()) {
+            failed++;
+            skipped = pending.length - synced - failed;
+            report('Envoi interrompu. Vérifiez la connexion et la session pour continuer.');
+            break;
         }
-
-        console.log(`[ContractsSyncService] ${pending.length} document(s) en attente de synchronisation`);
-
-        for (const item of pending) {
-            if (!getAuthToken()) { reportProgress('Envoi interrompu : reconnectez-vous pour continuer.'); break; }
-            try {
-                const targetType = getPendingTargetType(item);
-                const isUpdate = item.action === 'update' && Number.isFinite(item.targetId);
-                let finalSignature = item.contractData.signature
-                    || item.contractData.signatureBeneficiaire
-                    || item.contractData.signatureRepresentant
-                    || 'SIG_ELEC';
-
-                // Upload de la signature si présente
-                if (item.signatureDataUrl) {
-                    finalSignature = await uploadSignature(item.signatureDataUrl, item.victimId);
-                }
-
-                const built = buildPendingPayload(item, finalSignature);
-                const endpoint = isUpdate
-                    ? `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.140.0.106:8006'}/${targetType === 'consentement-mpu' ? 'consentements-mpu' : 'contrat'}/${item.targetId}`
-                    : built.endpoint;
-                const payload = built.payload;
-                const label = built.label;
-
-                const resp = await authenticatedFetch(endpoint, {
-                    method: isUpdate ? 'PATCH' : 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(payload),
-                });
-
-                if (!resp.ok) {
-                    const errorText = await resp.text();
-                    console.log('[ContractsSyncService] Erreur API:', errorText);
-
-                    failed++;
-                    processed++;
-                    const reason = resp.status === 409 || errorText.toLowerCase().includes('exist')
-                        ? `conflit détecté, l’acte reste conservé dans la file (${errorText || `HTTP ${resp.status}`})`
-                        : errorText || `HTTP ${resp.status}`;
-                    reportProgress(`Blocage sur l’élément ${processed}/${pending.length}: ${reason}`);
-                    continue;
-                }
-
-                await deletePendingContract(item.id as number);
-                synced++;
-                processed++;
-                reportProgress(`Élément ${processed}/${pending.length} synchronisé.`);
-                console.log(`[ContractsSyncService] ✓ ${label} synchronisé pour victime ${item.victimId}`);
-            } catch (err) {
-                console.log('[ContractsSyncService] Erreur lors de la synchro d\'un document:', err);
-                failed++;
-                processed++;
-                const message = err instanceof Error ? err.message : String(err);
-                reportProgress(`Blocage sur l’élément ${processed}/${pending.length}: ${message}`);
-            }
+        try {
+            const completed = getPendingTargetType(item) === 'consentement-mpu' ? await syncConsent(item) : await syncContract(item);
+            if (!completed) throw new Error('L’élément a été modifié pendant l’envoi. Relancez la synchronisation de la nouvelle version.');
+            synced++;
+            report('Synchronisation confirmée.');
+        } catch (error) {
+            failed++;
+            report(`Victime ${item.victimId} — ${error instanceof Error ? error.message : String(error)}`);
         }
-
-        if (processed < pending.length && getAuthToken()) reportProgress('Synchronisation interrompue avant la fin.');
-
-        console.log(`[ContractsSyncService] Synchronisation terminée: ${synced} créé(s), ${skipped} déjà existant(s), ${failed} échec(s)`);
-    } catch (err) {
-        console.log('[ContractsSyncService] Erreur globale de synchro:', err);
-    } finally {
-        isSyncing = false;
     }
-
     return { synced, failed, skipped };
 };
 
-// Démarrer la synchronisation automatique
+export const syncPendingContracts = (opts: SyncOptions = {}) => {
+    const run = () => runPendingContracts(opts);
+    // The settings and automatic LUC sync may start together or run in separate tabs.
+    const result = queuedSync.then(() => typeof navigator !== 'undefined' && navigator.locks
+        ? navigator.locks.request('fonops-pending-contracts', run)
+        : run());
+    queuedSync = result.catch(() => {});
+    return result;
+};
+
 export const startContractsSyncService = () => {
-    console.log('[ContractsSyncService] Démarrage du service de synchronisation');
-
-    // Synchroniser immédiatement si en ligne
-    if (isOnline()) {
-        syncPendingContracts({ targetType: 'contrat' });
-    }
-
-    // Écouter l'événement online
-    const handleOnline = () => {
-        console.log('[ContractsSyncService] Connexion rétablie, synchronisation...');
-        syncPendingContracts({ targetType: 'contrat' });
-    };
-
-    window.addEventListener('online', handleOnline);
-
-    // Synchronisation périodique toutes les 30 secondes (si en ligne)
-    syncInterval = setInterval(() => {
+    const syncOnlineContracts = () => {
         if (isOnline()) {
-            syncPendingContracts({ targetType: 'contrat' });
+            void syncPendingContracts({ targetType: 'contrat' }).catch(error => console.warn('[ContractsSyncService]', error));
         }
-    }, 30000);
-
-    // Retourner une fonction de cleanup
+    };
+    syncOnlineContracts();
+    window.addEventListener('online', syncOnlineContracts);
+    const interval = setInterval(syncOnlineContracts, 30000);
     return () => {
-        console.log('[ContractsSyncService] Arrêt du service de synchronisation');
-        window.removeEventListener('online', handleOnline);
-        if (syncInterval) {
-            clearInterval(syncInterval);
-            syncInterval = null;
-        }
+        window.removeEventListener('online', syncOnlineContracts);
+        clearInterval(interval);
     };
 };
 
