@@ -1,5 +1,6 @@
 "use client"
 import React, { useState, useRef, useEffect } from 'react';
+import { endLocalSession } from '@/app/utils/authSession';
 import { FiChevronDown, FiLogOut, FiMail, FiBell, FiSettings, FiUser, FiShield, FiClock, FiDownload } from 'react-icons/fi';
 
 const CORE_LOGIN_BASE_URL = process.env.NEXT_PUBLIC_CORE_LOGIN_URL;
@@ -282,7 +283,11 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle, isMobile = false }) => {
                 <button
                   className="flex items-center gap-3 w-full text-left px-6 py-3 text-red-600 hover:bg-red-50 font-medium transition-colors bg-red-100"
                   onClick={() => {
-                    window.location.href = LOGOUT_URL;
+                    try {
+                      endLocalSession(window.localStorage);
+                    } finally {
+                      window.location.replace(LOGOUT_URL);
+                    }
                   }}
                 >
                   <FiLogOut size={18} />

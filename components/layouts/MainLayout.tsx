@@ -1,12 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { hasLocalSession } from '@/app/utils/authSession';
 import SideBar from './sideBar';
 import Header from './header';
 import HamburgerMenu from '../HamburgerMenu';
-
-const AUTH_KEY = 'repaluc_auth';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -16,10 +15,8 @@ interface MainLayoutProps {
 const MainLayout: React.FC<MainLayoutProps> = ({ children, noZoom }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [authChecked, setAuthChecked] = useState(false);
-  const initialAuthCheckDone = useRef(false);
+  const [session, setSession] = useState<'checking' | 'ready' | 'unavailable'>('checking');
   const router = useRouter();
-  const pathname = usePathname();
 
   // Vérifier si on est sur mobile au chargement et au redimensionnement
   useEffect(() => {
@@ -38,34 +35,23 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, noZoom }) => {
   }, []);
 
   useEffect(() => {
-    if (initialAuthCheckDone.current) return;
-    initialAuthCheckDone.current = true;
-
-    if (pathname === '/login') {
-      setAuthChecked(true);
-      return;
-    }
-
     try {
-      const raw = localStorage.getItem('repaluc_auth');
-      const isAuthed = !!raw;
-      if (!isAuthed) {
-        router.replace('/login');
-        return;
-      }
-
-    } finally {
-      setAuthChecked(true);
+      if (hasLocalSession(window.localStorage)) setSession('ready');
+      else router.replace('/login');
+    } catch {
+      setSession('unavailable');
     }
-  }, [pathname, router]);
+  }, [router]);
 
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);
   };
 
-  if (!authChecked) {
-    return null;
-  }
+  if (session === 'unavailable') return <main className="p-6" role="alert">
+    <p>Le navigateur ne permet pas de lire la session sur cet appareil.</p>
+    <button type="button" className="mt-3 text-primary underline" onClick={() => window.location.reload()}>Réessayer</button>
+  </main>;
+  if (session !== 'ready') return null;
 
   return (
     <div className="flex min-h-screen bg-gray-50 overflow-x-hidden">

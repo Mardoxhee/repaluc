@@ -4,7 +4,7 @@ import { rdcProvinces } from '../constants/provinces';
 import { healthZonesByProvince } from '../constants/healthZonesByProvince';
 import { allBodyParts } from '../constants/bodyParts';
 import { spreadsheetPartners } from '../constants/spreadsheetPartners';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -20,6 +20,7 @@ import { Modal, ModalBody } from 'flowbite-react';
 import Swal from 'sweetalert2';
 import { pecmuRequest, PecmuApiError, statusLabels } from '../services/pecmuWorkflowApi';
 import { getVictimsFromCache, isOnline } from '../../utils/victimsCache';
+import { deletePecmuDraft, getPecmuDraft, getPecmuDraftKey, savePecmuDraft } from '../../utils/pecmuDraftCache';
 import { normalizeApiList, normalizeText } from '../utils/mentionStats';
 import {
   createFichePecmu,
@@ -29,9 +30,12 @@ import {
   listFichesPecmuByVictim,
   listFichesPecmu,
   updateFichePecmu,
+  submitFichePecmu,
   type FichePecmu,
 } from '../services/pecmuApi';
 import { violationGroups, violationOptions } from '../constants/violations';
+import { alertSourceLabel, readAlertSources, type AlertSource } from '../services/pecmuAlertSources';
+import PecmuAlertSources from './PecmuAlertSources';
 import YesNoToggle from './YesNoToggle';
 import PecmuDossierModal from './PecmuDossierModal';
 import PecmuPartnersSettings from '../../reglages/PecmuPartnersSettings';
@@ -146,7 +150,7 @@ const f2Sections: Array<{ title: string; fields: FormField[] }> = [
     title: 'Identité et localisation de la victime',
     fields: [
       { key: 'nomVictime', label: 'Nom de la victime' },
-      { key: 'age', label: 'Age', type: 'number' },
+      { key: 'age', label: 'Âge (années)', type: 'number' },
       { key: 'sexe', label: 'Sexe', type: 'select', options: ['Féminin', 'Masculin', 'Autre'] },
       { key: 'province', label: 'Province', type: 'select', options: rdcProvinces },
       { key: 'localite', label: 'Localité / ville' },
@@ -166,22 +170,15 @@ const f2Sections: Array<{ title: string; fields: FormField[] }> = [
     title: 'Structure de prise en charge',
     fields: [
       { key: 'zoneSante', label: 'Zone de santé' },
-      { key: 'structureNom', label: 'Nom de la structure qui prend en charge', type: 'select', required: true },
+      { key: 'structureNom', label: 'Nom de la structure qui prend en charge', required: true },
       { key: 'aireSante', label: 'Aire de santé' },
       { key: 'adresseStructure', label: 'Adresse de la structure où elle est suivie', type: 'textarea' },
       { key: 'contactMedecin', label: 'Contact du médecin ou infirmier' },
     ],
   },
   {
-    title: 'Source de l’alerte',
-    fields: [
-      { key: 'alertSourceStructureName', label: 'Nom de la structure ayant lancé l’alerte', required: true },
-      { key: 'alertSourceStructureType', label: 'Type de structure', type: 'select', options: ['STRUCTURE_MEDICALE', 'ONG', 'RELAIS_COMMUNAUTAIRE', 'SERVICE_PUBLIC', 'AUTRE'], required: true },
-      { key: 'sourceNom', label: 'Nom complet' },
-      { key: 'sourceContact', label: 'Contact téléphone' },
-      { key: 'sourceRapport', label: 'Rapports avec la victime ou le cas' },
-      { key: 'sourceAdresse', label: 'Adresse', type: 'textarea' },
-    ],
+    title: 'Sources de l’alerte',
+    fields: [{ key: 'alertSources', label: 'Sources de l’alerte' }],
   },
   {
     title: 'Situation médicale de la victime',
@@ -266,6 +263,24 @@ const isPecmuVictim = (victim: Victim): boolean => {
     programme.includes('pecmu')
   );
 };
+
+async function withDuplicateConfirmation<T>(save: (confirmed: boolean) => Promise<T>): Promise<T | null> {
+  try {
+    return await save(false);
+  } catch (error) {
+    if (!(error instanceof PecmuApiError) || error.statusCode !== 409 || error.code !== 'PECMU_POSSIBLE_DUPLICATE') throw error;
+    const body = error.responseBody as { matches?: Array<{ id: number }> } | undefined;
+    const matches = Array.isArray(body?.matches) ? body.matches : [];
+    const refs = matches.filter(item => Number.isInteger(item?.id)).map(item => '#' + item.id).join(', ');
+    const result = await Swal.fire({
+      icon: 'warning', title: 'Doublon possible',
+      text: (refs ? 'Fiches similaires : ' + refs + '. ' : 'Une fiche similaire existe déjà. ') + 'Voulez-vous poursuivre la soumission ?',
+      showCancelButton: true, confirmButtonText: 'Soumettre quand même', cancelButtonText: 'Revenir à la fiche',
+      focusCancel: true, confirmButtonColor: '#901c67',
+    });
+    return result.isConfirmed ? save(true) : null;
+  }
+}
 
 const buildF2Values = (victim?: Victim | null): Record<string, string> => {
   const values: Record<string, string> = {};
@@ -363,6 +378,18 @@ const PecmuModulePage: React.FC = () => {
   const [selectedVictim, setSelectedVictim] = useState<Victim | null>(null);
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [openDossierId, setOpenDossierId] = useState<number | null>(null);
+  const [returnedDossier, setReturnedDossier] = useState<{ id: number; tab: 'readmission' | 'care' } | null>(null);
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const id = Number(url.searchParams.get('dossier'));
+    if (!Number.isSafeInteger(id) || id <= 0) return;
+    setReturnedDossier({ id, tab: url.searchParams.get('etape') === 'readmission' ? 'readmission' : 'care' });
+    setOpenDossierId(id);
+    url.searchParams.delete('dossier');
+    url.searchParams.delete('etape');
+    window.history.replaceState(window.history.state, '', url.toString());
+  }, []);
+
   const [activeView, setActiveView] = useState<'victimes' | 'partenaires'>('victimes');
   const [alerts, setAlerts] = useState<PecmuAlert[]>([]);
   const [medicalActs, setMedicalActs] = useState<MedicalAct[]>([]);
@@ -373,8 +400,8 @@ const PecmuModulePage: React.FC = () => {
   const [loadingVictimAlerts, setLoadingVictimAlerts] = useState(false);
   const [showVictimAlerts, setShowVictimAlerts] = useState(false);
   const [alertValues, setAlertValues] = useState<Record<string, string>>(() => buildF2Values(null));
+  const [alertSources, setAlertSources] = useState<AlertSource[]>([]);
   const [carePartners, setCarePartners] = useState<CarePartner[]>(() => spreadsheetPartners.map((partner, index) => ({ ...partner, id: -(index + 1) })));
-  const [loadingCarePartners, setLoadingCarePartners] = useState(false);
   const [incidentDateMode, setIncidentDateMode] = useState<'date' | 'period'>('date');
   const [incidentDate, setIncidentDate] = useState('');
   const [incidentStartDate, setIncidentStartDate] = useState('');
@@ -383,6 +410,14 @@ const PecmuModulePage: React.FC = () => {
   const [otherViolation, setOtherViolation] = useState(false);
   const [selectedViolations, setSelectedViolations] = useState<string[]>([]);
   const [customViolation, setCustomViolation] = useState('');
+  const [localDraftKey, setLocalDraftKey] = useState('');
+  const [localDraftStatus, setLocalDraftStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+
+  const draftBaseline = useRef('');
+  const editHasLocalCopy = useRef(false);
+  const draftFields = editingDraft
+    ? JSON.stringify([alertValues, alertSources, selectedViolations, customViolation, otherViolation, incidentDateMode, incidentDate, incidentStartDate, incidentEndDate])
+    : '';
 
   const groupFicheRows = (rows: Victim[]) => {
     const grouped = new Map<string, Victim>();
@@ -404,9 +439,33 @@ const PecmuModulePage: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    if (!showAlertModal || !localDraftKey || submittingAlert) return;
+    if (editingDraft && draftBaseline.current === draftFields) {
+      if (!editHasLocalCopy.current) return;
+      editHasLocalCopy.current = false;
+      let active = true;
+      void deletePecmuDraft(localDraftKey).then(() => { if (active) setLocalDraftStatus('idle'); })
+        .catch(() => { if (active) setLocalDraftStatus('error'); });
+      return () => { active = false; };
+    }
+    if (editingDraft) editHasLocalCopy.current = true;
+    let current = true;
+    setLocalDraftStatus('saving');
+    void savePecmuDraft(localDraftKey, {
+      ...(editingDraft ? { serverBaseline: draftBaseline.current } : {}),
+      alertValues, alertSources, selectedViolations, customViolation, otherViolation,
+      incidentDateMode, incidentDate, incidentStartDate, incidentEndDate, alertMasterVictim,
+    }).then(() => {
+      if (current) setLocalDraftStatus('saved');
+    }).catch(() => {
+      if (current) setLocalDraftStatus('error');
+    });
+    return () => { current = false; };
+  }, [showAlertModal, editingDraft, draftFields, localDraftKey, submittingAlert, alertValues, alertSources, selectedViolations, customViolation, otherViolation, incidentDateMode, incidentDate, incidentStartDate, incidentEndDate, alertMasterVictim]);
+
+  useEffect(() => {
     if (!showAlertModal) return;
     let active = true;
-    setLoadingCarePartners(true);
     void pecmuRequest('/partenaires').then(result => {
       if (!active) return;
       const merged = normalizeApiList(result) as CarePartner[];
@@ -418,8 +477,6 @@ const PecmuModulePage: React.FC = () => {
       setCarePartners(merged);
     }).catch(() => {
       if (active) setCarePartners(spreadsheetPartners.map((partner, index) => ({ ...partner, id: -(index + 1) })));
-    }).finally(() => {
-      if (active) setLoadingCarePartners(false);
     });
     return () => { active = false; };
   }, [showAlertModal]);
@@ -602,28 +659,88 @@ const PecmuModulePage: React.FC = () => {
     }
   };
 
-  const openAlertModal = (victim?: Victim | null) => {
+  const openAlertModal = async (victim?: Victim | null) => {
     setEditingDraft(null);
-    const selected = victim || selectedVictim;
+    const selected = victim ?? null;
     const linked = selected?.masterVictimId ? ({
       id: selected.masterVictimId, nom: selected.nom, prenom: selected.prenom, postnom: selected.postnom,
       age: selected.age, sexe: selected.sexe, province: selected.province, territoire: selected.territoire,
       commune: selected.commune, village: selected.village, adresse: selected.adresse,
     } as MasterVictim) : null;
     setAlertMasterVictim(linked);
+    const draftKey = getPecmuDraftKey(selected && !linked ? 'fiche' : 'alert', linked?.id ?? selected?.pecmuFicheId);
+    setLocalDraftKey(draftKey);
+    setLocalDraftStatus(draftKey ? 'idle' : 'error');
     setExistingVictimAlerts([]);
     if (linked) void listFichesPecmuByVictim(fetcher, linked.id).then(setExistingVictimAlerts).catch(() => setExistingVictimAlerts([]));
-    const values = buildF2Values(selected);
-    const violations = parseViolationSelection(values.typeViolation);
-    setSelectedViolations(violations.selected);
-    setCustomViolation(violations.custom);
-    setOtherViolation(violations.other);
+    let values = buildF2Values(selected);
+    let savedDraft: Record<string, unknown> | null = null;
+    try {
+      const localDraft = draftKey ? await getPecmuDraft(draftKey) : null;
+      if (localDraft) {
+        const answer = await Swal.fire({
+          icon: 'question', title: 'Brouillon local disponible',
+          text: 'Un brouillon enregistré sur cet appareil existe. Voulez-vous le reprendre ?',
+          showCancelButton: true, confirmButtonText: 'Reprendre', cancelButtonText: 'Supprimer',
+          confirmButtonColor: '#901c67', cancelButtonColor: '#64748b',
+        });
+        if (answer.isConfirmed) savedDraft = localDraft.data;
+        else if (answer.dismiss === Swal.DismissReason.cancel) await deletePecmuDraft(draftKey);
+        else return;
+      }
+    } catch {
+      setLocalDraftStatus('error');
+    }
+    if (savedDraft) {
+      values = { ...values, ...(savedDraft.alertValues as Record<string, string> || {}) };
+      setAlertMasterVictim((savedDraft.alertMasterVictim as MasterVictim | null) || linked);
+      setSelectedViolations(Array.isArray(savedDraft.selectedViolations) ? savedDraft.selectedViolations as string[] : []);
+      setCustomViolation(String(savedDraft.customViolation || ''));
+      setOtherViolation(Boolean(savedDraft.otherViolation));
+      setIncidentDateMode(savedDraft.incidentDateMode === 'period' ? 'period' : 'date');
+      setIncidentDate(String(savedDraft.incidentDate || ''));
+      setIncidentStartDate(String(savedDraft.incidentStartDate || ''));
+      setIncidentEndDate(String(savedDraft.incidentEndDate || ''));
+    } else {
+      const violations = parseViolationSelection(values.typeViolation);
+      setSelectedViolations(violations.selected);
+      setCustomViolation(violations.custom);
+      setOtherViolation(violations.other);
+      hydrateIncidentDates(values.periodeIncident);
+    }
+    setAlertSources(readAlertSources({ ...values, alertSources: savedDraft?.alertSources }));
     setAlertValues(values);
-    hydrateIncidentDates(values.periodeIncident);
     setShowAlertModal(true);
   };
 
-  const openDraftEditor = (draft: FichePecmu, victim?: Victim) => {
+  const openDraftEditor = async (draft: FichePecmu, victim?: Victim) => {
+    if (draft.access?.canEdit === false) return;
+    const key = getPecmuDraftKey('edit', draft.id);
+    const values = mapFichePecmuToF2Values(draft);
+    const sources = readAlertSources(draft);
+    const violations = parseViolationSelection(values.typeViolation);
+    const dates = values.periodeIncident?.match(/\d{4}-\d{2}-\d{2}/g) || [];
+    const period = dates.length >= 2;
+    const baseline = JSON.stringify([values, sources, violations.selected, violations.custom, violations.other,
+      period ? 'period' : 'date', period ? '' : dates[0] || '', period ? dates[0] : '', period ? dates[1] : '']);
+    let saved: Record<string, unknown> | null = null;
+    let cacheAvailable = Boolean(key);
+    try {
+      const snapshot = key ? await getPecmuDraft(key) : null;
+      if (snapshot) {
+        const changed = baseline !== snapshot.data.serverBaseline;
+        const answer = await Swal.fire({
+          icon: changed ? 'warning' : 'question', title: 'Modifications locales disponibles',
+          text: changed ? 'La version du serveur a changé depuis votre saisie. Reprendre la copie locale permet de la relire avant de mettre à jour le serveur.' : 'Voulez-vous reprendre les modifications enregistrées sur cet appareil ?',
+          showCancelButton: true, confirmButtonText: 'Reprendre', cancelButtonText: 'Supprimer la copie locale', confirmButtonColor: '#901c67',
+        });
+        if (answer.isConfirmed) saved = snapshot.data;
+        else if (answer.dismiss === Swal.DismissReason.cancel) await deletePecmuDraft(key);
+        else return;
+      }
+    } catch { cacheAvailable = false; }
+    setLocalDraftKey(cacheAvailable ? key : '');
+    setLocalDraftStatus(cacheAvailable ? 'idle' : 'error');
     if (victim) {
       setSelectedVictim(victim);
       setAlertMasterVictim(victim.masterVictimId ? {
@@ -632,14 +749,20 @@ const PecmuModulePage: React.FC = () => {
         commune: victim.commune, village: victim.village, adresse: victim.adresse,
       } : null);
     }
-    const values = mapFichePecmuToF2Values(draft);
-    const violations = parseViolationSelection(values.typeViolation);
+    draftBaseline.current = baseline;
+    editHasLocalCopy.current = Boolean(saved);
     setEditingDraft(draft);
-    setAlertValues(values);
-    setSelectedViolations(violations.selected);
-    setCustomViolation(violations.custom);
-    setOtherViolation(violations.other);
-    hydrateIncidentDates(values.periodeIncident);
+    setAlertValues(saved ? { ...values, ...saved.alertValues as Record<string, string> } : values);
+    setAlertSources(saved && Array.isArray(saved.alertSources) ? saved.alertSources as AlertSource[] : sources);
+    setSelectedViolations(saved && Array.isArray(saved.selectedViolations) ? saved.selectedViolations as string[] : violations.selected);
+    setCustomViolation(saved ? String(saved.customViolation || '') : violations.custom);
+    setOtherViolation(saved ? Boolean(saved.otherViolation) : violations.other);
+    if (saved) {
+      setIncidentDateMode(saved.incidentDateMode === 'period' ? 'period' : 'date');
+      setIncidentDate(String(saved.incidentDate || ''));
+      setIncidentStartDate(String(saved.incidentStartDate || ''));
+      setIncidentEndDate(String(saved.incidentEndDate || ''));
+    } else hydrateIncidentDates(values.periodeIncident);
     setShowVictimAlerts(false);
     setShowAlertModal(true);
   };
@@ -685,15 +808,26 @@ const PecmuModulePage: React.FC = () => {
     if (submittingAlert) return;
     const saveAsDraft = (event.nativeEvent as SubmitEvent).submitter instanceof HTMLElement && (event.nativeEvent as SubmitEvent).submitter?.hasAttribute('data-save-draft');
     if (editingDraft) {
+      if (editingDraft.access?.canEdit === false) return;
       setSubmittingAlert(true);
       try {
-        const incidentPeriod = incidentDateMode === 'date' ? incidentDate : `${incidentStartDate} au ${incidentEndDate}`;
+        const incidentPeriod = incidentDateMode === 'date' ? incidentDate : [incidentStartDate, incidentEndDate].filter(Boolean).join(' au ');
         const violationType = [...selectedViolations, ...(otherViolation && customViolation.trim() ? [customViolation.trim()] : [])].join(' ; ');
-        const payload = mapF2ValuesToFichePecmuPayload({ ...alertValues, periodeIncident: incidentPeriod, typeViolation: violationType }, true);
-        if (saveAsDraft) payload.status = 'BROUILLON';
-        else payload.status = null;
-
-        await updateFichePecmu(fetcher, editingDraft.id, payload, true);
+        if (saveAsDraft) {
+          const payload = mapF2ValuesToFichePecmuPayload({ ...alertValues, periodeIncident: incidentPeriod, typeViolation: violationType }, true, alertSources);
+          payload.status = 'BROUILLON';
+          await updateFichePecmu(fetcher, editingDraft.id, payload, true);
+        } else {
+          if (draftBaseline.current !== draftFields) {
+            await Swal.fire({ icon: 'info', title: 'Modifications en cours', text: 'Cliquez sur « Mettre à jour » pour enregistrer les modifications avant de soumettre le brouillon.' });
+            return;
+          }
+          const result = await withDuplicateConfirmation(confirmed => submitFichePecmu(fetcher, editingDraft.id, confirmed));
+          if (result === null) return;
+        }
+        if (localDraftKey) {
+          try { await deletePecmuDraft(localDraftKey); } catch { setLocalDraftStatus('error'); }
+        }
         const savedDraftId = editingDraft.id;
         setEditingDraft(null);
         setShowAlertModal(false);
@@ -725,7 +859,8 @@ const PecmuModulePage: React.FC = () => {
       try {
         const incidentPeriod = incidentDateMode === 'date' ? incidentDate : [incidentStartDate, incidentEndDate].filter(Boolean).join(' au ');
         const violationType = [...selectedViolations, ...(otherViolation && customViolation.trim() ? [customViolation.trim()] : [])].join(' ; ');
-        await createFichePecmu(fetcher, { ...alertValues, periodeIncident: incidentPeriod, typeViolation: violationType }, alertMasterVictim?.id, 'BROUILLON');
+        await createFichePecmu(fetcher, { ...alertValues, periodeIncident: incidentPeriod, typeViolation: violationType }, alertMasterVictim?.id, { status: 'BROUILLON', sources: alertSources });
+        if (localDraftKey) { try { await deletePecmuDraft(localDraftKey); } catch { setLocalDraftStatus('error'); } }
         setShowAlertModal(false);
         await loadVictims();
         await Swal.fire({ icon: 'success', title: 'Brouillon enregistré', text: 'Le dossier a été enregistré avec le statut Brouillon. Vous pourrez le compléter et le soumettre ensuite.', confirmButtonColor: '#901c67' });
@@ -756,24 +891,15 @@ const PecmuModulePage: React.FC = () => {
     }
 
     const age = alertMasterVictim ? '' : alertValues.age.trim();
-    if (age && (!/^\d+$/.test(age) || Number(age) > 120)) {
+    if (age && (!Number.isFinite(Number(age)) || Number(age) < 0 || Number(age) > 120)) {
       await Swal.fire({
         icon: 'warning',
-        title: 'Age invalide',
-        text: "Saisissez un age entier compris entre 0 et 120 ans.",
+        title: 'Âge invalide',
+        text: 'Saisissez un âge compris entre 0 et 120 ans. Les âges de moins d’un an peuvent être saisis en décimal (ex. 0,5).',
         confirmButtonColor: '#901c67',
       });
       return;
     }
-    if (!alertValues.alertSourceStructureName?.trim() || !alertValues.alertSourceStructureType) {
-      await Swal.fire({ icon: 'warning', title: 'Structure d’alerte incomplète', text: 'Renseignez le nom et le type de la structure ayant lancé l’alerte.' });
-      return;
-    }
-    if (alertValues.alertSourceStructureType === 'AUTRE' && !alertValues.alertSourceOtherStructureType?.trim()) {
-      await Swal.fire({ icon: 'warning', title: 'Type de structure manquant', text: 'Précisez le type de structure sélectionné « Autre ».' });
-      return;
-    }
-
     if (incidentDateMode === 'date' && !incidentDate) {
       await Swal.fire({ icon: 'warning', title: 'Date des faits manquante', text: 'Sélectionnez la date des faits.' });
       return;
@@ -791,7 +917,12 @@ const PecmuModulePage: React.FC = () => {
     try {
       const violationType = [...selectedViolations, ...(otherViolation && customViolation.trim() ? [customViolation.trim()] : [])].join(' ; ');
       const incidentPeriod = incidentDateMode === 'date' ? incidentDate : `${incidentStartDate} au ${incidentEndDate}`;
-      const created = await createFichePecmu(fetcher, { ...alertValues, periodeIncident: incidentPeriod, typeViolation: violationType }, alertMasterVictim?.id);
+      const created = await withDuplicateConfirmation(confirmed => createFichePecmu(
+        fetcher, { ...alertValues, periodeIncident: incidentPeriod, typeViolation: violationType },
+        alertMasterVictim?.id, { sources: alertSources, confirmDuplicate: confirmed }
+      ));
+      if (created === null) return;
+      if (localDraftKey) { try { await deletePecmuDraft(localDraftKey); } catch { setLocalDraftStatus('error'); } }
       setShowAlertModal(false);
       if (created.id) setOpenDossierId(created.id);
       await loadVictims();
@@ -837,17 +968,7 @@ const PecmuModulePage: React.FC = () => {
     }
 
     if (field.key === 'structureNom') {
-      const partnersForLocation = alertValues.province && alertValues.zoneSante ? carePartners.filter(partner =>
-        normalizePartnerText(partner.province) === normalizePartnerText(alertValues.province) &&
-        normalizePartnerText(partner.zoneSante || partner.healthZone) === normalizePartnerText(alertValues.zoneSante)
-      ) : [];
-      const selected = partnersForLocation.find(partner => (partner.nom || partner.structure || '') === value);
-      const placeholder = !alertValues.province ? 'Sélectionner d’abord une province' : !alertValues.zoneSante ? 'Sélectionner d’abord une zone de santé' : 'Sélectionner une structure partenaire';
-      return <label key={field.key} className="block"><span className="text-xs font-bold uppercase tracking-wide text-slate-600">{field.label} *</span><select required disabled={!alertValues.province || !alertValues.zoneSante} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary-500 disabled:bg-slate-50" value={value} onChange={event => update(event.target.value)}><option value="">{placeholder}</option>{value && !selected && <option value={value}>{value}</option>}{partnersForLocation.map(partner => {
-        const name = partner.nom || partner.structure || '';
-        if (!name) return null;
-        return <option key={`${partner.id}-${name}`} value={name}>{name}</option>;
-      })}</select>{!loadingCarePartners && alertValues.province && alertValues.zoneSante && partnersForLocation.length === 0 && <span className="mt-1 block text-xs text-slate-500">Aucune structure partenaire n’est référencée pour cette province et cette zone de santé.</span>}</label>;
+      return <label key={field.key} className="block"><span className="text-xs font-bold uppercase tracking-wide text-slate-600">{field.label} *</span><input required type="text" className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary-500" value={value} onChange={event => update(event.target.value)} /></label>;
     }
 
     if (field.key === 'zoneSante') {
@@ -855,11 +976,11 @@ const PecmuModulePage: React.FC = () => {
       const officialZones = province ? healthZonesByProvince[province] || [] : [];
       const partnerZones = carePartners.filter(partner => normalizePartnerText(partner.province) === normalizePartnerText(alertValues.province)).map(partner => partner.zoneSante || partner.healthZone || '').filter(Boolean);
       const zones = [...new Set([...officialZones, ...partnerZones])].sort((a, b) => a.localeCompare(b, 'fr'));
-      return <label key={field.key} className="block"><span className="text-xs font-bold uppercase tracking-wide text-slate-600">{field.label}</span><select disabled={!alertValues.province} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary-500 disabled:bg-slate-50" value={value} onChange={event => { setAlertValues(previous => ({ ...previous, zoneSante: event.target.value, structureNom: '' })); }}><option value="">{alertValues.province ? 'Sélectionner une zone de santé' : 'Sélectionner d’abord une province'}</option>{value && !zones.includes(value) && <option value={value}>{value}</option>}{zones.map(zone => <option key={zone} value={zone}>{zone}</option>)}</select></label>;
+      return <label key={field.key} className="block"><span className="text-xs font-bold uppercase tracking-wide text-slate-600">{field.label}</span><select disabled={!alertValues.province} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary-500 disabled:bg-slate-50" value={value} onChange={event => { setAlertValues(previous => ({ ...previous, zoneSante: event.target.value })); }}><option value="">{alertValues.province ? 'Sélectionner une zone de santé' : 'Sélectionner d’abord une province'}</option>{value && !zones.includes(value) && <option value={value}>{value}</option>}{zones.map(zone => <option key={zone} value={zone}>{zone}</option>)}</select></label>;
     }
 
     if (field.key === 'province' && field.type === 'select') {
-      return <label key={field.key} className="block"><span className="text-xs font-bold uppercase tracking-wide text-slate-600">{field.label}</span><select className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary-500" value={value} onChange={event => setAlertValues(previous => ({ ...previous, province: event.target.value, zoneSante: '', structureNom: '' }))}><option value="">Sélectionner</option>{field.options?.map(option => <option key={option} value={option}>{option}</option>)}</select></label>;
+      return <label key={field.key} className="block"><span className="text-xs font-bold uppercase tracking-wide text-slate-600">{field.label}</span><select className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary-500" value={value} onChange={event => setAlertValues(previous => ({ ...previous, province: event.target.value, zoneSante: '' }))}><option value="">Sélectionner</option>{field.options?.map(option => <option key={option} value={option}>{option}</option>)}</select></label>;
     }
 
     if (field.key === 'partiesCorps') {
@@ -878,12 +999,8 @@ const PecmuModulePage: React.FC = () => {
       </div>;
     }
 
-    if (field.key === 'alertSourceStructureType') {
-      const labels: Record<string, string> = { STRUCTURE_MEDICALE: 'Structure médicale', ONG: 'ONG', RELAIS_COMMUNAUTAIRE: 'Relais communautaire', SERVICE_PUBLIC: 'Service public', AUTRE: 'Autre' };
-      return <div key={field.key} className="space-y-3">
-        <label className="block"><span className="text-xs font-bold uppercase tracking-wide text-slate-600">{field.label} *</span><select required className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" value={value} onChange={event => { update(event.target.value); if (event.target.value !== 'AUTRE') setAlertValues(previous => ({ ...previous, alertSourceOtherStructureType: '' })); }}><option value="">Sélectionner</option>{Object.entries(labels).map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
-        {value === 'AUTRE' && <label className="block"><span className="text-xs font-bold uppercase tracking-wide text-slate-600">Précisez le type de structure *</span><input required className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" value={alertValues.alertSourceOtherStructureType || ''} onChange={event => setAlertValues(previous => ({ ...previous, alertSourceOtherStructureType: event.target.value }))} /></label>}
-      </div>;
+    if (field.key === 'alertSources') {
+      return <PecmuAlertSources sources={alertSources} onChange={setAlertSources} />;
     }
 
     if (field.key === 'typeViolation') {
@@ -919,8 +1036,8 @@ const PecmuModulePage: React.FC = () => {
             type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'}
             min={field.key === 'age' ? 0 : undefined}
             max={field.key === 'age' ? 120 : undefined}
-            step={field.key === 'age' ? 1 : undefined}
-            inputMode={field.type === 'number' ? 'numeric' : undefined}
+            step={field.key === 'age' ? 'any' : undefined}
+            inputMode={field.key === 'age' ? 'decimal' : field.type === 'number' ? 'numeric' : undefined}
             className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
             value={value}
             onChange={(event) => update(event.target.value)}
@@ -1184,7 +1301,7 @@ const PecmuModulePage: React.FC = () => {
                         <div className="flex flex-wrap justify-end gap-2">
                           {isDraft && draftFiche ? <>
                             <button type="button" onClick={event => { event.stopPropagation(); setOpenDossierId(draftFiche.id); }} className="inline-flex items-center whitespace-nowrap border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50">Voir</button>
-                            <button type="button" onClick={event => { event.stopPropagation(); openDraftEditor(draftFiche, victim); }} className="inline-flex items-center whitespace-nowrap border border-primary/30 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/10">Éditer</button>
+                            {draftFiche.access?.canEdit !== false && <button type="button" onClick={event => { event.stopPropagation(); openDraftEditor(draftFiche, victim); }} className="inline-flex items-center whitespace-nowrap border border-primary/30 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/10">Éditer</button>}
                           </> : <button type="button" onClick={event => { event.stopPropagation(); requestAlertModal(victim); }} className="inline-flex items-center whitespace-nowrap border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100">Nouvelle alerte</button>}
                           <span className="inline-flex items-center whitespace-nowrap border border-secondary/20 bg-secondary/5 px-2.5 py-1 text-xs font-medium text-secondary">{actCount} {actCount > 1 ? 'actes médicaux' : 'acte médical'}</span>
                         </div>
@@ -1236,7 +1353,7 @@ const PecmuModulePage: React.FC = () => {
             </div>
             {loadingVictimAlerts ? <p role="status" className="py-8 text-center text-sm text-slate-500">Chargement des alertes…</p> : existingVictimAlerts.length ? <ol className="max-h-[60vh] divide-y divide-slate-100 overflow-y-auto">{existingVictimAlerts.map(alert => {
               const isDraft = alert.status?.toUpperCase() === 'BROUILLON';
-              return <li key={alert.id} className="flex flex-wrap items-center justify-between gap-3 py-4"><div><p className="font-semibold">Fiche PECMU #{alert.id} · {alert.alertSourceStructureName || alert.careStructureName || 'Structure non renseignée'}</p><p className="text-sm text-slate-500">{alert.incidentPeriod || 'Période non renseignée'} · {isDraft ? 'Brouillon' : alert.workflowStatus ? statusLabels[alert.workflowStatus] : alert.medicalStatus || 'Statut non renseigné'} · {alert.createdAt ? new Date(alert.createdAt).toLocaleDateString('fr-FR') : 'Date non renseignée'}</p></div><div className="flex items-center gap-2">{isDraft ? <><button type="button" className="border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50" onClick={() => { setShowVictimAlerts(false); setOpenDossierId(alert.id); }}>Voir</button><button type="button" className="bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary/90" onClick={() => openDraftEditor(alert)}>Éditer</button></> : <button type="button" className="text-sm font-semibold text-primary underline" onClick={() => { setShowVictimAlerts(false); setOpenDossierId(alert.id); }}>Ouvrir le dossier</button>}</div></li>;
+              return <li key={alert.id} className="flex flex-wrap items-center justify-between gap-3 py-4"><div><p className="font-semibold">Fiche PECMU #{alert.id} · {alertSourceLabel(alert) || alert.careStructureName || 'Structure non renseignée'}</p><p className="text-sm text-slate-500">{alert.incidentPeriod || 'Période non renseignée'} · {isDraft ? 'Brouillon' : alert.workflowStatus ? statusLabels[alert.workflowStatus] : alert.medicalStatus || 'Statut non renseigné'} · {alert.createdAt ? new Date(alert.createdAt).toLocaleDateString('fr-FR') : 'Date non renseignée'}</p></div><div className="flex items-center gap-2">{isDraft ? <><button type="button" className="border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50" onClick={() => { setShowVictimAlerts(false); setOpenDossierId(alert.id); }}>Voir</button>{alert.access?.canEdit !== false && <button type="button" className="bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary/90" onClick={() => openDraftEditor(alert)}>Éditer</button>}</> : <button type="button" className="text-sm font-semibold text-primary underline" onClick={() => { setShowVictimAlerts(false); setOpenDossierId(alert.id); }}>Ouvrir le dossier</button>}</div></li>;
             })}</ol> : <p className="py-8 text-center text-sm text-slate-500">Aucune alerte enregistrée pour cette victime.</p>}
             <div className="flex justify-end gap-3 border-t border-slate-200 pt-4"><button type="button" onClick={() => setShowVictimAlerts(false)} className="border border-slate-300 px-4 py-2 text-sm font-semibold">Fermer</button>{selectedVictim && <button type="button" onClick={() => { setShowVictimAlerts(false); requestAlertModal(selectedVictim); }} className="bg-primary px-4 py-2 text-sm font-semibold text-white">Nouvelle alerte</button>}</div>
           </section>
@@ -1264,12 +1381,12 @@ const PecmuModulePage: React.FC = () => {
 
             <div className="max-h-[calc(100vh-230px)] overflow-y-auto px-4 py-5 md:px-7">
               <fieldset disabled={submittingAlert} className="space-y-5">
-                <PecmuVictimSearch fetcher={fetcher} selected={alertMasterVictim} onSelect={victim => { void selectAlertVictim(victim); }} disabled={submittingAlert} />
+                <PecmuVictimSearch fetcher={fetcher} selected={alertMasterVictim} onSelect={victim => { void selectAlertVictim(victim); }} disabled={submittingAlert || Boolean(editingDraft)} />
                 {alertMasterVictim && !editingDraft && <section className="space-y-3 rounded border border-slate-200 bg-white p-4">
                   <div className="flex items-center justify-between gap-3"><h3 className="font-semibold">Alertes PECMU déjà enregistrées</h3><span className="rounded bg-primary/5 px-2 py-1 text-xs font-semibold text-primary">{existingVictimAlerts.length} alerte{existingVictimAlerts.length > 1 ? 's' : ''}</span></div>
                   {loadingVictimAlerts ? <p role="status" className="text-sm text-slate-500">Chargement des alertes…</p> : existingVictimAlerts.length ? <ol className="space-y-2">{existingVictimAlerts.map(alert => {
                     const isDraft = alert.status?.toUpperCase() === 'BROUILLON';
-                    return <li key={alert.id} className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3"><div><p className="text-sm font-semibold">Fiche PECMU #{alert.id} · {alert.alertSourceStructureName || alert.careStructureName || 'Structure non renseignée'}</p><p className="text-xs text-slate-500">{alert.incidentPeriod || 'Période non renseignée'} · {isDraft ? 'Brouillon' : alert.workflowStatus ? statusLabels[alert.workflowStatus] : alert.medicalStatus || 'Statut non renseigné'} · {alert.createdAt ? new Date(alert.createdAt).toLocaleDateString('fr-FR') : 'Date non renseignée'}</p></div><div className="flex items-center gap-2">{isDraft ? <><button type="button" className="border border-slate-300 px-3 py-1 text-sm font-semibold text-slate-700" onClick={() => { setShowAlertModal(false); setOpenDossierId(alert.id); }}>Voir</button><button type="button" className="border border-primary px-3 py-1 text-sm font-semibold text-primary" onClick={() => openDraftEditor(alert)}>Éditer</button></> : <button type="button" className="text-sm font-semibold text-primary underline" onClick={() => { setShowAlertModal(false); setOpenDossierId(alert.id); }}>Ouvrir le dossier</button>}</div></li>;
+                    return <li key={alert.id} className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3"><div><p className="text-sm font-semibold">Fiche PECMU #{alert.id} · {alertSourceLabel(alert) || alert.careStructureName || 'Structure non renseignée'}</p><p className="text-xs text-slate-500">{alert.incidentPeriod || 'Période non renseignée'} · {isDraft ? 'Brouillon' : alert.workflowStatus ? statusLabels[alert.workflowStatus] : alert.medicalStatus || 'Statut non renseigné'} · {alert.createdAt ? new Date(alert.createdAt).toLocaleDateString('fr-FR') : 'Date non renseignée'}</p></div><div className="flex items-center gap-2">{isDraft ? <><button type="button" className="border border-slate-300 px-3 py-1 text-sm font-semibold text-slate-700" onClick={() => { setShowAlertModal(false); setOpenDossierId(alert.id); }}>Voir</button>{alert.access?.canEdit !== false && <button type="button" className="border border-primary px-3 py-1 text-sm font-semibold text-primary" onClick={() => openDraftEditor(alert)}>Éditer</button>}</> : <button type="button" className="text-sm font-semibold text-primary underline" onClick={() => { setShowAlertModal(false); setOpenDossierId(alert.id); }}>Ouvrir le dossier</button>}</div></li>;
                   })}</ol> : <p className="text-sm text-slate-500">Aucune alerte précédente trouvée pour cette victime.</p>}
                 </section>}
                 {f2Sections.filter((_, index) => !(alertMasterVictim && !editingDraft && index === 0)).map((section) => (
@@ -1306,15 +1423,18 @@ const PecmuModulePage: React.FC = () => {
               </fieldset>
             </div>
 
-            <div className="flex justify-end gap-3 border-t !border-gray-200 bg-white px-4 py-4 md:px-7">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t !border-gray-200 bg-white px-4 py-4 md:px-7">
+              <p role="status" className="text-xs text-slate-500">{(localDraftStatus === 'saving' ? 'Enregistrement local…' : localDraftStatus === 'saved' ? 'Brouillon sauvegardé sur cet appareil' : localDraftStatus === 'error' ? 'Sauvegarde locale indisponible' : '')}</p>
+              <div className="flex justify-end gap-3">
               <button type="button" onClick={() => setShowAlertModal(false)} className="border !border-gray-300 px-4 py-2 text-sm font-bold !text-gray-700 hover:!bg-gray-50">Annuler</button>
-              <button type="submit" data-save-draft disabled={submittingAlert} className="inline-flex items-center gap-2 border border-primary px-4 py-2 text-sm font-bold text-primary hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60">
+              <button type="submit" data-save-draft formNoValidate disabled={submittingAlert} className="inline-flex items-center gap-2 border border-primary px-4 py-2 text-sm font-bold text-primary hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60">
                 <Save size={16} />{submittingAlert ? (editingDraft ? 'Mise à jour…' : 'Enregistrement…') : (editingDraft ? 'Mettre à jour' : 'Enregistrer le brouillon')}
               </button>
-              <button type="submit" disabled={submittingAlert} className="inline-flex items-center gap-2 !bg-red-600 px-4 py-2 text-sm font-bold text-white hover:!bg-red-700 disabled:cursor-not-allowed disabled:opacity-60">
+              <button type="submit" formNoValidate={Boolean(editingDraft)} disabled={submittingAlert} className="inline-flex items-center gap-2 !bg-red-600 px-4 py-2 text-sm font-bold text-white hover:!bg-red-700 disabled:cursor-not-allowed disabled:opacity-60">
                 <Save size={16} />
                 {submittingAlert ? (editingDraft ? 'Soumission…' : 'Enregistrement...') : (editingDraft ? 'Soumettre' : 'Enregistrer l’alerte F2')}
               </button>
+              </div>
             </div>
           </form>
         </ModalBody>
@@ -1324,8 +1444,9 @@ const PecmuModulePage: React.FC = () => {
         <PecmuDossierModal
           key={openDossierId}
           ficheId={openDossierId}
+          initialTab={returnedDossier?.id === openDossierId ? returnedDossier.tab : undefined}
           fetcher={fetcher}
-          onClose={() => setOpenDossierId(null)}
+          onClose={() => { setOpenDossierId(null); setReturnedDossier(null); }}
           onChanged={loadVictims}
         />
       ) : null}

@@ -7,6 +7,7 @@ import Swal from 'sweetalert2';
 import { Eye, EyeOff, Loader2, ShieldCheck, WifiOff, KeyRound } from 'lucide-react';
 import { hashPassword, saveOfflineCredentials, verifyOfflineCredentials } from '@/app/utils/authCache';
 import { authenticatedFetch } from '@/app/utils/authFetch';
+import { rememberLocalSession } from '@/app/utils/authSession';
 
 type Step = 'credentials' | '2fa';
 
@@ -45,11 +46,6 @@ export default function LoginPage() {
     };
   }, []);
 
-  const finishLogin = async () => {
-    localStorage.setItem('repaluc_auth', JSON.stringify({ username, ts: Date.now() }));
-    router.replace('/');
-  };
-
   const verify2fa = async (token: string) => {
     if (!token || token.length !== 6) return;
     if (submitting) return;
@@ -80,10 +76,20 @@ export default function LoginPage() {
       if (merged?.userAuthorisation) localStorage.setItem('auth', JSON.stringify(merged.userAuthorisation));
       if (merged?.applications) localStorage.setItem('apps', JSON.stringify(merged.applications));
 
-      const passwordHash = await hashPassword(username, password);
-      await saveOfflineCredentials(username, passwordHash);
-
-      await finishLogin();
+      rememberLocalSession(localStorage, username);
+      try {
+        const passwordHash = await hashPassword(username, password);
+        await saveOfflineCredentials(username, passwordHash);
+      } catch {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Connexion réussie',
+          text: 'Le navigateur n’a pas pu enregistrer vos identifiants pour une prochaine connexion hors ligne.',
+          confirmButtonText: 'Continuer',
+          confirmButtonColor: '#901c67',
+        });
+      }
+      router.replace('/');
     } catch (error: any) {
       await Swal.fire({
         icon: 'error',
@@ -114,7 +120,8 @@ export default function LoginPage() {
           return;
         }
 
-        await finishLogin();
+        rememberLocalSession(localStorage, username);
+        router.replace('/');
         return;
       }
 

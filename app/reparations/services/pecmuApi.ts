@@ -1,6 +1,7 @@
 "use client";
 
 import { statusLabels, type WorkflowStatus } from './pecmuWorkflowApi';
+import { readAlertSources, cleanAlertSources, type AlertSource } from './pecmuAlertSources';
 import { normalizeApiList } from '../utils/mentionStats';
 
 export type PecmuFetcher = (url: string, options?: RequestInit) => Promise<any>;
@@ -20,7 +21,10 @@ export type PecmuFilterRule = {
   value: string;
 };
 
+export type PecmuAccess = { canRead: boolean; canEdit: boolean };
+
 export type FichePecmu = {
+  access?: PecmuAccess;
   workflowStatus?: WorkflowStatus;
   status?: string | null;
   id: number;
@@ -41,6 +45,7 @@ export type FichePecmu = {
   healthArea?: string;
   careStructureAddress?: string;
   doctorOrNurseContact?: string;
+  alertSources?: AlertSource[];
   alertSourceFullName?: string;
   alertSourceStructureName?: string;
   alertSourceStructureType?: string;
@@ -122,6 +127,8 @@ export type SuiviAccompagnement = {
 
 export type PecmuStatistics = {
   total?: number;
+  submitted?: number;
+  drafts?: number;
   certified?: number;
   notCertified?: number;
   eligible?: number;
@@ -257,7 +264,7 @@ export const mapFichePecmuToVictimRow = (fiche: FichePecmu) => ({
   rawPecmuFiche: fiche,
 });
 
-export const mapF2ValuesToFichePecmuPayload = (values: Record<string, string>, preserveEmpty = false): Partial<FichePecmu> => {
+export const mapF2ValuesToFichePecmuPayload = (values: Record<string, string>, preserveEmpty = false, sources = readAlertSources(values)): Partial<FichePecmu> => {
   const payload: Partial<FichePecmu> = {
     victimName: values.nomVictime,
     age: values.age === '' && preserveEmpty ? null as any : toOptionalNumber(values.age),
@@ -274,13 +281,7 @@ export const mapF2ValuesToFichePecmuPayload = (values: Record<string, string>, p
     healthArea: values.aireSante,
     careStructureAddress: values.adresseStructure,
     doctorOrNurseContact: values.contactMedecin,
-    alertSourceFullName: values.sourceNom,
-    alertSourceStructureName: values.alertSourceStructureName,
-    alertSourceStructureType: values.alertSourceStructureType,
-    alertSourceOtherStructureType: values.alertSourceStructureType === 'AUTRE' ? values.alertSourceOtherStructureType : null,
-    alertSourcePhone: values.sourceContact,
-    alertSourceRelationship: values.sourceRapport,
-    alertSourceAddress: values.sourceAdresse,
+    alertSources: cleanAlertSources(sources),
     violationType: values.typeViolation,
     incidentDetails: values.detailsIncident,
     incidentPeriod: values.periodeIncident,
@@ -328,13 +329,6 @@ export const mapFichePecmuToF2Values = (fiche: FichePecmu): Record<string, strin
     aireSante: fiche.healthArea || '',
     adresseStructure: fiche.careStructureAddress || '',
     contactMedecin: fiche.doctorOrNurseContact || '',
-    sourceNom: fiche.alertSourceFullName || '',
-    alertSourceStructureName: fiche.alertSourceStructureName || '',
-    alertSourceStructureType: fiche.alertSourceStructureType || '',
-    alertSourceOtherStructureType: fiche.alertSourceOtherStructureType || '',
-    sourceContact: fiche.alertSourcePhone || '',
-    sourceRapport: fiche.alertSourceRelationship || '',
-    sourceAdresse: fiche.alertSourceAddress || '',
     typeViolation: fiche.violationType || '',
     detailsIncident: fiche.incidentDetails || '',
     periodeIncident: fiche.incidentPeriod || '',
@@ -368,7 +362,9 @@ export const listFichesPecmu = async (
   const response = await fetcher(`/fiche-pecmu?${query}`);
   if (!response) return null;
 
-  const rows = normalizeApiList(response).map((item: FichePecmu) => mapFichePecmuToVictimRow(item));
+  const rows = normalizeApiList(response)
+    .filter((item: FichePecmu) => item.access?.canRead !== false)
+    .map((item: FichePecmu) => mapFichePecmuToVictimRow(item));
   return {
     response,
     rows,
@@ -383,8 +379,9 @@ export const listFichesPecmu = async (
   };
 };
 
-export const createFichePecmu = async (fetcher: PecmuFetcher, values: Record<string, string>, victimId?: number, status?: 'BROUILLON') => {
-  const payload = mapF2ValuesToFichePecmuPayload(values);
+export const createFichePecmu = async (fetcher: PecmuFetcher, values: Record<string, string>, victimId?: number, options: { status?: 'BROUILLON'; sources?: AlertSource[]; confirmDuplicate?: boolean } = {}) => {
+  const { status, sources, confirmDuplicate } = options;
+  const payload = mapF2ValuesToFichePecmuPayload(values, false, sources);
   if (status) (payload as Record<string, unknown>).status = status;
   if (victimId) {
     for (const key of ['victimName', 'age', 'sex', 'province', 'locality', 'victimAddress', 'victimPhone'] as const) delete payload[key];
@@ -392,20 +389,20 @@ export const createFichePecmu = async (fetcher: PecmuFetcher, values: Record<str
   }
   const response = await fetcher('/fiche-pecmu', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: ficheSubmissionHeaders(confirmDuplicate),
     body: JSON.stringify(payload),
   });
 
-  if (!response) {
-    throw new Error("La fiche PECMU n'a pas pu être enregistrée.");
+  const created = response?.data ?? response;
+  if (!Number.isInteger(created?.id) || created.id <= 0) {
+    throw new Error("Le serveur n’a pas confirmé l’identifiant de la fiche. Vérifiez la liste avant de réessayer.");
   }
-
-  return (response.data?.id ? response.data : response) as FichePecmu;
+  return created as FichePecmu;
 };
 
 export const listFichesPecmuByVictim = async (fetcher: PecmuFetcher, victimId: number): Promise<FichePecmu[]> => {
   const response = await fetcher(`/fiche-pecmu/by-victime/${victimId}`);
-  return response ? normalizeApiList(response) as FichePecmu[] : [];
+  return normalizeApiList(response).filter((item: FichePecmu) => item.access?.canRead !== false);
 };
 
 export const searchMasterVictims = async (fetcher: PecmuFetcher, search: string): Promise<any[]> => {
@@ -432,6 +429,17 @@ export const updateFichePecmu = async (fetcher: PecmuFetcher, id: number, payloa
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(preserveEmpty ? payload : compactPayload(payload)),
   }), 'Impossible de modifier la fiche PECMU.')
   );
+};
+
+const ficheSubmissionHeaders = (confirmDuplicate?: boolean): Record<string, string> =>
+  confirmDuplicate ? { 'Content-Type': 'application/json', 'X-Confirm-Duplicate': 'true' } : { 'Content-Type': 'application/json' };
+
+export const submitFichePecmu = async (fetcher: PecmuFetcher, id: number, confirmDuplicate = false): Promise<void> => {
+  await fetcher(`/fiche-pecmu/${id}`, {
+    method: 'PATCH',
+    headers: ficheSubmissionHeaders(confirmDuplicate),
+    body: JSON.stringify({ status: 'SOUMIS' }),
+  });
 };
 
 export const deleteFichePecmu = async (fetcher: PecmuFetcher, id: number) => {

@@ -1,11 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
-import { rdcProvinces } from '../constants/provinces';
-import { healthZonesByProvince } from '../constants/healthZonesByProvince';
-import { spreadsheetPartners } from '../constants/spreadsheetPartners';
+import { careLocationFields, type CarePartnerLocation } from './careLocationFields';
 import { outcomeLabels, type MedicalCare } from '../services/pecmuWorkflowApi';
 import { WorkflowForm, fieldClass, type WorkflowField } from './WorkflowForm';
+import PecmuInvoiceInput from './PecmuInvoiceInput';
 import YesNoToggle from './YesNoToggle';
 
 export default function PecmuEvolutionForm({ care, hasClosureForm, busy, onSave, careFields = [], carePartners = [], initial, submitLabel = 'Enregistrer l’évolution' }: {
@@ -13,11 +12,12 @@ export default function PecmuEvolutionForm({ care, hasClosureForm, busy, onSave,
   hasClosureForm: boolean;
   busy: boolean;
   careFields?: WorkflowField[];
-  carePartners?: Array<{ nom?: string; structure?: string; province?: string; zoneSante?: string; healthZone?: string }>;
+  carePartners?: CarePartnerLocation[];
   initial?: Record<string, any>;
   submitLabel?: string;
-  onSave: (values: Record<string, any>, files: Record<string, File>, closeCase: boolean) => Promise<boolean>;
+  onSave: (values: Record<string, any>, files: Record<string, File>, closeCase: boolean, invoices: File[]) => Promise<boolean>;
 }) {
+  const [invoices, setInvoices] = useState<File[]>([]);
   const [files, setFiles] = useState<Record<string, File>>({});
   const [closeCase, setCloseCase] = useState(false);
   const [error, setError] = useState('');
@@ -41,18 +41,7 @@ export default function PecmuEvolutionForm({ care, hasClosureForm, busy, onSave,
     ...careFields,
     ...(careFields.length ? [{ key: 'evolutionHeading', label: 'Évolution', type: 'heading' as const }] : []),
     { key: 'outcome', label: 'Évolution', type: 'select', options: outcomeLabels, required: !careFields.length },
-    { key: 'transferProvince', label: 'Province de transfert', type: 'select', options: Object.fromEntries(rdcProvinces.map(value => [value, value])), required: true, resetOnChange: ['transferHealthZone', 'transferStructureName'], when: values => values.outcome === 'TRANSFERRED' },
-    { key: 'transferHealthZone', label: 'Zone de santé de transfert', type: 'select', required: true, resetOnChange: ['transferStructureName'], options: values => Object.fromEntries((healthZonesByProvince[values.transferProvince] || []).map(zone => [zone, zone])), when: values => values.outcome === 'TRANSFERRED' },
-    { key: 'transferStructureName', label: 'Structure receveuse', type: 'select', required: true, options: values => {
-      const options: Record<string, string> = {};
-      const partners: Array<{ nom?: string; structure?: string; province?: string; zoneSante?: string; healthZone?: string }> = [...spreadsheetPartners, ...carePartners];
-      partners.filter(partner => partner.province === values.transferProvince && (partner.zoneSante || partner.healthZone) === values.transferHealthZone).forEach(partner => {
-        const name = partner.nom || partner.structure;
-        if (name) options[name] = name;
-      });
-      if (values.transferStructureName && !(values.transferStructureName in options)) options[values.transferStructureName] = values.transferStructureName;
-      return options;
-    }, when: values => values.outcome === 'TRANSFERRED' },
+    ...careLocationFields('transfer', carePartners).map(field => ({ ...field, when: (values: Record<string, any>) => values.outcome === 'TRANSFERRED' })),
     { key: 'transferNotes', label: 'Motif de transfert', type: 'textarea', when: values => values.outcome === 'TRANSFERRED' },
   ]} onSubmit={async values => {
     setError('');
@@ -62,8 +51,9 @@ export default function PecmuEvolutionForm({ care, hasClosureForm, busy, onSave,
     const outcomeDate = values.outcome === care.outcome && care.outcomeDate
       ? care.outcomeDate.slice(0, 10)
       : `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    return onSave({ ...values, ...(values.outcome ? { outcomeDate } : {}) }, Object.fromEntries(requiredDocuments.filter(({ type }) => files[type]).map(({ type }) => [type, files[type]])), canClose(values.outcome) && closeCase);
+    return onSave({ ...values, ...(values.outcome ? { outcomeDate } : {}) }, Object.fromEntries(requiredDocuments.filter(({ type }) => files[type]).map(({ type }) => [type, files[type]])), canClose(values.outcome) && closeCase, invoices);
   }}>{values => <>
+    <PecmuInvoiceInput onChange={setInvoices} />
     {documents(values.outcome).filter(doc => doc.type !== 'CLOSURE_FORM').map(doc => fileInput(doc.type, doc.label))}
     {canClose(values.outcome) && <div className="md:col-span-2"><YesNoToggle label="Dossier clôturé ?" checked={closeCase} onChange={setCloseCase} /></div>}
     {canClose(values.outcome) && closeCase && fileInput('CLOSURE_FORM', 'Formulaire de clôture')}

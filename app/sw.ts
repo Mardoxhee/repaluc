@@ -28,6 +28,18 @@ const onlyOkResponses = {
  * une journée).
  */
 const runtimeCaching: RuntimeCaching[] = [
+  // Les navigations du routeur Next reçoivent les composants de la version
+  // déployée. Réutiliser leur cache historique si le réseau est coupé.
+  {
+    matcher: ({ request, url, sameOrigin }) =>
+      sameOrigin && (request.headers.get("RSC") === "1" || url.searchParams.has("_rsc")),
+    handler: new NetworkFirst({
+      cacheName: "misc-cache",
+      fetchOptions: { cache: "no-cache" },
+      plugins: [onlyOkResponses],
+    }),
+  },
+
   // 1) Pages HTML (navigation) — NetworkFirst avec fallback cache permanent
   {
     matcher: ({ request, url }) =>
@@ -37,7 +49,6 @@ const runtimeCaching: RuntimeCaching[] = [
       url.pathname.endsWith(".html"),
     handler: new NetworkFirst({
       cacheName: "pages-cache",
-      networkTimeoutSeconds: 3,
       plugins: [onlyOkResponses],
     }),
   },

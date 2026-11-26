@@ -34,7 +34,7 @@ export default function PecmuCareCard({ care, children }: { care: MedicalCare; c
       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-sm font-bold text-primary">{care.sequenceNumber}</span>
       <div className="min-w-0 flex-1">
         <h3 className="break-words font-semibold text-slate-900">{care.careStructureName || `Prise en charge ${care.sequenceNumber}`}</h3>
-        <p className="mt-1 text-sm text-slate-500">{[mode, care.careProvince, care.careHealthZone].filter(Boolean).join(' · ')}</p>
+        <p className="mt-1 text-sm text-slate-500">{[care.admissionType === 'READMISSION' ? 'Réadmission après rechute' : care.admissionType === 'TRANSFER' ? 'Après transfert' : null, mode, care.careProvince, care.careHealthZone].filter(Boolean).join(' · ')}</p>
         <span className="mt-2 inline-block rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">{care.outcome ? outcomeLabels[care.outcome] : 'En cours'}</span>
       </div>
       <ChevronDown size={20} aria-hidden="true" className="shrink-0 text-primary transition-transform group-open:rotate-180 motion-reduce:transition-none" />

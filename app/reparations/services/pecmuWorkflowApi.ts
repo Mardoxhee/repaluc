@@ -2,7 +2,7 @@
 
 import { extractUploadedFileLink } from '../../utils/uploadResponse';
 import { authenticatedFetch } from '../../utils/authFetch';
-import type { FichePecmu, PecmuFetcher, SuiviAccompagnement } from './pecmuApi';
+import type { FichePecmu, PecmuAccess, PecmuFetcher, SuiviAccompagnement } from './pecmuApi';
 
 export type WorkflowStatus = 'CERTIFICATION_PENDING' | 'MEDICAL_DECISION_PENDING' | 'NOT_CERTIFIED' | 'CONSENT_PENDING' | 'NOT_ELIGIBLE' | 'CONSENT_REFUSED' | 'READY_FOR_CARE' | 'IN_CARE' | 'TRANSFERRED' | 'CLOSURE_PENDING' | 'LOST_TO_FOLLOW_UP' | 'CLOSED';
 export const statusLabels: Record<WorkflowStatus, string> = {
@@ -17,11 +17,11 @@ export const consentTypes = {
   PSYCHOLOGICAL_ACT: 'Consentement à l’acte psychologique', REFUSAL: 'Formulaire de refus', OTHER: 'Autre consentement',
 };
 export const outcomeLabels = { STABILIZED_OR_CURED: 'Stabilisé/guéri', DECEASED: 'Décédé', TRANSFERRED: 'Transféré à un niveau supérieur', LOST_TO_FOLLOW_UP: 'Perdu de vue' };
-export const medicalDocumentTypes = { MEDICAL_REPORT: 'Rapport médical', DEATH_CERTIFICATE: 'Certificat de décès', TRANSFER_NOTE: 'Note de transfert', OTHER: 'Autre document médical' };
+export const medicalDocumentTypes = { INVOICE: 'Facture', MEDICAL_REPORT: 'Rapport médical', DEATH_CERTIFICATE: 'Certificat de décès', TRANSFER_NOTE: 'Note de transfert', OTHER: 'Autre document médical' };
 export type FileMetadata = { id?: number | string; type?: string; documentType?: string; originalName?: string; filename?: string; mimeType?: string; size?: number; url?: string; src?: string; file?: string; path?: string };
 export type WorkflowConsent = FileMetadata & { id: number; agent: string; consentType: keyof typeof consentTypes; consentStatus: 'SIGNED' | 'REFUSED'; consentDate?: string; notes?: string; file?: unknown; isActive?: boolean };
 export type MedicalCare = {
-  id: number; fichePecmuId: number; sequenceNumber: number; previousCareId?: number;
+  id: number; fichePecmuId: number; sequenceNumber: number; previousCareId?: number; admissionType?: 'STANDARD' | 'TRANSFER' | 'READMISSION';
   careMode?: 'OUTPATIENT' | 'HOSPITALIZATION'; careDate?: string; hospitalizationStartDate?: string; hospitalizationEndDate?: string;
   supervisorName?: string; careStructureName?: string; careProvince?: string; treatingDoctorName?: string; treatingDoctorPhone?: string;
   careHealthZone?: string; complaints?: string; diagnosis?: string; treatmentReceived?: string; bilanParaclinique?: string; appointmentDate1?: string; appointmentComment1?: string; appointmentDate2?: string; appointmentComment2?: string; appointmentDate3?: string; appointmentComment3?: string;
@@ -30,6 +30,7 @@ export type MedicalCare = {
   documents?: FileMetadata[]; examens?: FileMetadata[]; createdAt?: string;
 };
 export type WorkflowSnapshot = {
+  access?: PecmuAccess;
   medicalDecision?: { eligible?: boolean; comment?: string; decisionMakerName?: string; decisionMakerFunction?: string; decisionDate?: string };
   certification?: { certified?: boolean; certificationFile?: string };
   fiche: FichePecmu & { documents?: FileMetadata[] };
@@ -43,9 +44,12 @@ export type PsychologicalCare = {
   initialEvaluation?: string; diagnosticHypothesis?: string; therapiesReceived?: string; therapyCount?: number;
   therapySessions?: Array<{ id?: number; date?: string; therapy?: string; notes?: string; agent?: string }>;
   homeVisits?: Array<{ id?: number; date?: string; observations?: string; agent?: string }>;
-  report?: FileMetadata | string | null; reportFile?: string; reportName?: string; postTherapyEvaluation?: string;
+  report?: (FileMetadata & { downloadUrl?: string }) | string | null; reportFile?: string; reportName?: string; postTherapyEvaluation?: string;
   closureDate?: string; closureNotes?: string; isClosed?: boolean; [key: string]: any;
 };
+export function canEditPecmuWorkflow(state: WorkflowSnapshot | null): boolean {
+  return state !== null && state.access?.canEdit !== false && state.fiche.access?.canEdit !== false;
+}
 export type SupervisorOption = { value: string; label: string };
 export class PecmuApiError extends Error {
   constructor(
@@ -72,6 +76,9 @@ export const pecmuRequest: PecmuFetcher = async (path, options = {}) => {
 export async function loadPecmuWorkflow(fetcher: PecmuFetcher, id: number): Promise<WorkflowSnapshot> {
   const result = await fetcher(`/fiche-pecmu/${id}/workflow`);
   const state = result?.data?.fiche ? result.data : result;
+  if (state?.access?.canRead === false || state?.fiche?.access?.canRead === false) {
+    throw new PecmuApiError(403, 'RESOURCE_OUT_OF_SCOPE', 'Vous n’avez pas accès à ce dossier.');
+  }
   if (!state?.fiche || !state.currentStatus || !Array.isArray(state.nextActions)) throw new Error('Le serveur a retourné un parcours PECMU incomplet.');
   return { ...state, consents: state.consents || [], followUps: state.followUps || [], medicalCare: [...(state.medicalCare || [])].sort((a, b) => a.sequenceNumber - b.sequenceNumber) };
 }
@@ -82,11 +89,39 @@ export function validatePecmuFile(file: File) {
   if (!file.size) throw new Error('Le fichier est vide.');
   if (!/\.(pdf|png|jpe?g)$/i.test(file.name)) throw new Error('Formats acceptés : PDF, PNG et JPEG.');
 }
+const invoiceRequestKeys = new WeakMap<File, string>();
+
+export async function createPecmuCareEpisode(fetcher: PecmuFetcher, payload: Record<string, unknown>, requestId: string) {
+  return fetcher('/acte-medical-pecmu', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestId },
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function uploadPecmuFile(fetcher: PecmuFetcher, path: string, file: File) {
   validatePecmuFile(file);
   const form = new FormData(); form.append('file', file);
+  if (path.endsWith('/documents/INVOICE')) {
+    const key = invoiceRequestKeys.get(file) || crypto.randomUUID();
+    invoiceRequestKeys.set(file, key);
+    return fetcher(path, { method: 'POST', headers: { 'Idempotency-Key': key }, body: form });
+  }
   return fetcher(path, { method: 'POST', body: form });
 }
+export async function uploadCareInvoices(fetcher: PecmuFetcher, careId: number, invoices: File[], uploaded: WeakSet<File>) {
+  for (const file of invoices) {
+    if (uploaded.has(file)) continue;
+    try {
+      await uploadPecmuFile(fetcher, `/acte-medical-pecmu/${careId}/documents/INVOICE`, file);
+      uploaded.add(file);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'Envoi impossible.';
+      throw new Error(`Facture « ${file.name} » de la prise en charge #${careId} : ${reason}`);
+    }
+  }
+}
+
 export async function uploadCertificationNote(fetcher: PecmuFetcher, file: File): Promise<string> {
   const response = await uploadPecmuFile(fetcher, '/minio/files/upload', file);
   const url = extractUploadedFileLink(response);
@@ -186,7 +221,7 @@ export function getPecmuPermissions(): string[] | null {
   } catch { /* Missing SSO claims are treated as no granted permissions. */ }
   return null;
 }
-export type WorkflowTab = 'identity' | 'certification' | 'decision' | 'consents' | 'care' | 'psychological' | 'followups' | 'closure' | 'orientations' | 'history';
+export type WorkflowTab = 'identity' | 'certification' | 'decision' | 'consents' | 'care' | 'psychological' | 'followups' | 'closure' | 'orientations' | 'history' | 'readmission';
 export function isWorkflowTabAvailable(_status: WorkflowStatus, _tab: WorkflowTab): boolean {
   // The backend owns authorization and stage-transition validation. Keep every tab accessible.
   return true;

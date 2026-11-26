@@ -22,6 +22,15 @@ test('general updates reject protected fields before making requests', async () 
     await assert.rejects(ficheApi.updateFichePecmu(async () => { throw Error('Must not request'); }, 1, { [field]: 'value' }), /actions dédiées/);
   }
 });
+test('submitting a PECMU draft only patches its status to SOUMIS', async () => {
+  await ficheApi.submitFichePecmu(async (path, options) => {
+    assert.equal(path, '/fiche-pecmu/42');
+    assert.equal(options.method, 'PATCH');
+    assert.equal(options.headers['Content-Type'], 'application/json');
+    assert.deepEqual(JSON.parse(options.body), { status: 'SOUMIS' });
+    return undefined;
+  }, 42);
+});
 test('workflow GET orders any number of transferred episodes and preserves server actions', async () => {
   const state = await api.loadPecmuWorkflow(async path => {
     assert.equal(path, '/fiche-pecmu/42/workflow');
@@ -30,6 +39,20 @@ test('workflow GET orders any number of transferred episodes and preserves serve
   assert.deepEqual(state.medicalCare.map(c => c.id), [1, 2, 3]);
   assert.deepEqual(state.nextActions, ['UPLOAD_TRANSFER_NOTE']);
   assert.equal(api.canPerform(state, 'OPEN_TRANSFERRED_MEDICAL_CARE', null), false);
+});
+test('read-only PECMU dossiers expose the saved workflow without enabling mutations', async () => {
+  const reader = { canRead: true, canEdit: false };
+  const snapshot = { fiche: { id: 42, status: 'BROUILLON' }, currentStatus: 'IN_CARE', nextActions: ['OPEN_MEDICAL_CARE'] };
+  const load = values => api.loadPecmuWorkflow(async () => ({ ...snapshot, ...values }), 42);
+  assert.equal(api.canEditPecmuWorkflow(await load({ access: reader })), false);
+  assert.equal(api.canEditPecmuWorkflow(await load({ fiche: { ...snapshot.fiche, access: reader } })), false);
+  assert.equal(api.canEditPecmuWorkflow(await load({ access: { canRead: true, canEdit: true } })), true);
+  assert.equal(api.canEditPecmuWorkflow(await load({})), true);
+  await assert.rejects(load({ access: { canRead: false, canEdit: false } }), error => error.statusCode === 403);
+  const history = await ficheApi.listFichesPecmuByVictim(async () => [
+    { id: 42, access: reader }, { id: 43, access: { canRead: false, canEdit: false } },
+  ], 8);
+  assert.deepEqual(history, [{ id: 42, access: reader }]);
 });
 test('actions require both server transition and explicit SSO permission when provided', () => {
   const state = { nextActions: ['RECORD_MEDICAL_DECISION'] };
@@ -158,4 +181,95 @@ test('workflow tabs unlock progressively and refusal never unlocks medical care'
   assert.equal(allowed('CLOSED', 'orientations'), true);
   assert.equal(allowed('CLOSED', 'care'), true);
   assert.equal(allowed('CERTIFICATION_PENDING', 'history'), true);
+});
+
+test('F2 preserves ordered alert sources and removes legacy top-level fields from writes', async () => {
+  const { readAlertSources } = require('../app/reparations/services/pecmuAlertSources.ts');
+  const legacy = { alertSourceStructureType: 'ONG', alertSourceStructureName: 'Centre', alertSourceFullName: 'Contact' };
+  const sources = [...readAlertSources(legacy), { structureType: 'AUTRE', otherStructureType: ' Famille ' }, {}];
+  const expected = [
+    { structureType: 'ONG', structureName: 'Centre', contactName: 'Contact' },
+    { structureType: 'AUTRE', otherStructureType: 'Famille' },
+  ];
+  assert.deepEqual(readAlertSources({ ...legacy, alertSources: [] }), []);
+  assert.deepEqual(readAlertSources({ ...legacy, alertSources: expected }), expected);
+  assert.deepEqual(readAlertSources({ sourceNom: 'Ancien brouillon local' }), [{ contactName: 'Ancien brouillon local' }]);
+  await ficheApi.createFichePecmu(async (path, options) => {
+    const body = JSON.parse(options.body);
+    assert.equal(path, '/fiche-pecmu');
+    assert.equal(body.status, 'BROUILLON');
+    assert.equal(body.victimeId, 42);
+    assert.deepEqual(body.alertSources, expected);
+    assert.equal('alertSourceStructureName' in body, false);
+    return { id: 1 };
+  }, {}, 42, { status: 'BROUILLON', sources });
+  const partial = ficheApi.mapF2ValuesToFichePecmuPayload({}, true, [{ phone: ' 123 ' }]);
+  assert.deepEqual(partial.alertSources, [{ phone: '123' }]);
+});
+
+test('a confirmed duplicate keeps the draft status payload and explicitly confirms the warning', async () => {
+  await ficheApi.submitFichePecmu(async (path, options) => {
+    assert.equal(path, '/fiche-pecmu/7');
+    assert.equal(options.method, 'PATCH');
+    assert.equal(options.headers['X-Confirm-Duplicate'], 'true');
+    assert.deepEqual(JSON.parse(options.body), { status: 'SOUMIS' });
+  }, 7, true);
+});
+
+test('medical readmission retries the creation with the same idempotency key and previous episode', async () => {
+  const seen = new Map();
+  const payload = { fichePecmuId: 7, previousCareId: 12, admissionType: 'READMISSION', careMode: 'OUTPATIENT' };
+  const fetcher = async (path, options) => {
+    assert.equal(path, '/acte-medical-pecmu');
+    assert.equal(options.method, 'POST');
+    assert.deepEqual(JSON.parse(options.body), payload);
+    const key = options.headers['Idempotency-Key'];
+    assert.equal(key, 'test-readmission');
+    if (seen.has(key)) return seen.get(key);
+    seen.set(key, { id: 13 });
+    throw Error('Réponse perdue');
+  };
+  await assert.rejects(api.createPecmuCareEpisode(fetcher, payload, 'test-readmission'), /perdue/);
+  assert.deepEqual(await api.createPecmuCareEpisode(fetcher, payload, 'test-readmission'), { id: 13 });
+  assert.equal(seen.size, 1);
+});
+
+test('invoice retry keeps the key when storage succeeded and the HTTP response was lost', async () => {
+  const invoices = ['un.pdf', 'deux.jpg'].map(name => new File(['fichier'], name));
+  const uploaded = new WeakSet();
+  const stored = new Map();
+  const names = [];
+  const fetcher = async (path, options) => {
+    assert.equal(path, '/acte-medical-pecmu/13/documents/INVOICE');
+    assert.equal(options.method, 'POST');
+    const file = options.body.get('file');
+    names.push(file.name);
+    const key = options.headers['Idempotency-Key'];
+    assert.ok(key);
+    if (stored.has(key)) return stored.get(key);
+    stored.set(key, { id: stored.size + 1 });
+    if (file.name === 'deux.jpg') throw Error('Réponse perdue');
+    return stored.get(key);
+  };
+  await assert.rejects(api.uploadCareInvoices(fetcher, 13, invoices, uploaded), /deux.jpg.*#13.*perdue/);
+  await api.uploadCareInvoices(fetcher, 13, invoices, uploaded);
+  assert.deepEqual(names, ['un.pdf', 'deux.jpg', 'deux.jpg']);
+  assert.equal(stored.size, 2);
+});
+
+test('care and transfer select preserve partner-only and historical locations', () => {
+  const { careLocationFields } = require('../app/reparations/pecmu/careLocationFields.ts');
+  const { spreadsheetPartners } = require('../app/reparations/constants/spreadsheetPartners.ts');
+  for (const scope of ['care', 'transfer']) {
+    const [province, zone, structure] = careLocationFields(scope, spreadsheetPartners);
+    const location = { [province.key]: 'Kongo-Central', [zone.key]: 'Muanda' };
+    assert.equal(zone.options(location).Muanda, 'Muanda');
+    assert.equal(zone.options(location).Moanda, 'Moanda');
+    assert.equal(structure.options(location)['HGR Muanda'], 'HGR Muanda');
+    assert.equal(zone.options({ [province.key]: 'Kinshasa' }).Muanda, undefined);
+    const old = { [province.key]: 'Ancienne province', [zone.key]: 'Ancienne zone', [structure.key]: 'Ancien dispensaire' };
+    for (const field of [province, zone, structure]) assert.equal(field.options(old)[old[field.key]], old[field.key]);
+    assert.deepEqual(province.resetOnChange, [zone.key, structure.key]);
+    assert.deepEqual(zone.resetOnChange, [structure.key]);
+  }
 });

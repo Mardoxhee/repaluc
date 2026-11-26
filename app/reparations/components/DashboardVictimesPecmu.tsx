@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { RefreshCw, BellRing, HeartPulse, FolderCheck, Network, Activity, ShieldCheck, BedDouble } from 'lucide-react';
+import { RefreshCw, BellRing, HeartPulse, FolderCheck, Network, Activity, ShieldCheck, BedDouble, Save } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import StatCard from './dashboard/StatCard';
 import { getFichePecmuStatistics, type PecmuStatistics } from '../services/pecmuApi';
@@ -74,7 +74,9 @@ export default function DashboardVictimesPecmu(_props: DashboardVictimesPecmuPro
     {loading && <p role="status" className="sr-only">Chargement des statistiques…</p>}
     {error ? <div role="alert" className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}<button type="button" onClick={() => setAttempt(value => value + 1)} className="ml-3 font-semibold underline">Réessayer</button></div> : <>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="Alertes enregistrées" value={count('total')} icon={<BellRing size={20} className="text-white" />} color="bg-primary" subtitle="Dossiers actifs" loading={loading} />
+        <StatCard title="Dossiers soumis" value={count('submitted')} icon={<BellRing size={20} className="text-white" />} color="bg-primary" subtitle="Fiches soumises par mon compte" loading={loading} />
+        <StatCard title="Dossiers brouillons" value={count('drafts')} icon={<Save size={20} className="text-white" />} color="bg-amber-600" subtitle="Brouillons de mon compte" loading={loading} />
+        <StatCard title="Alertes enregistrées" value={count('total')} icon={<BellRing size={20} className="text-white" />} color="bg-primary" subtitle="Dossiers PECMU" loading={loading} />
         <StatCard title="Victimes prises en charge" value={count('treated')} icon={<HeartPulse size={20} className="text-white" />} color="bg-secondary" subtitle="Tous épisodes de soins confondus" loading={loading} />
         <StatCard title="Dossiers clôturés" value={count('closed')} icon={<FolderCheck size={20} className="text-white" />} color="bg-emerald-600" subtitle="Parcours PECMU clôturés" loading={loading} />
         <StatCard title="Victimes orientées" value={count('orientedToOtherPrograms')} icon={<Network size={20} className="text-white" />} color="bg-indigo-500" subtitle="Vers d’autres programmes" loading={loading} />
