@@ -10,6 +10,7 @@ import type { PendingContract } from '../../../utils/contractsCache';
 import { syncPendingContracts } from '../../../utils/contractsSyncService';
 import type { Victim, Tranche, Contrat, Consentements, Representant, SaveMessage, ContractForm, ContractTemplateId, MesureReparationKey } from './types';
 import { getVictimBirthInfo } from '../../utils/victimBirthInfo';
+import { DIRECTEUR_GENERAL_FONAREV, signataireFonarevMpu } from '../../constants/directionFonarev';
 import {
     cloneMesuresReparation,
     getContractPrejudiceOptions,
@@ -28,9 +29,6 @@ import {
     mesuresFromKeys,
     normalizeText,
 } from './contractTemplates';
-
-const FONAREV_DIRECTEUR_GENERAL_NOM = 'Patrick FATA MAKUNGA';
-const FONAREV_DIRECTEUR_GENERAL_FONCTION = 'Directeur Général';
 
 const createTemplateTranches = (templateId: ContractTemplateId, prejudiceFinal?: string): Tranche[] => {
     return getDefaultTemplateTranches(templateId, prejudiceFinal).map((tranche, index) => ({
@@ -92,8 +90,8 @@ const getInitialContractForm = (victim: Victim): ContractForm => {
                 : 'Réparation Administrative',
         lieuSignature: [victim.territoire, victim.province].filter(Boolean).join(', ') || 'Goma',
         dateSignature: new Date().toISOString().split('T')[0],
-        fonarevNom: FONAREV_DIRECTEUR_GENERAL_NOM,
-        fonarevFonction: FONAREV_DIRECTEUR_GENERAL_FONCTION,
+        fonarevNom: DIRECTEUR_GENERAL_FONAREV.nomAgentFonarev,
+        fonarevFonction: DIRECTEUR_GENERAL_FONAREV.fonctionAgentFonarev,
     };
 };
 
@@ -333,8 +331,6 @@ export function useContrat(victim: Victim) {
                             reparationJudiciaire: '',
                             lieuSignature: data.lieuConsentement || prev.lieuSignature,
                             dateSignature: data.dateConsentement || prev.dateSignature,
-                            fonarevNom: data.nomAgentFonarev || prev.fonarevNom,
-                            fonarevFonction: data.fonctionAgentFonarev || prev.fonarevFonction,
                         }));
 
                         setConsentements((prev) => ({
@@ -513,8 +509,6 @@ export function useContrat(victim: Victim) {
             ...previous,
             dateSignature: String(data.dateConsentement || previous.dateSignature).slice(0, 10),
             lieuSignature: data.lieuConsentement || previous.lieuSignature,
-            fonarevNom: data.nomAgentFonarev || previous.fonarevNom,
-            fonarevFonction: data.fonctionAgentFonarev || previous.fonarevFonction,
         }));
         setConsentements(previous => ({
             ...previous,
@@ -697,7 +691,6 @@ export function useContrat(victim: Victim) {
             }
 
             const usesLegacyContractText = selectedTemplateId === 'luc-decision-justice';
-            const nomAgentFonarev = getConnectedAgentFullName();
 
             if (isMpuConsentement) {
                 if (documentKey && (!existingContrat || documentKey !== documentSignatureKey || pendingOfflineContrat)) {
@@ -735,8 +728,7 @@ export function useContrat(victim: Victim) {
                     decisionConsentement: consentements.refuseReparation ? 'refuse' : 'accepte',
                     dateConsentement: contractForm.dateSignature || new Date().toISOString().split('T')[0],
                     lieuConsentement: contractForm.lieuSignature,
-                    nomAgentFonarev,
-                    fonctionAgentFonarev: contractForm.fonarevFonction || undefined,
+                    ...signataireFonarevMpu(pendingOfflineContrat?.contractData ?? existingContrat),
                 };
 
                 // A repair of a server act only changes its signature and keeps its recorded signer.
@@ -768,6 +760,7 @@ export function useContrat(victim: Victim) {
                 return true;
             }
 
+            const nomAgentFonarev = getConnectedAgentFullName();
             const mesuresReparationAcceptees = usesLegacyContractText
                 ? (consentements.accepteReparation ? ['indemnisation' as MesureReparationKey] : [])
                 : getSelectedMesures(consentements.mesuresAcceptees);

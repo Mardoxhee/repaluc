@@ -3,9 +3,11 @@ import React from 'react';
 import { Clock, Wifi } from 'lucide-react';
 import type { Victim, Contrat, SaveMessage, ContractForm } from './types';
 import type { PendingContract } from '../../../utils/contractsCache';
+import { signataireFonarevMpu } from '../../constants/directionFonarev';
 
 interface SignaturesSectionProps {
     victim: Victim;
+    isMpuConsentement: boolean;
     contractForm: ContractForm;
     setContractForm: React.Dispatch<React.SetStateAction<ContractForm>>;
     existingContrat: Contrat | null;
@@ -29,6 +31,7 @@ interface SignaturesSectionProps {
 
 export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
     victim,
+    isMpuConsentement,
     contractForm,
     setContractForm,
     existingContrat,
@@ -50,6 +53,7 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
     documentActionLabel = 'le contrat',
 }) => {
     const previewSignature = localDrawing || signatureUrl;
+    const signataireMpu = isMpuConsentement ? signataireFonarevMpu(pendingOfflineContrat?.contractData ?? existingContrat) : undefined;
     const pendingMpu = pendingOfflineContrat?.targetType === 'consentement-mpu';
     const updateField = (field: keyof ContractForm, value: string) => {
         setContractForm((prev) => ({ ...prev, [field]: value }));
@@ -90,7 +94,8 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
                                 <span>Nom :</span>
                                 <input
                                     type="text"
-                                    value={contractForm.fonarevNom}
+                                    value={signataireMpu?.nomAgentFonarev ?? contractForm.fonarevNom}
+                                    readOnly={isMpuConsentement}
                                     onChange={(e) => updateField('fonarevNom', e.target.value)}
                                     className="min-w-0 flex-1 border-b border-dotted border-gray-400 bg-transparent px-1 outline-none"
                                 />
@@ -99,7 +104,8 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
                                 <span>Fonction :</span>
                                 <input
                                     type="text"
-                                    value={contractForm.fonarevFonction}
+                                    value={signataireMpu?.fonctionAgentFonarev ?? contractForm.fonarevFonction}
+                                    readOnly={isMpuConsentement}
                                     onChange={(e) => updateField('fonarevFonction', e.target.value)}
                                     className="min-w-0 flex-1 border-b border-dotted border-gray-400 bg-transparent px-1 outline-none"
                                 />

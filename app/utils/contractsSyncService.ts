@@ -3,6 +3,7 @@ import { getAllPendingContracts, recordPendingContractSync, type PendingContract
 import { isOnline } from './victimsCache';
 import { authenticatedFetch, getAuthToken } from './authFetch';
 import { getConnectedAgentFullName } from './currentUser';
+import { DIRECTEUR_GENERAL_FONAREV, signataireFonarevMpu } from '../reparations/constants/directionFonarev';
 import { getMpuConsentDocumentReference, getMpuSignerField, getMpuSignatureFileKey } from './mpuConsentSignature';
 import { readUploadedFileReference, readSyncHttpError } from './uploadResponse';
 import type { SyncProgressCallback } from './syncProgress';
@@ -64,7 +65,7 @@ const consentFields = [
     'vulnerabilites', 'autresVulnerabilites', 'informeMpu', 'droitsExpliques', 'aExerceDroit',
     'engagementsAcceptes', 'mediateurFonarev', 'accompagnementPersonneConfiance', 'incapableConsentir',
     'nomRepresentant', 'qualiteRepresentant', 'organisationRepresentant', 'pieceIdentiteRepresentant',
-    'decisionConsentement', 'dateConsentement', 'lieuConsentement', 'nomAgentFonarev', 'fonctionAgentFonarev',
+    'decisionConsentement', 'dateConsentement', 'lieuConsentement',
 ] as const;
 
 const positiveId = (value: unknown): number | undefined => {
@@ -83,6 +84,8 @@ const readConsentId = (raw: any, victimId: number): number | undefined => {
 
 type ServerConsent = {
     id: number;
+    nomAgentFonarev?: string | null;
+    fonctionAgentFonarev?: string | null;
     incapableConsentir?: boolean;
     signatureBeneficiaire?: string | null;
     signatureRepresentant?: string | null;
@@ -101,6 +104,9 @@ const findConsent = async (victimId: number): Promise<ServerConsent | undefined>
 
 const writeConsentMetadata = async (data: Record<string, unknown>, victimId: number, consentId?: number) => {
     const payload: Record<string, unknown> = {};
+    if (!consentId || data.nomAgentFonarev != null || data.fonctionAgentFonarev != null) {
+        Object.assign(payload, signataireFonarevMpu(data));
+    }
     for (const field of consentFields) {
         if (data[field] != null) payload[field] = data[field];
     }
@@ -160,10 +166,14 @@ const syncConsent = async (item: PendingContract) => {
         throw new Error('Le consentement à modifier n’a pas été retrouvé pour cette victime.');
     }
 
-    if (!consent || !item.consentMetadataSynced) {
+    // Older clients could already have sent the operator's name as director before uploading the drawing.
+    const needsDirectorCorrection = consent?.fonctionAgentFonarev === DIRECTEUR_GENERAL_FONAREV.fonctionAgentFonarev
+        && consent.nomAgentFonarev !== DIRECTEUR_GENERAL_FONAREV.nomAgentFonarev;
+    if (!consent || !item.consentMetadataSynced || needsDirectorCorrection) {
         // Recover the server act first if an offline creation or its response was interrupted.
         if (!consent && !localConsentSignature(item, data.incapableConsentir)) throw new Error(missingSignature);
-        const id = await writeConsentMetadata(data, victimId, consent?.id);
+        const metadata = consent && item.consentMetadataSynced ? DIRECTEUR_GENERAL_FONAREV : data;
+        const id = await writeConsentMetadata(metadata, victimId, consent?.id);
         if (id && !await recordPendingContractSync(item, id)) return false;
         consent = await findConsent(victimId);
         if (!consent || (id && consent.id !== id)) throw new Error('Le serveur n’a pas confirmé l’identifiant du consentement.');

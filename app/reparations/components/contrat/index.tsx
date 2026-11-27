@@ -351,6 +351,7 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
 
                             <SignaturesSection
                                 victim={victim}
+                                isMpuConsentement={isMpuConsentement}
                                 contractForm={contractForm}
                                 setContractForm={setContractForm}
                                 existingContrat={existingContrat}

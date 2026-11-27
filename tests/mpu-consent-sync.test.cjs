@@ -164,6 +164,40 @@ test('a 2xx signature PATCH is insufficient when the subsequent GET does not ret
   assert.equal(state.record, null);
 });
 
+test('an offline MPU act saved with the operator as director is sent with the director’s name', async t => {
+  const entry = pendingConsent();
+  Object.assign(entry.contractData, { nomAgentFonarev: 'Agent de saisie', fonctionAgentFonarev: 'Directeur Général' });
+  const { server, sync, fileKey } = simulateMpu(t, entry);
+  assert.equal((await sync()).synced, 1);
+  assert.equal(server.act.nomAgentFonarev, 'Patrick FATA MAKUNGA');
+  assert.equal(server.act.fonctionAgentFonarev, 'Directeur Général');
+  assert.equal(server.act.signatureBeneficiaire, fileKey);
+});
+
+test('resuming a partial MPU sync corrects only the director and attaches the captured signature', async t => {
+  const entry = pendingConsent();
+  Object.assign(entry, { targetId: 13, action: 'update', consentMetadataSynced: true, signatureFileKey: 'capture.png' });
+  const act = { ...unsignedAct(), lieuConsentement: 'Lieu confirmé', nomAgentFonarev: 'Agent de saisie', fonctionAgentFonarev: 'Directeur Général' };
+  const { server, sync } = simulateMpu(t, entry, act);
+  assert.equal((await sync()).synced, 1);
+  assert.equal(server.act.nomAgentFonarev, 'Patrick FATA MAKUNGA');
+  assert.equal(server.act.fonctionAgentFonarev, 'Directeur Général');
+  assert.equal(server.act.lieuConsentement, 'Lieu confirmé');
+  assert.equal(server.act.signatureBeneficiaire, 'capture.png');
+  assert.equal(server.uploadBodies.length, 0);
+});
+
+test('attaching a signature preserves a historical MPU signatory with another recorded function', async t => {
+  const entry = pendingConsent();
+  Object.assign(entry, { targetId: 13, action: 'update', consentMetadataSynced: true, signatureFileKey: 'capture.png' });
+  const act = { ...unsignedAct(), nomAgentFonarev: 'Signataire historique', fonctionAgentFonarev: 'Chargée de protection' };
+  const { server, sync } = simulateMpu(t, entry, act);
+  assert.equal((await sync()).synced, 1);
+  assert.equal(server.metadataWrites, 0);
+  assert.equal(server.act.nomAgentFonarev, 'Signataire historique');
+  assert.equal(server.act.fonctionAgentFonarev, 'Chargée de protection');
+});
+
 test('an act recovered from a former dossier attachment still requires its signature field to be persisted', async t => {
   const entry = pendingConsent();
   Object.assign(entry, { action: 'update', targetId: 13, consentMetadataSynced: true, signatureDataUrl: null });
