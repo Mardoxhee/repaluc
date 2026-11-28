@@ -154,6 +154,33 @@ const selectRecordKeys = <T extends string>(record: Record<T, boolean>): T[] => 
         .map(([key]) => key as T)
 );
 
+const getMpuConsentFields = (consentements: Consentements, representant: Representant, contractForm: Pick<ContractForm, 'dateSignature' | 'lieuSignature'>) => ({
+    etatVictimisation: consentements.etatVictimisation || undefined,
+    situationVulnerabiliteUrgente: consentements.situationVulnerabiliteUrgente,
+    mesuresProposees: selectRecordKeys(consentements.mesuresProposees),
+    autresMesures: consentements.autresMesures || undefined,
+    vulnerabilites: selectRecordKeys(consentements.vulnerabilites),
+    autresVulnerabilites: consentements.autresVulnerabilites || undefined,
+    informeMpu: consentements.informeMpu,
+    droitsExpliques: consentements.droitsExpliques,
+    aExerceDroit: consentements.exerceDroit
+        ? true
+        : consentements.comprisDroit
+            ? false
+            : undefined,
+    engagementsAcceptes: consentements.engagementsAcceptes,
+    mediateurFonarev: consentements.mediateurFonarev || consentements.faireMediateur,
+    accompagnementPersonneConfiance: consentements.accompagnementPersonneConfiance || consentements.avocat,
+    incapableConsentir: consentements.incapaciteConsentir,
+    nomRepresentant: representant.nom || undefined,
+    qualiteRepresentant: representant.qualite || undefined,
+    organisationRepresentant: representant.organisation || undefined,
+    pieceIdentiteRepresentant: representant.pieceIdentite || undefined,
+    decisionConsentement: consentements.refuseReparation ? 'refuse' : 'accepte',
+    dateConsentement: contractForm.dateSignature || new Date().toISOString().split('T')[0],
+    lieuConsentement: contractForm.lieuSignature,
+});
+
 const recordFromKeys = <T extends string>(
     keys: readonly T[],
     selected?: unknown
@@ -211,7 +238,8 @@ export function useContrat(victim: Victim) {
     const [pendingOfflineContrat, setPendingOfflineContrat] = useState<PendingContract | null>(null);
     const [reloadContrat, setReloadContrat] = useState(0);
     const pendingContractIdRef = useRef<number | null>(null);
-    const hydratedPendingContractIdRef = useRef<number | null>(null);
+    const initialMpuFields = useRef<ReturnType<typeof getMpuConsentFields> | null>(null);
+    const hydratedPendingRevisionRef = useRef<string | null>(null);
 
     const formattedSignatureDate = existingContrat?.dateSignature
         ? new Date(existingContrat.dateSignature).toLocaleDateString('fr-FR')
@@ -270,6 +298,52 @@ export function useContrat(victim: Victim) {
         }
     }, [showSignatureModal]);
 
+    function hydrateMpuForm(data: PendingContract['contractData']) {
+        const defaults = getInitialContractForm(victim);
+        const signatureFields = {
+            dateSignature: String(data.dateConsentement || defaults.dateSignature).slice(0, 10),
+            lieuSignature: data.lieuConsentement || defaults.lieuSignature,
+        };
+        const formConsentements = {
+            ...createDefaultConsentements(),
+            faireMediateur: Boolean(data.mediateurFonarev),
+            avocat: Boolean(data.accompagnementPersonneConfiance),
+            exerceDroit: data.aExerceDroit === true,
+            comprisDroit: data.aExerceDroit === false,
+            accepteReparation: data.decisionConsentement !== 'refuse',
+            refuseReparation: data.decisionConsentement === 'refuse',
+            incapaciteConsentir: Boolean(data.incapableConsentir),
+            consentementRepresentant: Boolean(data.incapableConsentir || data.nomRepresentant),
+            etatVictimisation: data.etatVictimisation || '',
+            situationVulnerabiliteUrgente: Boolean(data.situationVulnerabiliteUrgente),
+            mesuresProposees: recordFromKeys(MPU_MESURES.map((mesure) => mesure.key), data.mesuresProposees),
+            autresMesures: data.autresMesures || '',
+            vulnerabilites: recordFromKeys(MPU_VULNERABILITES.map((vulnerabilite) => vulnerabilite.key), data.vulnerabilites),
+            autresVulnerabilites: data.autresVulnerabilites || '',
+            informeMpu: Boolean(data.informeMpu),
+            droitsExpliques: Boolean(data.droitsExpliques),
+            engagementsAcceptes: Boolean(data.engagementsAcceptes),
+            mediateurFonarev: Boolean(data.mediateurFonarev),
+            accompagnementPersonneConfiance: Boolean(data.accompagnementPersonneConfiance),
+        };
+        const formRepresentant = {
+            nom: data.nomRepresentant || '',
+            qualite: data.qualiteRepresentant || '',
+            organisation: data.organisationRepresentant || '',
+            pieceIdentite: data.pieceIdentiteRepresentant || '',
+        };
+        initialMpuFields.current = getMpuConsentFields(formConsentements, formRepresentant, signatureFields);
+        setConsentements(formConsentements);
+        setRepresentant(formRepresentant);
+        setContractForm(prev => ({
+            ...prev,
+            typeContrat: defaults.typeContrat,
+            reparationAdministrative: defaults.reparationAdministrative,
+            reparationJudiciaire: defaults.reparationJudiciaire,
+            ...signatureFields,
+        }));
+    }
+
     // Charger le contrat existant
     useEffect(() => {
         let active = true;
@@ -324,44 +398,8 @@ export function useContrat(victim: Victim) {
                             planIndemnisation: [],
                         });
 
-                        setContractForm((prev) => ({
-                            ...prev,
-                            typeContrat: 'Acte de consentement MPU',
-                            reparationAdministrative: 'Mesures Provisoires Urgentes (MPU)',
-                            reparationJudiciaire: '',
-                            lieuSignature: data.lieuConsentement || prev.lieuSignature,
-                            dateSignature: data.dateConsentement || prev.dateSignature,
-                        }));
-
-                        setConsentements((prev) => ({
-                            ...prev,
-                            faireMediateur: Boolean(data.mediateurFonarev),
-                            avocat: Boolean(data.accompagnementPersonneConfiance),
-                            exerceDroit: data.aExerceDroit === true,
-                            comprisDroit: data.aExerceDroit === false,
-                            accepteReparation: data.decisionConsentement !== 'refuse',
-                            refuseReparation: data.decisionConsentement === 'refuse',
-                            incapaciteConsentir: Boolean(data.incapableConsentir),
-                            consentementRepresentant: Boolean(data.incapableConsentir || data.nomRepresentant),
-                            etatVictimisation: data.etatVictimisation || '',
-                            situationVulnerabiliteUrgente: Boolean(data.situationVulnerabiliteUrgente),
-                            mesuresProposees: recordFromKeys(MPU_MESURES.map((mesure) => mesure.key), data.mesuresProposees),
-                            autresMesures: data.autresMesures || '',
-                            vulnerabilites: recordFromKeys(MPU_VULNERABILITES.map((vulnerabilite) => vulnerabilite.key), data.vulnerabilites),
-                            autresVulnerabilites: data.autresVulnerabilites || '',
-                            informeMpu: Boolean(data.informeMpu),
-                            droitsExpliques: Boolean(data.droitsExpliques),
-                            engagementsAcceptes: Boolean(data.engagementsAcceptes),
-                            mediateurFonarev: Boolean(data.mediateurFonarev),
-                            accompagnementPersonneConfiance: Boolean(data.accompagnementPersonneConfiance),
-                        }));
-
-                        setRepresentant({
-                            nom: data.nomRepresentant || '',
-                            qualite: data.qualiteRepresentant || '',
-                            organisation: data.organisationRepresentant || '',
-                            pieceIdentite: data.pieceIdentiteRepresentant || '',
-                        });
+                        // A late network read must retain pending offline edits already displayed.
+                        if (pendingContractIdRef.current === null) hydrateMpuForm(data);
 
                         setLoadingContrat(false);
                         setSignatureStatusMessage('Chargement de la signature…');
@@ -502,42 +540,12 @@ export function useContrat(victim: Victim) {
     }, [victim.id, isMpuConsentement]);
 
     useEffect(() => {
-        if (!isMpuConsentement || !pendingOfflineContrat || pendingOfflineContrat.id == null || hydratedPendingContractIdRef.current === pendingOfflineContrat.id) return;
+        if (!isMpuConsentement || !pendingOfflineContrat || pendingOfflineContrat.id == null) return;
+        const revision = `${pendingOfflineContrat.id}:${pendingOfflineContrat.revision ?? 0}`;
+        if (hydratedPendingRevisionRef.current === revision) return;
         const data = pendingOfflineContrat.contractData || {};
-        hydratedPendingContractIdRef.current = pendingOfflineContrat.id;
-        setContractForm(previous => ({
-            ...previous,
-            dateSignature: String(data.dateConsentement || previous.dateSignature).slice(0, 10),
-            lieuSignature: data.lieuConsentement || previous.lieuSignature,
-        }));
-        setConsentements(previous => ({
-            ...previous,
-            faireMediateur: Boolean(data.mediateurFonarev),
-            avocat: Boolean(data.accompagnementPersonneConfiance),
-            exerceDroit: data.aExerceDroit === true,
-            comprisDroit: data.aExerceDroit === false,
-            accepteReparation: data.decisionConsentement !== 'refuse',
-            refuseReparation: data.decisionConsentement === 'refuse',
-            incapaciteConsentir: Boolean(data.incapableConsentir),
-            consentementRepresentant: Boolean(data.incapableConsentir || data.nomRepresentant),
-            etatVictimisation: data.etatVictimisation || '',
-            situationVulnerabiliteUrgente: Boolean(data.situationVulnerabiliteUrgente),
-            mesuresProposees: recordFromKeys(MPU_MESURES.map(mesure => mesure.key), data.mesuresProposees),
-            autresMesures: data.autresMesures || '',
-            vulnerabilites: recordFromKeys(MPU_VULNERABILITES.map(item => item.key), data.vulnerabilites),
-            autresVulnerabilites: data.autresVulnerabilites || '',
-            informeMpu: Boolean(data.informeMpu),
-            droitsExpliques: Boolean(data.droitsExpliques),
-            engagementsAcceptes: Boolean(data.engagementsAcceptes),
-            mediateurFonarev: Boolean(data.mediateurFonarev),
-            accompagnementPersonneConfiance: Boolean(data.accompagnementPersonneConfiance),
-        }));
-        setRepresentant({
-            nom: data.nomRepresentant || '',
-            qualite: data.qualiteRepresentant || '',
-            organisation: data.organisationRepresentant || '',
-            pieceIdentite: data.pieceIdentiteRepresentant || '',
-        });
+        hydratedPendingRevisionRef.current = revision;
+        hydrateMpuForm(data);
     }, [isMpuConsentement, pendingOfflineContrat, setContractForm]);
 
     // Fonctions de dessin
@@ -702,45 +710,36 @@ export function useContrat(victim: Victim) {
                     return false;
                 }
 
+                const fields = documentKey && initialMpuFields.current
+                    ? initialMpuFields.current
+                    : getMpuConsentFields(consentements, representant, contractForm);
                 const mpuPayload = {
                     victimeId: victim.id,
-                    etatVictimisation: consentements.etatVictimisation || undefined,
-                    situationVulnerabiliteUrgente: consentements.situationVulnerabiliteUrgente,
-                    mesuresProposees: selectRecordKeys(consentements.mesuresProposees),
-                    autresMesures: consentements.autresMesures || undefined,
-                    vulnerabilites: selectRecordKeys(consentements.vulnerabilites),
-                    autresVulnerabilites: consentements.autresVulnerabilites || undefined,
-                    informeMpu: consentements.informeMpu,
-                    droitsExpliques: consentements.droitsExpliques,
-                    aExerceDroit: consentements.exerceDroit
-                        ? true
-                        : consentements.comprisDroit
-                            ? false
-                            : undefined,
-                    engagementsAcceptes: consentements.engagementsAcceptes,
-                    mediateurFonarev: consentements.mediateurFonarev || consentements.faireMediateur,
-                    accompagnementPersonneConfiance: consentements.accompagnementPersonneConfiance || consentements.avocat,
-                    incapableConsentir: consentements.incapaciteConsentir,
-                    nomRepresentant: representant.nom || undefined,
-                    qualiteRepresentant: representant.qualite || undefined,
-                    organisationRepresentant: representant.organisation || undefined,
-                    pieceIdentiteRepresentant: representant.pieceIdentite || undefined,
-                    decisionConsentement: consentements.refuseReparation ? 'refuse' : 'accepte',
-                    dateConsentement: contractForm.dateSignature || new Date().toISOString().split('T')[0],
-                    lieuConsentement: contractForm.lieuSignature,
+                    ...fields,
                     ...signataireFonarevMpu(pendingOfflineContrat?.contractData ?? existingContrat),
                 };
 
-                // A repair of a server act only changes its signature and keeps its recorded signer.
-                const repairExisting = existingContrat && (!pendingOfflineContrat || pendingOfflineContrat.consentMetadataSynced);
-                const signerField = getMpuSignerField(existingContrat?.incapableConsentir === true);
+                const editingSavedAct = (existingContrat || pendingOfflineContrat?.targetId) &&
+                    (!pendingOfflineContrat || pendingOfflineContrat.consentMetadataSynced);
+                const recorded = pendingOfflineContrat?.contractData ?? existingContrat;
+                const signerField = getMpuSignerField(recorded?.incapableConsentir === true);
+                const consentChanges: Record<string, unknown> = { ...pendingOfflineContrat?.consentChanges };
+                if (editingSavedAct && !documentKey && initialMpuFields.current) {
+                    const initial = initialMpuFields.current;
+                    for (const key of Object.keys(fields) as Array<keyof typeof fields>) {
+                        const value = fields[key];
+                        if (JSON.stringify(value) === JSON.stringify(initial[key])) continue;
+                        if (value !== undefined) consentChanges[key] = value;
+                        else if (typeof initial[key] === 'string' && key !== 'etatVictimisation') consentChanges[key] = '';
+                    }
+                }
                 const queued = await savePendingContract({
                     victimId: victim.id,
-                    contractData: repairExisting && existingContrat
-                        ? { ...mpuPayload, incapableConsentir: existingContrat.incapableConsentir, ...(documentKey ? { [signerField]: documentKey } : {}) }
+                    contractData: documentKey
+                        ? { ...mpuPayload, incapableConsentir: recorded?.incapableConsentir, [signerField]: documentKey }
                         : mpuPayload,
-                    ...(repairExisting ? { consentMetadataSynced: true } : {}),
-                    ...(repairExisting && !existingContrat?.signature ? { expectedSignatureFileKey: '' } : {}),
+                    ...(editingSavedAct ? { consentMetadataSynced: true, consentChanges } : {}),
+                    ...(editingSavedAct && !existingContrat?.signature ? { expectedSignatureFileKey: pendingOfflineContrat?.expectedSignatureFileKey ?? '' } : {}),
                     signatureDataUrl,
                     targetType: 'consentement-mpu',
                     ...(existingContrat?.id
@@ -749,7 +748,7 @@ export function useContrat(victim: Victim) {
                 });
                 setPendingOfflineContrat(queued);
                 pendingContractIdRef.current = queued.id ?? null;
-                if (existingContrat && !repairExisting) {
+                if (existingContrat && !editingSavedAct) {
                     setExistingContrat({ ...existingContrat, ...mpuPayload } as Contrat);
                 }
 

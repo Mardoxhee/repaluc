@@ -159,7 +159,7 @@ export const SignaturesSection: React.FC<SignaturesSectionProps> = ({
                                                 <Clock className="w-5 h-5 text-amber-600" />
                                             </div>
                                             <div>
-                                                <p className="font-semibold text-amber-800">{documentLabel} {pendingSignatureMissing ? 'à signer' : localDrawing || !pendingMpu ? 'signé hors ligne' : 'en attente'}</p>
+                                                <p className="font-semibold text-amber-800">{documentLabel} {pendingSignatureMissing ? 'à signer' : pendingMpu ? 'enregistré sur cet appareil' : 'signé hors ligne'}</p>
                                                 <p className="text-sm text-amber-700">
                                                     {pendingMpu ? 'Enregistré le' : 'Signé le'} {new Date(pendingOfflineContrat.createdAt).toLocaleDateString('fr-FR')} à {new Date(pendingOfflineContrat.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                                                 </p>

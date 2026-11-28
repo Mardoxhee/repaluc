@@ -58,13 +58,18 @@ const ContratVictim: React.FC<ContratVictimProps> = ({ victim }) => {
     const documentLabel = isMpuConsentement ? 'Acte de consentement MPU' : 'Contrat de réparation';
     const documentActionLabel = isMpuConsentement ? "l’acte de consentement MPU" : 'le contrat';
     const pendingData = pendingOfflineContrat?.contractData;
-    const signerIsRepresentative = isMpuConsentement && (pendingData?.incapableConsentir ?? existingContrat?.incapableConsentir ?? consentements.incapaciteConsentir);
+    const savedSignerRole = pendingData?.incapableConsentir ?? existingContrat?.incapableConsentir;
+    const showingSavedSignature = pendingOfflineContrat || existingContrat?.signature || documentSignatureKey;
+    const signerIsRepresentative = isMpuConsentement && (showingSavedSignature
+        ? savedSignerRole ?? consentements.incapaciteConsentir
+        : consentements.incapaciteConsentir);
     const pendingReferences = [pendingOfflineContrat?.signatureFileKey, pendingData?.[getMpuSignerField(signerIsRepresentative)], pendingData?.signature];
     const localDrawing = pendingOfflineContrat?.signatureDataUrl || pendingReferences.find(ref => typeof ref === 'string' && ref.startsWith('data:image/'));
     const pendingSignatureMissing = pendingOfflineContrat?.targetType === 'consentement-mpu' && !localDrawing && !pendingReferences.some(getMpuSignatureFileKey);
     const hasSignedAct = !!existingContrat && (!isMpuConsentement || !!existingContrat.signature);
     const pendingDate = pendingData?.dateConsentement || pendingOfflineContrat?.createdAt;
-    const documentDate = formattedSignatureDate || (pendingDate ? new Date(pendingDate).toLocaleDateString('fr-FR') : '');
+    const localDate = pendingDate ? new Date(pendingDate).toLocaleDateString('fr-FR') : '';
+    const documentDate = isMpuConsentement ? localDate || formattedSignatureDate : formattedSignatureDate || localDate;
 
     return (
         <>

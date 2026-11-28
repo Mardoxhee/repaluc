@@ -74,17 +74,20 @@ Content-Type: application/json
 | `pieceIdentiteRepresentant` | `string` | Référence de sa pièce d'identité |
 | `nomAgentFonarev` | `string` | Agent FONAREV signataire |
 | `fonctionAgentFonarev` | `string` | Fonction de l'agent FONAREV |
+| `signatureBeneficiaire` | `string` | Clé du fichier de la signature ou de l’empreinte du bénéficiaire |
+| `signatureRepresentant` | `string` | Clé du fichier de la signature du représentant |
 
-### Stockage de la signature depuis le frontend
+Sur tout nouvel acte, la rubrique « Pour le FONAREV » indique **Patrick FATA MAKUNGA**, **Directeur Général**, quel que soit le compte connecté. Un acte historique qui désigne explicitement un signataire exerçant une autre fonction conserve cette identité.
 
-Le tracé est enregistré sur l’appareil dans IndexedDB. Depuis les Réglages, le frontend retrouve ou crée l’acte et envoie l’image à `POST /minio/files/upload` sur la même base API. Le corps multipart contient un seul champ binaire `file`. Dans la réponse `201`, `originalName` désigne le nom fourni par l’appareil et `filename` le nom attribué par MinIO. Le frontend conserve `filename` dans IndexedDB puis inscrit cette valeur dans l’acte par `PATCH /consentements-mpu/:id`.
+### Enregistrement local et synchronisation depuis les Réglages
 
-| Signataire indiqué par le formulaire | Champ du PATCH | Valeur |
-| --- | --- | --- |
-| Bénéficiaire (`incapableConsentir: false`) | `signatureBeneficiaire` | Clé permanente du fichier |
-| Représentant (`incapableConsentir: true`) | `signatureRepresentant` | Clé permanente du fichier |
+1. À la signature, le formulaire enregistre les champs de l’acte et le tracé dans IndexedDB, même si l’appareil est connecté. Le tracé est consultable à la réouverture. L’acte figure dans les Réglages parmi les données à synchroniser.
+2. Quand l’utilisateur lance la synchronisation, le frontend consulte `GET /consentements-mpu/victime/:victimeId` avec la session en cours. Cette lecture permet de retrouver un acte existant, y compris après une interruption.
+3. Si la capture doit être envoyée, le frontend appelle `POST /minio/files/upload` avec un corps `multipart/form-data` contenant le seul champ binaire `file`. Il conserve dans IndexedDB le `filename` renvoyé par MinIO. Une reprise réutilise cette clé. Le champ `originalName` désigne le nom fourni par l’appareil.
+4. En l’absence d’acte, `POST /consentements-mpu` transmet dans la même requête les champs du formulaire et la clé de signature. Si l’acte existe, `PATCH /consentements-mpu/:id` transmet uniquement les champs à modifier. Dans les deux cas, `incapableConsentir: false` désigne `signatureBeneficiaire` et `incapableConsentir: true` désigne `signatureRepresentant`.
+5. Le frontend relit l’acte avec `GET /consentements-mpu/victime/:victimeId`. La file locale est purgée pour cet acte après confirmation de la clé attendue dans le champ du bon signataire. En cas de refus ou de confirmation manquante, le tracé et la clé déjà obtenue restent disponibles pour un nouvel essai depuis les Réglages.
 
-Le frontend envoie le seul champ du signataire concerné. Il relit l’acte et vérifie que ce champ contient la clé attendue avant de retirer le tracé de la file locale. Si le serveur refuse le champ, ou le laisse à `null`, la clé et le tracé restent disponibles pour réessayer. Un refus `property … should not exist` sur le PATCH doit être corrigé dans la validation backend de cette route. Une propriété visible dans le JSON de lecture peut être absente du DTO de mise à jour.
+Une réponse `400` avec `property signatureBeneficiaire should not exist` indique que la validation de la route appelée refuse le champ documenté. Vérifier les champs acceptés par le backend pour la méthode concernée (`POST` ou `PATCH`).
 
 ### Valeurs recommandées pour les listes
 
@@ -146,8 +149,9 @@ Pour une autre mesure ou vulnérabilité, remplir respectivement `autresMesures`
   "decisionConsentement": "accepte",
   "dateConsentement": "2026-08-13",
   "lieuConsentement": "Kalemie",
-  "nomAgentFonarev": "Marie Kabongo",
-  "fonctionAgentFonarev": "Chargée de protection"
+  "nomAgentFonarev": "Patrick FATA MAKUNGA",
+  "fonctionAgentFonarev": "Directeur Général",
+  "signatureBeneficiaire": "signatures/consentement-42.png"
 }
 ```
 
@@ -162,11 +166,16 @@ Pour une autre mesure ou vulnérabilité, remplir respectivement `autresMesures`
   "pieceIdentiteRepresentant": "Carte d'électeur n°12345",
   "decisionConsentement": "accepte",
   "dateConsentement": "2026-08-13",
-  "lieuConsentement": "Kalemie"
+  "lieuConsentement": "Kalemie",
+  "nomAgentFonarev": "Patrick FATA MAKUNGA",
+  "fonctionAgentFonarev": "Directeur Général",
+  "signatureRepresentant": "signatures/representant-43.png"
 }
 ```
 
-### Exemple Next.js avec `fetch`
+### Exemple de POST depuis la synchronisation
+
+Cet extrait illustre la requête de création une fois le fichier envoyé et sa clé conservée sur l’appareil.
 
 ```ts
 type ConsentementMpuPayload = {
@@ -176,6 +185,8 @@ type ConsentementMpuPayload = {
   lieuConsentement: string;
   mesuresProposees?: string[];
   vulnerabilites?: string[];
+  signatureBeneficiaire?: string;
+  signatureRepresentant?: string;
   [key: string]: unknown;
 };
 
@@ -183,7 +194,7 @@ export async function creerConsentementMpu(
   payload: ConsentementMpuPayload,
   accessToken: string,
 ) {
-  const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/consentements-mpu`, {
+  const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/consentements-mpu`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -212,7 +223,7 @@ export async function creerConsentementMpu(
 
 ## Mise à jour — `PATCH /consentements-mpu/:id`
 
-Exemple de rattachement à un acte déjà enregistré, après l’upload de la signature du bénéficiaire.
+Lors du rattachement d’une signature à un acte existant, le corps peut se limiter au seul champ de signature. Si la décision a aussi été modifiée, inclure sa nouvelle valeur dans le même PATCH.
 
 ```json
 {

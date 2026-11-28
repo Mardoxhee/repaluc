@@ -18,6 +18,7 @@ export interface PendingContract {
     targetId?: number;
     revision?: number;
     consentMetadataSynced?: boolean;
+    consentChanges?: Record<string, unknown>;
     createdAt: number;
 }
 
@@ -134,7 +135,9 @@ export const getAllPendingContracts = async (): Promise<PendingContract[]> => {
 };
 
 // A new signature or edit saved while the request is in flight must stay queued.
-export const recordPendingContractSync = async (sent: PendingContract, consentId?: number, signatureFileKey?: string): Promise<boolean> => {
+export const recordPendingContractSync = async (
+    sent: PendingContract, checkpoint?: { signatureFileKey?: string; consentId?: number }
+): Promise<boolean> => {
     const localId = sent.id;
     if (localId == null) throw new Error('Identifiant local de l’acte manquant.');
     const db = await openContractsDB();
@@ -148,10 +151,11 @@ export const recordPendingContractSync = async (sent: PendingContract, consentId
                 const current: PendingContract | undefined = request.result;
                 if (!current || current.revision !== sent.revision) return;
                 matched = true;
-                if (consentId === undefined) store.delete(localId);
+                if (!checkpoint) store.delete(localId);
                 else store.put({
-                    ...current, targetId: consentId, action: 'update', consentMetadataSynced: true,
-                    ...(signatureFileKey !== undefined ? { signatureFileKey } : {}),
+                    ...current,
+                    ...(checkpoint.consentId !== undefined ? { targetId: checkpoint.consentId, action: 'update' } : {}),
+                    ...(checkpoint.signatureFileKey !== undefined ? { signatureFileKey: checkpoint.signatureFileKey } : {}),
                 });
             };
             tx.oncomplete = () => resolve(matched);
